@@ -2,7 +2,7 @@
 
 A web application that scans websites for potential API keys, secrets, and sensitive information leaks. This tool helps developers and security professionals identify and fix security vulnerabilities in their web applications.
 
-**Related Project:** For validating and testing found credentials, check out [Keyleaksecret](https://github.com/0xSojalSec/Keyleaksecret) - a comprehensive tool for verifying 80+ types of API keys and secrets.
+**Referenced Project:** Key detection patterns inspired by [Keyleaksecret](https://github.com/0xSojalSec/Keyleaksecret).
 
 ## Features
 
@@ -129,95 +129,14 @@ The scanner detects 50+ types of sensitive information including:
 - Hardcoded passwords
 - Encrypted credentials in JavaScript
 
-## Validating Found Secrets
+## Findings and Recommendations
 
-When the scanner finds potential secrets, it provides **actionable recommendations** including:
+When the scanner detects potential secrets, it provides:
 
-- **Immediate actions** to take (rotate, revoke, etc.)
-- **Validation commands** to test if the key is actually valid/active  
-- **Specific curl commands** to verify key functionality
+- **Severity classification** (Critical, High, Medium, Low)
+- **Context information** showing where the secret was found
+- **Actionable recommendations** for remediation
 - **Best practices** for secure credential management
-
-### Recommended Validation Tool
-
-For comprehensive validation of found secrets, we recommend using [**Keyleaksecret**](https://github.com/0xSojalSec/Keyleaksecret) - a specialized tool that provides:
-
-- **80+ service validation methods** (Slack, GitHub, AWS, Stripe, Twilio, etc.)
-- **Automated testing** of key validity
-- **Detailed status reporting** for each credential
-- **Best practices** for responsible disclosure
-
-### Quick Validation Examples
-
-**Slack Token:**
-```bash
-curl -X POST "https://slack.com/api/auth.test?token=YOUR_TOKEN&pretty=1"
-```
-
-**GitHub Token:**
-```bash
-curl -H "Authorization: token YOUR_TOKEN" https://api.github.com/user
-```
-
-**Stripe API Key:**
-```bash
-curl https://api.stripe.com/v1/charges -u YOUR_KEY:
-```
-
-**AWS Access Key:**
-```bash
-aws sts get-caller-identity --no-cli-pager
-```
-
-**OpenAI API Key:**
-```bash
-curl https://api.openai.com/v1/models -H "Authorization: Bearer YOUR_KEY"
-```
-
-**Anthropic (Claude) API Key:**
-```bash
-curl https://api.anthropic.com/v1/messages \
-  -H "x-api-key: YOUR_KEY" \
-  -H "anthropic-version: 2023-06-01" \
-  -H "content-type: application/json" \
-  -d '{"model": "claude-3-opus-20240229", "max_tokens": 1024, "messages": [{"role": "user", "content": "test"}]}'
-```
-
-**Google Gemini API Key:**
-```bash
-curl "https://generativelanguage.googleapis.com/v1/models?key=YOUR_KEY"
-```
-
-**Google Vertex AI:**
-```bash
-# Test API key
-curl "https://generativelanguage.googleapis.com/v1/models?key=YOUR_KEY"
-
-# For service account - use gcloud CLI
-gcloud auth activate-service-account --key-file=service-account-key.json
-gcloud projects list
-```
-
-**Hugging Face Token:**
-```bash
-curl -H "Authorization: Bearer YOUR_TOKEN" https://huggingface.co/api/whoami
-```
-
-**OpenRouter API Key:**
-```bash
-curl https://openrouter.ai/api/v1/auth/key -H "Authorization: Bearer YOUR_KEY"
-```
-
-**Replicate API Key:**
-```bash
-curl -H "Authorization: Token YOUR_KEY" https://api.replicate.com/v1/account
-```
-
-**Together AI / Groq / Mistral / Other Providers:**
-```bash
-# Most providers follow OpenAI-compatible format
-curl https://api.PROVIDER.com/v1/models -H "Authorization: Bearer YOUR_KEY"
-```
 
 ## Security Considerations
 
