@@ -1,5 +1,9 @@
 # KeyLeak Detector
 
+[![GitHub](https://img.shields.io/badge/GitHub-Amal--David%2Fkeyleak--detector-blue?logo=github)](https://github.com/Amal-David/keyleak-detector)
+[![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+[![Python](https://img.shields.io/badge/Python-3.8%2B-blue)](https://www.python.org/)
+
 A web application that scans websites for potential API keys, secrets, and sensitive information leaks. This tool helps developers and security professionals identify and fix security vulnerabilities in their web applications.
 
 **Referenced Project:** Key detection patterns inspired by [Keyleaksecret](https://github.com/0xSojalSec/Keyleaksecret).
@@ -177,8 +181,27 @@ When the scanner detects potential secrets, it provides:
 
 ## Contributing
 
-Contributions are welcome! Please feel free to submit a Pull Request.
+Contributions are welcome! Please feel free to:
+
+1. Fork the repository: [https://github.com/Amal-David/keyleak-detector](https://github.com/Amal-David/keyleak-detector)
+2. Create a feature branch (`git checkout -b feature/AmazingFeature`)
+3. Commit your changes (`git commit -m 'Add some AmazingFeature'`)
+4. Push to the branch (`git push origin feature/AmazingFeature`)
+5. Open a Pull Request
+
+## Issues and Support
+
+Found a bug or have a feature request? Please open an issue on GitHub:
+[https://github.com/Amal-David/keyleak-detector/issues](https://github.com/Amal-David/keyleak-detector/issues)
 
 ## License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+## Author
+
+Created and maintained by [Amal David](https://github.com/Amal-David)
+
+## Repository
+
+**GitHub:** [https://github.com/Amal-David/keyleak-detector](https://github.com/Amal-David/keyleak-detector)

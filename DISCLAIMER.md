@@ -74,9 +74,12 @@ If you discover vulnerabilities using this tool:
 
 ## Contact
 
-If you become aware of any misuse of this tool, please report it through the project's GitHub repository.
+If you become aware of any misuse of this tool, please report it through the project's GitHub repository:
+[https://github.com/Amal-David/keyleak-detector/issues](https://github.com/Amal-David/keyleak-detector/issues)
 
 ---
+
+**Project Repository:** [https://github.com/Amal-David/keyleak-detector](https://github.com/Amal-David/keyleak-detector)
 
 **Last Updated:** November 1, 2025
 
