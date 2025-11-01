@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>KeyLeak Detector</title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}">
+</head>
+<body class="bg-slate-900 min-h-screen font-sans text-slate-300">
+    <!-- Header -->
+    <header class="border-b border-slate-800">
+        <div class="container mx-auto px-4 py-4">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center gap-3">
+                    <div class="text-emerald-400 text-2xl">
+                        <i class="fas fa-terminal"></i>
+                    </div>
+                    <div>
+                        <h1 class="text-lg font-bold text-emerald-400 font-mono">keyleak-detector</h1>
+                        <p class="text-xs text-slate-500">secret scanner</p>
+                    </div>
+                </div>
+                <a href="https://github.com" target="_blank" class="text-slate-500 hover:text-emerald-400 transition-colors">
+                    <i class="fab fa-github text-xl"></i>
+                </a>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main -->
+    <main class="container mx-auto px-4 py-8">
+        <!-- Scanner -->
+        <div class="max-w-4xl mx-auto mb-8">
+            <div class="bg-slate-800 border border-slate-700 rounded-lg p-6 shadow-2xl">
+                <div class="flex items-center gap-2 mb-4 text-slate-400 text-sm font-mono">
+                    <span class="text-emerald-400">$</span>
+                    <span>./scan --target</span>
+                </div>
+                <div class="flex flex-col md:flex-row gap-3">
+                    <div class="flex-1">
+                        <input 
+                            type="text" 
+                            id="urlInput" 
+                            placeholder="https://target.com" 
+                            class="w-full px-4 py-3 bg-slate-900 border border-slate-700 rounded text-slate-100 placeholder-slate-600 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 font-mono text-sm transition-all"
+                        >
+                    </div>
+                    <button 
+                        id="scanButton" 
+                        class="bg-emerald-600 hover:bg-emerald-500 text-slate-900 font-semibold py-3 px-8 rounded transition-all duration-200 flex items-center justify-center gap-2 min-w-[120px] font-mono text-sm"
+                    >
+                        <span id="buttonText">SCAN</span>
+                        <span id="buttonSpinner" class="hidden">
+                            <div class="loading-spinner-dark"></div>
+                        </span>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Info Section -->
+        <div class="max-w-4xl mx-auto mb-8">
+            <div class="grid md:grid-cols-2 gap-6">
+                <!-- What it does -->
+                <div class="bg-slate-800/50 border border-slate-700/50 rounded-lg p-5">
+                    <div class="flex items-center gap-2 mb-3">
+                        <span class="text-emerald-400 font-mono text-sm">›</span>
+                        <h3 class="text-emerald-400 font-mono text-sm font-bold">WHAT IT DOES</h3>
+                    </div>
+                    <p class="text-slate-400 text-xs leading-relaxed">
+                        Automated security scanner that crawls web applications to detect exposed credentials, API keys, tokens, and sensitive data that could be exploited by attackers. Analyzes both static and dynamic content.
+                    </p>
+                </div>
+
+                <!-- How it works -->
+                <div class="bg-slate-800/50 border border-slate-700/50 rounded-lg p-5">
+                    <div class="flex items-center gap-2 mb-3">
+                        <span class="text-emerald-400 font-mono text-sm">›</span>
+                        <h3 class="text-emerald-400 font-mono text-sm font-bold">HOW IT WORKS</h3>
+                    </div>
+                    <p class="text-slate-400 text-xs leading-relaxed">
+                        Uses headless browser automation (Playwright) + network interception (mitmproxy) to capture all traffic. Applies regex pattern matching with context-aware filtering to reduce false positives.
+                    </p>
+                </div>
+            </div>
+
+            <!-- What it detects -->
+            <div class="bg-slate-800/50 border border-slate-700/50 rounded-lg p-5 mt-6">
+                <div class="flex items-center gap-2 mb-3">
+                    <span class="text-emerald-400 font-mono text-sm">›</span>
+                    <h3 class="text-emerald-400 font-mono text-sm font-bold">DETECTION PATTERNS</h3>
+                </div>
+                <p class="text-slate-400 text-xs leading-relaxed">
+                    Detects 50+ patterns including AWS Keys, Google Cloud Keys (API Keys, Vertex AI, Service Accounts), Stripe Keys, LLM Inference Provider Keys (OpenAI, Claude, Gemini, OpenRouter, Replicate, Together AI, Perplexity, Mistral, Groq, Fireworks, and more), JWT Tokens, database credentials (PostgreSQL, MySQL, MongoDB, Redis), Private Keys (RSA, SSH), API endpoints, Basic Auth credentials, and other sensitive data commonly exposed in web applications.
+                </p>
+            </div>
+        </div>
+
+        <!-- Error -->
+        <div id="errorMessage" class="hidden max-w-4xl mx-auto mb-6">
+            <div class="bg-red-900/20 border border-red-800 rounded p-4">
+                <div class="flex items-start gap-3">
+                    <i class="fas fa-exclamation-triangle text-red-400 mt-1"></i>
+                    <p id="errorText" class="text-red-300 text-sm font-mono"></p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Results -->
+        <div id="results" class="max-w-4xl mx-auto hidden">
+            <div class="bg-slate-800 border border-slate-700 rounded-lg shadow-2xl overflow-hidden">
+                <div class="bg-slate-900 border-b border-slate-700 px-6 py-4">
+                    <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                        <div>
+                            <h2 class="text-lg font-bold text-emerald-400 font-mono mb-1">SCAN RESULTS</h2>
+                            <p id="scanUrl" class="text-slate-500 text-xs font-mono"></p>
+                        </div>
+                        <div id="scanSummary" class="flex flex-wrap gap-2"></div>
+                    </div>
+                </div>
+                <div id="findingsList" class="divide-y divide-slate-700">
+                    <!-- Findings here -->
+                </div>
+                <div id="noFindings" class="p-12 text-center hidden">
+                    <div class="text-emerald-400 text-5xl mb-4">
+                        <i class="fas fa-check-circle"></i>
+                    </div>
+                    <h3 class="text-xl font-bold text-slate-300 mb-2 font-mono">NO SECRETS FOUND</h3>
+                    <p class="text-slate-500 text-sm">
+                        Target appears clean
+                    </p>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Footer -->
+    <footer class="border-t border-slate-800 mt-12">
+        <div class="container mx-auto px-4 py-6">
+            <div class="max-w-4xl mx-auto">
+                <div class="flex flex-wrap items-center justify-between gap-4 text-xs text-slate-600 font-mono">
+                    <span>keyleak-detector v1.0.0 | MIT</span>
+                    <a href="https://github.com" target="_blank" class="hover:text-emerald-400 transition-colors">
+                        github.com
+                    </a>
+                </div>
+            </div>
+        </div>
+    </footer>
+
+    <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+</body>
+</html>
