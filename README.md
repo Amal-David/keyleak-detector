@@ -8,6 +8,10 @@ A web application that scans websites for potential API keys, secrets, and sensi
 
 **Referenced Project:** Key detection patterns inspired by [Keyleaksecret](https://github.com/0xSojalSec/Keyleaksecret).
 
+## 📸 Preview
+
+![KeyLeak Detector Interface](image-preview.png)
+
 ## ⚠️ Disclaimer
 
 **FOR EDUCATIONAL AND AUTHORIZED TESTING PURPOSES ONLY**
