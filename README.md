@@ -12,21 +12,6 @@ A web application that scans websites for potential API keys, secrets, and sensi
 
 ![KeyLeak Detector Interface](image-preview.png)
 
-## ⚠️ Disclaimer
-
-**FOR EDUCATIONAL AND AUTHORIZED TESTING PURPOSES ONLY**
-
-This tool is provided for educational purposes and authorized security testing only. By using this software, you agree to the following:
-
-- **You may ONLY scan websites and applications that you own or have explicit written permission to test**
-- **Unauthorized scanning of third-party websites may be illegal in your jurisdiction**
-- **The authors and contributors are NOT responsible for any misuse or damage caused by this tool**
-- **Users are solely responsible for ensuring compliance with all applicable laws and regulations**
-- **This tool is provided "AS IS" without warranty of any kind, express or implied**
-- **The authors assume NO liability for any consequences resulting from the use or misuse of this software**
-
-By using KeyLeak Detector, you acknowledge that you have read, understood, and agreed to these terms. If you do not agree, do not use this tool.
-
 ## Features
 
 - Scans web pages for common secret patterns (API keys, passwords, tokens, etc.)
@@ -160,6 +145,21 @@ When the scanner detects potential secrets, it provides:
 - **Context information** showing where the secret was found
 - **Actionable recommendations** for remediation
 - **Best practices** for secure credential management
+
+## ⚠️ Disclaimer
+
+**FOR EDUCATIONAL AND AUTHORIZED TESTING PURPOSES ONLY**
+
+This tool is provided for educational purposes and authorized security testing only. By using this software, you agree to the following:
+
+- **You may ONLY scan websites and applications that you own or have explicit written permission to test**
+- **Unauthorized scanning of third-party websites may be illegal in your jurisdiction**
+- **The authors and contributors are NOT responsible for any misuse or damage caused by this tool**
+- **Users are solely responsible for ensuring compliance with all applicable laws and regulations**
+- **This tool is provided "AS IS" without warranty of any kind, express or implied**
+- **The authors assume NO liability for any consequences resulting from the use or misuse of this software**
+
+By using KeyLeak Detector, you acknowledge that you have read, understood, and agreed to these terms. If you do not agree, do not use this tool.
 
 ## Legal and Ethical Use
 
