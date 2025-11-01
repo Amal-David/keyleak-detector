@@ -4,6 +4,21 @@ A web application that scans websites for potential API keys, secrets, and sensi
 
 **Referenced Project:** Key detection patterns inspired by [Keyleaksecret](https://github.com/0xSojalSec/Keyleaksecret).
 
+## ⚠️ Disclaimer
+
+**FOR EDUCATIONAL AND AUTHORIZED TESTING PURPOSES ONLY**
+
+This tool is provided for educational purposes and authorized security testing only. By using this software, you agree to the following:
+
+- **You may ONLY scan websites and applications that you own or have explicit written permission to test**
+- **Unauthorized scanning of third-party websites may be illegal in your jurisdiction**
+- **The authors and contributors are NOT responsible for any misuse or damage caused by this tool**
+- **Users are solely responsible for ensuring compliance with all applicable laws and regulations**
+- **This tool is provided "AS IS" without warranty of any kind, express or implied**
+- **The authors assume NO liability for any consequences resulting from the use or misuse of this software**
+
+By using KeyLeak Detector, you acknowledge that you have read, understood, and agreed to these terms. If you do not agree, do not use this tool.
+
 ## Features
 
 - Scans web pages for common secret patterns (API keys, passwords, tokens, etc.)
@@ -138,14 +153,27 @@ When the scanner detects potential secrets, it provides:
 - **Actionable recommendations** for remediation
 - **Best practices** for secure credential management
 
-## Security Considerations
+## Legal and Ethical Use
 
-- **Only scan websites you own or have permission to scan**
+### Authorization Required
+- ✅ **DO** scan your own websites and applications
+- ✅ **DO** scan websites where you have explicit written authorization
+- ✅ **DO** use for security research with proper permissions
+- ✅ **DO** use for educational purposes in controlled environments
+- ❌ **DON'T** scan websites without explicit permission
+- ❌ **DON'T** use for malicious purposes
+- ❌ **DON'T** share or exploit found credentials
+
+### Best Practices
+- Always obtain written permission before scanning any system
+- Handle scan results securely and responsibly
+- If you find valid credentials, rotate them immediately
+- Report findings through responsible disclosure programs
 - Be cautious when scanning production environments
-- This tool is for **educational and security testing purposes only**
-- Always handle scan results securely and responsibly
-- If you find valid credentials, **rotate them immediately**
-- Report findings through responsible disclosure when appropriate
+- Understand and comply with applicable laws in your jurisdiction
+
+### Liability
+**THE AUTHORS AND CONTRIBUTORS OF THIS SOFTWARE DISCLAIM ALL LIABILITY FOR ANY MISUSE, DAMAGES, OR LEGAL CONSEQUENCES ARISING FROM THE USE OF THIS TOOL. USERS ASSUME FULL RESPONSIBILITY FOR THEIR ACTIONS.**
 
 ## Contributing
 
