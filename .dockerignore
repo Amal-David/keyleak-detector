@@ -1,0 +1,55 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+env/
+ENV/
+.venv
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Git
+.git/
+.gitignore
+.gitattributes
+
+# Docker
+Dockerfile
+compose.yml
+.dockerignore
+
+# Documentation and analysis files
+*.md
+DISCLAIMER.md
+LICENSE
+PATTERN_ANALYSIS.md
+GITLEAKS_INTEGRATION.md
+INTEGRATION_BENEFITS.md
+IMPROVEMENTS_SUMMARY.md
+
+# Test files
+test_page.html
+import_gitleaks_patterns.py
+gitleaks_patterns_imported.py
+
+# Logs
+logs/
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Temporary files
+*.tmp
+*.temp
+.cache/
+

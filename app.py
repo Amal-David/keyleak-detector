@@ -33,6 +33,9 @@ import jwt
 # Import our custom views
 from custom_views import load as load_custom_image_view
 
+# Import pattern manager for enhanced detection
+from pattern_importer import get_enhanced_patterns
+
 # Set up logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -44,18 +47,18 @@ load_dotenv()
 mitm_thread = None
 mitm_running = False
 
-# Enhanced patterns for detecting potential secrets
-SECRET_PATTERNS = {
-    # API Keys and Tokens
+# Custom patterns for detecting potential secrets (will be enhanced with GitLeaks patterns)
+CUSTOM_SECRET_PATTERNS = {
+    # API Keys and Tokens (Gitleaks-inspired patterns)
     'api_key': r'(?i)(?:api[_-]?key|apikey|api[_-]?token|api[_-]?secret)[=: ]*[\'\"]?([a-z0-9_\-]{20,})[\'\"]?',
-    'jwt_token': r'eyJ[a-zA-Z0-9\-_=]+\.[a-zA-Z0-9\-_]+\.?[a-zA-Z0-9\-_.+/=]*',
+    'jwt_token': r'eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}',  # Stricter - min 10 chars per section
     'bearer_token': r'bearer[\s=:]+([a-zA-Z0-9_\-]{20,})',
     'oauth_token': r'[0-9]+-[0-9A-Za-z_]{40}',
     'hardcoded_creds': r'(?i)(?:username|user|password|pass|secret|key|token)[\s=:]+\s*[\'\"]([a-zA-Z0-9_\-@\.]{12,})[\'\"]',
     
-    # Cloud Provider Credentials
-    'aws_key': r'(?i)aws[_-]?(?:access[_-]?key[_-]?id|key[_-]?id|access[_-]?key)[=: ]*[\'\"]?([A-Z0-9]{20})[\'\"]?',
-    'aws_secret': r'(?i)aws[_-]?secret[_-]?(?:access[_-]?key|key|secret)[=: ]*[\'\"]?([A-Za-z0-9/+=]{40})[\'\"]?',
+    # Cloud Provider Credentials (Gitleaks-inspired patterns)
+    'aws_key': r'AKIA[0-9A-Z]{16}',  # More accurate - AWS keys always start with AKIA
+    'aws_secret': r'(?i)aws(.{0,20})?[\'"][0-9a-zA-Z\/+]{40}[\'"]',  # Context-aware AWS secret
     'aws_account_id': r'\b(aws[_-]?account[_-]?id|account[_-]?id|aws[_-]?id)[=: ]*[\'\"]?([0-9]{4}[\-]?[0-9]{4}[\-]?[0-9]{4})[\'\"]?',
     'aws_credentials_block': r'\[default\][\s\S]*?aws_access_key_id\s*=\s*([A-Z0-9]{20})[\s\S]*?aws_secret_access_key\s*=\s*([A-Za-z0-9/+=]{40})',
     'aws_config': r'\[profile [^\]]+\][\s\S]*?aws_access_key_id\s*=\s*([A-Z0-9]{20})[\s\S]*?aws_secret_access_key\s*=\s*([A-Za-z0-9/+=]{40})',
@@ -68,13 +71,19 @@ SECRET_PATTERNS = {
     'mailgun_api_key': r'key-[0-9a-zA-Z]{32}',
     'mailchimp_api_key': r'[0-9a-f]{32}-us[0-9]{1,2}',
     'twilio_api_key': r'SK[0-9a-fA-F]{32}',
-    'stripe_api_key': r'(?i)stripe[_-]?api[_-]?key[=: ]*[\'\"]?(sk_(test|live)_[0-9a-zA-Z]{24,})[\'\"]?',
-    'stripe_restricted_key': r'(?i)stripe[_-]?restricted[_-]?key[=: ]*[\'\"]?(rk_(test|live)_[0-9a-zA-Z]{24,})[\'\"]?',
-    'slack_token': r'xox[baprs]-(?i)[a-z0-9-]{10,48}',
-    'github_token': r'(?i)github[_-]?(?:token|key|secret)[=: ]*[\'\"]?([0-9a-zA-Z]{40})[\'\"]?',
-    'github_oauth': r'ghp_[a-zA-Z0-9]{36}',
+    'stripe_key': r'(sk|pk)_(test|live)_[0-9a-zA-Z]{24,99}',  # Catches both secret and publishable keys
+    'stripe_restricted_key': r'rk_(test|live)_[0-9a-zA-Z]{24,}',
+    'slack_token': r'xox[baprs]-[0-9]{10,13}-[0-9]{10,13}-[a-zA-Z0-9]{24,32}',  # More structured
+    'slack_webhook': r'https://hooks\.slack\.com/services/T[a-zA-Z0-9_]+/B[a-zA-Z0-9_]+/[a-zA-Z0-9_]+',  # NEW
+    'github_pat': r'ghp_[0-9a-zA-Z]{36}',  # GitHub Personal Access Token
+    'github_fine_grained_pat': r'github_pat_[0-9a-zA-Z_]{82}',  # NEW - Fine-grained PAT
+    'github_oauth': r'gho_[0-9a-zA-Z]{36}',  # GitHub OAuth token
     'gitlab_token': r'glpat-[0-9a-zA-Z\-]{20}',
     'npm_token': r'npm_[a-zA-Z0-9\-\_]{36}',
+    'sendgrid_api_key': r'SG\.[a-zA-Z0-9_-]{22}\.[a-zA-Z0-9_-]{43}',  # NEW - SendGrid
+    'square_access_token': r'sq0atp-[0-9A-Za-z\-_]{22}',  # NEW - Square payment
+    'square_oauth_secret': r'sq0csp-[0-9A-Za-z\-_]{43}',  # NEW - Square OAuth
+    'pypi_upload_token': r'pypi-AgEIcHlwaS5vcmc[A-Za-z0-9\-_]{50,}',  # NEW - PyPI
     
     # LLM API Keys
     'openai_api_key': r'sk-(?:proj-)?[a-zA-Z0-9]{20,}',
@@ -144,9 +153,28 @@ SECRET_PATTERNS = {
     'date_of_birth': r'\b(0[1-9]|1[0-2])[-/.](0[1-9]|[12][0-9]|3[01])[-/.](19|20)\d{2}\b',
 }
 
+# Enhance with imported patterns from GitLeaks
+try:
+    SECRET_PATTERNS = get_enhanced_patterns(
+        custom_patterns=CUSTOM_SECRET_PATTERNS,
+        use_cache=True,  # Cache patterns for 24 hours
+        include_secrets_db=False  # Use GitLeaks patterns only (160+ patterns)
+    )
+    logger.info(f"Successfully loaded {len(SECRET_PATTERNS)} detection patterns (custom + GitLeaks)")
+except Exception as e:
+    logger.warning(f"Failed to import GitLeaks patterns, using custom patterns only: {e}")
+    SECRET_PATTERNS = CUSTOM_SECRET_PATTERNS
+    logger.info(f"Using {len(SECRET_PATTERNS)} custom detection patterns")
+
 # Compiled regex patterns for better performance
-COMPILED_PATTERNS = {name: re.compile(pattern, re.IGNORECASE | re.MULTILINE) 
-                    for name, pattern in SECRET_PATTERNS.items()}
+COMPILED_PATTERNS = {}
+for name, pattern in SECRET_PATTERNS.items():
+    try:
+        COMPILED_PATTERNS[name] = re.compile(pattern, re.IGNORECASE | re.MULTILINE)
+    except (re.error, Exception) as e:
+        logger.warning(f"Skipping invalid pattern '{name}': {e}")
+
+logger.info(f"Successfully compiled {len(COMPILED_PATTERNS)}/{len(SECRET_PATTERNS)} patterns")
 
 # Known false positives to filter out
 FALSE_POSITIVES = [
@@ -281,13 +309,19 @@ FINDING_CONTEXT = {
     'mailgun_api_key': 'Mailgun API key found in request or response',
     'mailchimp_api_key': 'Mailchimp API key found in request or response',
     'twilio_api_key': 'Twilio API key found in request or response',
-    'stripe_api_key': 'Stripe API key found in request or response',
+    'stripe_key': 'Stripe API key found in request or response',
     'stripe_restricted_key': 'Stripe restricted key found in request or response',
     'slack_token': 'Slack token found in request or response',
-    'github_token': 'GitHub token found in request or response',
+    'slack_webhook': 'Slack webhook URL found in request or response',
+    'github_pat': 'GitHub Personal Access Token found in request or response',
+    'github_fine_grained_pat': 'GitHub Fine-Grained Personal Access Token found in request or response',
     'github_oauth': 'GitHub OAuth token found in request or response',
     'gitlab_token': 'GitLab token found in request or response',
     'npm_token': 'npm token found in request or response',
+    'sendgrid_api_key': 'SendGrid API key found in request or response',
+    'square_access_token': 'Square access token found in request or response',
+    'square_oauth_secret': 'Square OAuth secret found in request or response',
+    'pypi_upload_token': 'PyPI upload token found in request or response',
     'openai_api_key': 'OpenAI API key found in request or response',
     'anthropic_api_key': 'Anthropic (Claude) API key found in request or response',
     'gemini_api_key': 'Google Gemini API key found in request or response',
@@ -339,8 +373,9 @@ SEVERITY_LEVELS = {
     'high': [
         'aws_key', 'aws_secret', 'google_api_key', 'google_service_account', 'google_vertex_api_key',
         'firebase', 'heroku_api_key', 'mailgun_api_key', 'mailchimp_api_key',
-        'twilio_api_key', 'stripe_api_key', 'stripe_restricted_key', 'slack_token',
-        'github_token', 'github_oauth', 'gitlab_token', 'npm_token', 
+        'twilio_api_key', 'stripe_key', 'stripe_restricted_key', 'slack_token', 'slack_webhook',
+        'github_pat', 'github_fine_grained_pat', 'github_oauth', 'gitlab_token', 'npm_token', 
+        'sendgrid_api_key', 'square_access_token', 'square_oauth_secret', 'pypi_upload_token',
         'openai_api_key', 'anthropic_api_key', 'gemini_api_key', 'huggingface_token', 'cohere_api_key',
         'openrouter_api_key', 'replicate_api_key', 'together_api_key', 'perplexity_api_key',
         'mistral_api_key', 'ai21_api_key', 'anyscale_api_key', 'deepinfra_api_key', 'groq_api_key', 'fireworks_api_key',
@@ -832,10 +867,16 @@ def get_recommendation(finding_type: str, value: str, source: str) -> str:
         'google_api_key': 'CRITICAL: Rotate this Google API key immediately. Test: curl "https://www.googleapis.com/youtube/v3/activities?key=KEY_HERE". Restrict key usage in Google Cloud Console and use environment variables.',
         'google_service_account': 'CRITICAL: Google Cloud service account credentials exposed. This provides full access to GCP resources. Rotate immediately in IAM & Admin console, revoke compromised key, and audit all GCP resource access logs.',
         'google_vertex_api_key': 'CRITICAL: Rotate this Google Vertex AI API key immediately. Test: curl "https://generativelanguage.googleapis.com/v1/models?key=KEY". This can incur significant AI/ML charges. Restrict in GCP Console and use environment variables.',
-        'stripe_api_key': 'CRITICAL: Rotate immediately. Test validity: curl https://api.stripe.com/v1/charges -u KEY:. Note: sk_live_ keys expose production data. Use environment variables and restrict key permissions.',
+        'stripe_key': 'CRITICAL: Rotate immediately. Test validity: curl https://api.stripe.com/v1/charges -u KEY:. Note: sk_live_ keys expose production data, pk_ keys can expose rate limits. Use environment variables and restrict key permissions.',
         'slack_token': 'CRITICAL: Revoke and rotate. Test: curl -X POST "https://slack.com/api/auth.test?token=TOKEN&pretty=1". Regenerate in Slack App settings.',
-        'github_token': 'CRITICAL: Revoke immediately. Test: curl -H "Authorization: token TOKEN" https://api.github.com/user. Generate new token with minimal required scopes.',
-        'github_oauth': 'CRITICAL: Revoke this GitHub personal access token. Test: curl -H "Authorization: token TOKEN" https://api.github.com/user. Generate new token with minimal scopes.',
+        'slack_webhook': 'HIGH: Slack webhook URL exposed. Anyone with this URL can post messages to your Slack channel. Regenerate webhook in Slack settings and restrict usage to server-side only.',
+        'github_pat': 'CRITICAL: Revoke this GitHub Personal Access Token immediately. Test: curl -H "Authorization: token TOKEN" https://api.github.com/user. Generate new token with minimal required scopes.',
+        'github_fine_grained_pat': 'CRITICAL: Revoke this GitHub Fine-Grained PAT immediately. Test: curl -H "Authorization: token TOKEN" https://api.github.com/user. These tokens have specific repository access - regenerate with minimal permissions.',
+        'github_oauth': 'CRITICAL: Revoke this GitHub OAuth token. Test: curl -H "Authorization: token TOKEN" https://api.github.com/user. Generate new token with minimal scopes.',
+        'sendgrid_api_key': 'CRITICAL: Rotate this SendGrid API key immediately. Test: curl -X GET "https://api.sendgrid.com/v3/scopes" -H "Authorization: Bearer KEY". This could be used to send emails from your domain. Rotate in SendGrid dashboard.',
+        'square_access_token': 'CRITICAL: Rotate this Square access token immediately. Test: curl https://connect.squareup.com/v2/locations -H "Authorization: Bearer TOKEN". This provides access to payment processing. Rotate in Square Developer Dashboard.',
+        'square_oauth_secret': 'CRITICAL: Rotate this Square OAuth secret immediately. This is used for OAuth authentication and could compromise your Square integration. Regenerate in Square Developer Dashboard.',
+        'pypi_upload_token': 'CRITICAL: Rotate this PyPI upload token immediately. Test: pip install twine && twine upload --repository-url https://test.pypi.org/legacy/ PACKAGE. This could be used to publish malicious packages. Revoke in PyPI account settings.',
         'firebase': 'HIGH: This Firebase API key is exposed. While client-side keys are expected, ensure Firebase Security Rules are properly configured to prevent unauthorized access.',
         'heroku_api_key': 'CRITICAL: Rotate immediately. Test: curl -n https://api.heroku.com/account -H "Authorization: Bearer KEY". Regenerate in Heroku account settings.',
         'mailgun_api_key': 'CRITICAL: Rotate this Mailgun API key. Test: curl --user "api:KEY" https://api.mailgun.net/v3/domains. This could be used to send emails from your domain.',

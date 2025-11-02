@@ -6,7 +6,9 @@
 
 A web application that scans websites for potential API keys, secrets, and sensitive information leaks. This tool helps developers and security professionals identify and fix security vulnerabilities in their web applications.
 
-**Referenced Project:** Key detection patterns inspired by [Keyleaksecret](https://github.com/0xSojalSec/Keyleaksecret).
+**🔍 Detection Capability:** Features **130+ detection patterns** for comprehensive secret scanning, combining custom patterns with industry-standard rules from [GitLeaks](https://github.com/gitleaks/gitleaks).
+
+**Pattern Sources:** Detection patterns dynamically imported from [GitLeaks](https://github.com/gitleaks/gitleaks) and enhanced with custom patterns inspired by [Keyleaksecret](https://github.com/0xSojalSec/Keyleaksecret), all optimized for runtime web scanning.
 
 ## 📸 Preview
 
@@ -14,18 +16,40 @@ A web application that scans websites for potential API keys, secrets, and sensi
 
 ## Features
 
+- **130+ Detection Patterns** - Comprehensive secret detection powered by GitLeaks pattern database
 - Scans web pages for common secret patterns (API keys, passwords, tokens, etc.)
 - Checks response headers for sensitive information
 - Validates security headers
 - User-friendly web interface
 - Real-time scanning results
 - Categorizes findings by severity
+- Auto-updating patterns (24-hour cache refresh from GitLeaks)
 
 ## Installation
 
+### Option 1: Docker (Recommended)
+
+```bash
+# Clone the repository
+git clone https://github.com/Amal-David/keyleak-detector.git
+cd keyleak-detector
+
+# Start with Docker Compose
+docker compose up -d
+
+# View logs
+docker compose logs -f
+```
+
+The application will be available at **http://localhost:5002**
+
+For detailed Docker instructions, see [DOCKER.md](DOCKER.md)
+
+### Option 2: Manual Installation
+
 1. Clone this repository:
    ```bash
-   git clone <repository-url>
+   git clone https://github.com/Amal-David/keyleak-detector.git
    cd keyleak-detector
    ```
 
@@ -77,7 +101,7 @@ The application uses a combination of browser automation and network traffic ana
 
 ## Patterns Detected
 
-The scanner detects 50+ types of sensitive information including:
+The scanner detects **130+ types of sensitive information** including:
 
 **Cloud Provider Credentials:**
 - AWS Access Keys & Secret Keys
@@ -182,6 +206,15 @@ By using KeyLeak Detector, you acknowledge that you have read, understood, and a
 
 ### Liability
 **THE AUTHORS AND CONTRIBUTORS OF THIS SOFTWARE DISCLAIM ALL LIABILITY FOR ANY MISUSE, DAMAGES, OR LEGAL CONSEQUENCES ARISING FROM THE USE OF THIS TOOL. USERS ASSUME FULL RESPONSIBILITY FOR THEIR ACTIONS.**
+
+## Acknowledgments
+
+This project uses detection patterns from:
+
+- **[GitLeaks](https://github.com/gitleaks/gitleaks)** - Industry-standard SAST tool. We dynamically import their pattern database for enhanced detection.
+- **[Keyleaksecret](https://github.com/0xSojalSec/Keyleaksecret)** - Additional pattern inspiration.
+
+Thanks to these projects for their contributions, which helped us integrate better detection patterns and make our solution more comprehensive.
 
 ## Contributing
 

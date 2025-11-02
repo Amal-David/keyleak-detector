@@ -38,3 +38,14 @@ htmlcov/
 *.tmp
 temp/
 tmp/
+
+# Documentation - only allow specific .md files
+*.md
+!README.md
+!DOCKER.md
+!DISCLAIMER.md
+!LICENSE.md
+
+# Pattern cache
+patterns_cache.json
+patterns_sample.json
