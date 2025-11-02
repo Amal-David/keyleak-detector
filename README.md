@@ -29,6 +29,9 @@ A web application that scans websites for potential API keys, secrets, and sensi
 
 ### Option 1: Docker (Recommended)
 
+The easiest way to run KeyLeak Detector is using Docker. This method includes all dependencies and browser automation components pre-configured.
+
+**Quick Start:**
 ```bash
 # Clone the repository
 git clone https://github.com/Amal-David/keyleak-detector.git
@@ -39,11 +42,35 @@ docker compose up -d
 
 # View logs
 docker compose logs -f
+
+# Stop the container
+docker compose down
 ```
 
-The application will be available at **http://localhost:5002**
+**The application will be available at http://localhost:5002**
 
-For detailed Docker instructions, see [DOCKER.md](DOCKER.md)
+**Requirements:**
+- Docker 20.10+
+- Docker Compose 2.0+
+- 2GB RAM minimum
+- 5GB disk space
+
+**Common Docker Commands:**
+```bash
+# Check container status
+docker compose ps
+
+# Restart container
+docker compose restart
+
+# Rebuild after code changes
+docker compose up -d --build
+
+# View real-time logs
+docker compose logs -f keyleak-detector
+```
+
+For detailed Docker instructions, deployment options, and troubleshooting, see [DOCKER.md](DOCKER.md)
 
 ### Option 2: Manual Installation
 
@@ -72,6 +99,18 @@ For detailed Docker instructions, see [DOCKER.md](DOCKER.md)
 
 ## Usage
 
+### Using Docker (Recommended)
+
+If you're running with Docker, the application starts automatically:
+
+```bash
+docker compose up -d
+```
+
+Then open your web browser and navigate to **http://localhost:5002**
+
+### Manual Installation
+
 1. Start the application:
    ```bash
    python app.py
@@ -84,9 +123,12 @@ For detailed Docker instructions, see [DOCKER.md](DOCKER.md)
    
    > **Note:** The app runs on port 5002 instead of 5000 as port 5000 is commonly used by AirPlay on macOS.
 
-3. Enter the URL you want to scan in the input field and click "Scan Now"
+### Scanning Websites
 
-4. View the results, which will show any potential security issues found
+1. Enter the URL you want to scan in the input field
+2. Click "Scan Now"
+3. Wait for the scan to complete (typically 30-60 seconds)
+4. View the results, which will show any potential security issues found organized by severity
 
 ## How It Works
 
