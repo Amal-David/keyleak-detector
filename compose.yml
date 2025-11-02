@@ -1,0 +1,34 @@
+services:
+  keyleak-detector:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: keyleak-detector
+    ports:
+      - "5002:5002"
+    environment:
+      - PORT=5002
+      - PYTHONUNBUFFERED=1
+    volumes:
+      # Mount logs directory (optional - for persistent logs)
+      - ./logs:/app/logs
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import requests; requests.get('http://localhost:5002', timeout=5)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    # Security options
+    security_opt:
+      - no-new-privileges:true
+    # Resource limits (adjust as needed)
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 2G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+

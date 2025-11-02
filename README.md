@@ -6,7 +6,9 @@
 
 A web application that scans websites for potential API keys, secrets, and sensitive information leaks. This tool helps developers and security professionals identify and fix security vulnerabilities in their web applications.
 
-**Referenced Project:** Key detection patterns inspired by [Keyleaksecret](https://github.com/0xSojalSec/Keyleaksecret).
+**🔍 Detection Capability:** Comprehensive secret scanning with detection patterns dynamically loaded from [GitLeaks](https://github.com/gitleaks/gitleaks) and enhanced with custom patterns for runtime web scanning.
+
+**Pattern Sources:** Detection patterns dynamically imported from [GitLeaks](https://github.com/gitleaks/gitleaks) and enhanced with custom patterns inspired by [Keyleaksecret](https://github.com/0xSojalSec/Keyleaksecret), all optimized for runtime web scanning.
 
 ## 📸 Preview
 
@@ -14,18 +16,67 @@ A web application that scans websites for potential API keys, secrets, and sensi
 
 ## Features
 
+- **Comprehensive Pattern Detection** - Dynamic pattern loading from GitLeaks combined with custom patterns
 - Scans web pages for common secret patterns (API keys, passwords, tokens, etc.)
 - Checks response headers for sensitive information
 - Validates security headers
 - User-friendly web interface
 - Real-time scanning results
 - Categorizes findings by severity
+- Pattern caching with 24-hour refresh interval (updates on application restart after cache expiry)
 
 ## Installation
 
+### Option 1: Docker (Recommended)
+
+The easiest way to run KeyLeak Detector is using Docker. This method includes all dependencies and browser automation components pre-configured.
+
+**Quick Start:**
+```bash
+# Clone the repository
+git clone https://github.com/Amal-David/keyleak-detector.git
+cd keyleak-detector
+
+# Start with Docker Compose
+docker compose up -d
+
+# View logs
+docker compose logs -f
+
+# Stop the container
+docker compose down
+```
+
+**The application will be available at http://localhost:5002**
+
+**Requirements:**
+- Docker 20.10+
+- Docker Compose 2.0+
+- 2GB RAM minimum
+- 5GB disk space
+
+**Common Docker Commands:**
+```bash
+# Check container status
+docker compose ps
+
+# Restart container
+docker compose restart
+
+# Rebuild after code changes
+docker compose up -d --build
+
+# View real-time logs
+docker compose logs -f keyleak-detector
+```
+
+For detailed Docker instructions, deployment options, and troubleshooting, see [DOCKER.md](DOCKER.md)
+
+### Option 2: Manual Installation
+
 1. Clone this repository:
    ```bash
-   git clone <repository-url>
+   git clone https://github.com/Amal-David/keyleak-detector.git
    cd keyleak-detector
    ```
 
@@ -48,6 +99,18 @@ A web application that scans websites for potential API keys, secrets, and sensi
 
 ## Usage
 
+### Using Docker (Recommended)
+
+If you're running with Docker, the application starts automatically:
+
+```bash
+docker compose up -d
+```
+
+Then open your web browser and navigate to **http://localhost:5002**
+
+### Manual Installation
+
 1. Start the application:
    ```bash
    python app.py
@@ -60,9 +123,12 @@ A web application that scans websites for potential API keys, secrets, and sensi
    
    > **Note:** The app runs on port 5002 instead of 5000 as port 5000 is commonly used by AirPlay on macOS.
 
-3. Enter the URL you want to scan in the input field and click "Scan Now"
+### Scanning Websites
 
-4. View the results, which will show any potential security issues found
+1. Enter the URL you want to scan in the input field
+2. Click "Scan Now"
+3. Wait for the scan to complete (typically 30-60 seconds)
+4. View the results, which will show any potential security issues found organized by severity
 
 ## How It Works
 
@@ -77,7 +143,7 @@ The application uses a combination of browser automation and network traffic ana
 
 ## Patterns Detected
 
-The scanner detects 50+ types of sensitive information including:
+The scanner detects a wide range of sensitive information including:
 
 **Cloud Provider Credentials:**
 - AWS Access Keys & Secret Keys
@@ -182,6 +248,15 @@ By using KeyLeak Detector, you acknowledge that you have read, understood, and a
 
 ### Liability
 **THE AUTHORS AND CONTRIBUTORS OF THIS SOFTWARE DISCLAIM ALL LIABILITY FOR ANY MISUSE, DAMAGES, OR LEGAL CONSEQUENCES ARISING FROM THE USE OF THIS TOOL. USERS ASSUME FULL RESPONSIBILITY FOR THEIR ACTIONS.**
+
+## Acknowledgments
+
+This project uses detection patterns from:
+
+- **[GitLeaks](https://github.com/gitleaks/gitleaks)** - Industry-standard SAST tool. We dynamically import their pattern database for enhanced detection.
+- **[Keyleaksecret](https://github.com/0xSojalSec/Keyleaksecret)** - Additional pattern inspiration.
+
+Thanks to these projects for their contributions, which helped us integrate better detection patterns and make our solution more comprehensive.
 
 ## Contributing
 
