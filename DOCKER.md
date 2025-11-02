@@ -140,9 +140,11 @@ docker stats --no-stream keyleak-detector
 
 ## 🔐 Security Considerations
 
-### Running as Non-Root (Production)
+### Running as Non-Root (Optional Enhancement)
 
-For production, add a non-root user to the Dockerfile:
+For enhanced security, you can add a non-root user to the Dockerfile:
+
+**Note:** The current Dockerfile runs as root. For production deployments, consider implementing the non-root user configuration shown below.
 
 ```dockerfile
 # Add after WORKDIR /app
@@ -189,7 +191,7 @@ tmpfs:
 docker swarm init
 
 # Deploy stack
-docker stack deploy -c docker compose.yml keyleak
+docker stack deploy -c compose.yml keyleak
 
 # List services
 docker stack services keyleak
@@ -280,7 +282,7 @@ If Playwright fails to start:
 docker compose build --no-cache
 
 # Check Playwright installation
-docker compose exec keyleak-detector playwright --version
+docker compose exec keyleak-detector python -c "import playwright; print(playwright.__version__)"
 ```
 
 ### Memory Issues

@@ -6,7 +6,7 @@
 
 A web application that scans websites for potential API keys, secrets, and sensitive information leaks. This tool helps developers and security professionals identify and fix security vulnerabilities in their web applications.
 
-**🔍 Detection Capability:** Features **130+ detection patterns** for comprehensive secret scanning, combining custom patterns with industry-standard rules from [GitLeaks](https://github.com/gitleaks/gitleaks).
+**🔍 Detection Capability:** Comprehensive secret scanning with detection patterns dynamically loaded from [GitLeaks](https://github.com/gitleaks/gitleaks) and enhanced with custom patterns for runtime web scanning.
 
 **Pattern Sources:** Detection patterns dynamically imported from [GitLeaks](https://github.com/gitleaks/gitleaks) and enhanced with custom patterns inspired by [Keyleaksecret](https://github.com/0xSojalSec/Keyleaksecret), all optimized for runtime web scanning.
 
@@ -16,14 +16,14 @@ A web application that scans websites for potential API keys, secrets, and sensi
 
 ## Features
 
-- **130+ Detection Patterns** - Comprehensive secret detection powered by GitLeaks pattern database
+- **Comprehensive Pattern Detection** - Dynamic pattern loading from GitLeaks combined with custom patterns
 - Scans web pages for common secret patterns (API keys, passwords, tokens, etc.)
 - Checks response headers for sensitive information
 - Validates security headers
 - User-friendly web interface
 - Real-time scanning results
 - Categorizes findings by severity
-- Auto-updating patterns (24-hour cache refresh from GitLeaks)
+- Pattern caching with 24-hour refresh interval (updates on application restart after cache expiry)
 
 ## Installation
 
@@ -143,7 +143,7 @@ The application uses a combination of browser automation and network traffic ana
 
 ## Patterns Detected
 
-The scanner detects **130+ types of sensitive information** including:
+The scanner detects a wide range of sensitive information including:
 
 **Cloud Provider Credentials:**
 - AWS Access Keys & Secret Keys

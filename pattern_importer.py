@@ -59,8 +59,8 @@ class GitleaksPatternImporter:
             logger.info(f"Loaded {len(patterns)} patterns from GitLeaks")
             return patterns
             
-        except Exception as e:
-            logger.error(f"Failed to fetch GitLeaks patterns: {e}")
+        except (requests.RequestException, ValueError, KeyError) as e:
+            logger.exception(f"Failed to fetch GitLeaks patterns: {e}")
             return {}
 
 
@@ -108,8 +108,8 @@ class SecretsPatternsDB:
             logger.info(f"Loaded {len(patterns)} patterns from secrets-patterns-db (min confidence: {min_confidence})")
             return patterns
             
-        except Exception as e:
-            logger.error(f"Failed to fetch secrets-patterns-db: {e}")
+        except (requests.RequestException, ValueError, KeyError) as e:
+            logger.exception(f"Failed to fetch secrets-patterns-db: {e}")
             return {}
 
 
@@ -223,10 +223,19 @@ class PatternManager:
             with open(self.CACHE_FILE, 'r') as f:
                 patterns = json.load(f)
             
+            # Validate cache structure
+            if not isinstance(patterns, dict):
+                logger.warning("Invalid cache format - expected dict")
+                return None
+            
+            if not all(isinstance(k, str) and isinstance(v, str) for k, v in patterns.items()):
+                logger.warning("Invalid cache content - expected string key-value pairs")
+                return None
+            
             return patterns
             
-        except Exception as e:
-            logger.warning(f"Failed to load cache: {e}")
+        except (IOError, json.JSONDecodeError, ValueError) as e:
+            logger.exception(f"Failed to load cache: {e}")
             return None
     
     def _save_to_cache(self, patterns: Dict[str, str]):

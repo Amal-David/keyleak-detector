@@ -71,8 +71,8 @@ CUSTOM_SECRET_PATTERNS = {
     'mailgun_api_key': r'key-[0-9a-zA-Z]{32}',
     'mailchimp_api_key': r'[0-9a-f]{32}-us[0-9]{1,2}',
     'twilio_api_key': r'SK[0-9a-fA-F]{32}',
-    'stripe_key': r'(sk|pk)_(test|live)_[0-9a-zA-Z]{24,99}',  # Catches both secret and publishable keys
-    'stripe_restricted_key': r'rk_(test|live)_[0-9a-zA-Z]{24,}',
+    'stripe_key': r'(?:sk|pk)_(?:test|live)_[0-9a-zA-Z]{24,99}',  # Catches both secret and publishable keys
+    'stripe_restricted_key': r'rk_(?:test|live)_[0-9a-zA-Z]{24,}',
     'slack_token': r'xox[baprs]-[0-9]{10,13}-[0-9]{10,13}-[a-zA-Z0-9]{24,32}',  # More structured
     'slack_webhook': r'https://hooks\.slack\.com/services/T[a-zA-Z0-9_]+/B[a-zA-Z0-9_]+/[a-zA-Z0-9_]+',  # NEW
     'github_pat': r'ghp_[0-9a-zA-Z]{36}',  # GitHub Personal Access Token
