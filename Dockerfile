@@ -1,46 +1,43 @@
-# Use Python 3.11 slim image
-FROM python:3.11-slim
+# Use Python 3.11 on Debian Bookworm (stable) for reliable apt repos
+FROM python:3.11-slim-bookworm
 
 # Set working directory
 WORKDIR /app
 
-# Install system dependencies required for Playwright and mitmproxy
-RUN apt-get update && apt-get install -y \
-    wget \
-    gnupg \
-    ca-certificates \
-    fonts-liberation \
-    libasound2 \
-    libatk-bridge2.0-0 \
-    libatk1.0-0 \
-    libatspi2.0-0 \
-    libcups2 \
-    libdbus-1-3 \
-    libdrm2 \
-    libgbm1 \
-    libgtk-3-0 \
-    libnspr4 \
-    libnss3 \
-    libwayland-client0 \
-    libxcomposite1 \
-    libxdamage1 \
-    libxfixes3 \
-    libxkbcommon0 \
-    libxrandr2 \
-    xdg-utils \
-    libu2f-udev \
-    libvulkan1 \
-    && rm -rf /var/lib/apt/lists/*
-
-# Copy requirements file
+# Copy requirements first for better layer caching
 COPY requirements.txt .
 
-# Install Python dependencies
-RUN pip install --no-cache-dir -r requirements.txt
-
-# Install Playwright browsers
-RUN playwright install chromium
-RUN playwright install-deps chromium
+# Install dependencies with aggressive space optimization
+RUN set -eux && \
+    # Configure apt to minimize cache
+    echo 'APT::Install-Recommends "0";' > /etc/apt/apt.conf.d/99-no-recommends && \
+    echo 'APT::Install-Suggests "0";' > /etc/apt/apt.conf.d/99-no-suggests && \
+    echo 'APT::Keep-Downloaded-Packages "false";' > /etc/apt/apt.conf.d/99-no-cache && \
+    # Update and install base packages
+    apt-get update && \
+    apt-get install -y --no-install-recommends wget ca-certificates && \
+    # Clean immediately
+    apt-get clean && rm -rf /var/lib/apt/lists/* /var/cache/apt/* && \
+    # Install Python packages
+    pip install --no-cache-dir -r requirements.txt && \
+    # Install Playwright browser
+    playwright install chromium && \
+    # Install system deps
+    apt-get update && \
+    playwright install-deps chromium && \
+    # Final aggressive cleanup
+    apt-get purge -y wget && \
+    apt-get autoremove -y && \
+    apt-get clean && \
+    rm -rf \
+        /var/lib/apt/lists/* \
+        /var/cache/apt/* \
+        /tmp/* \
+        /var/tmp/* \
+        /root/.cache \
+        /usr/share/doc \
+        /usr/share/man \
+        /usr/share/locale
 
 # Copy application files
 COPY . .

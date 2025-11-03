@@ -53,7 +53,7 @@ docker compose down
 - Docker 20.10+
 - Docker Compose 2.0+
 - 2GB RAM minimum
-- 5GB disk space
+- 1GB disk space (image size: ~690MB)
 
 **Common Docker Commands:**
 ```bash

@@ -4,6 +4,8 @@ This guide covers running KeyLeak Detector using Docker.
 
 ## 🐳 Quick Start
 
+**Image Size:** ~690MB (optimized with full browser automation)
+
 ### Using Docker Compose (Recommended)
 
 ```bash
