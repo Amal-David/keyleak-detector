@@ -13,16 +13,16 @@ RUN set -eux && \
     echo 'APT::Install-Recommends "0";' > /etc/apt/apt.conf.d/99-no-recommends && \
     echo 'APT::Install-Suggests "0";' > /etc/apt/apt.conf.d/99-no-suggests && \
     echo 'APT::Keep-Downloaded-Packages "false";' > /etc/apt/apt.conf.d/99-no-cache && \
-    # Update and install base packages
+    # Update package lists and install dependencies
     apt-get update && \
     apt-get install -y --no-install-recommends wget ca-certificates && \
-    # Clean immediately
+    # Clean apt cache
     apt-get clean && rm -rf /var/lib/apt/lists/* /var/cache/apt/* && \
     # Install Python packages
     pip install --no-cache-dir -r requirements.txt && \
     # Install Playwright browser
     playwright install chromium && \
-    # Install system deps
+    # Install system deps for Playwright
     apt-get update && \
     playwright install-deps chromium && \
     # Final aggressive cleanup

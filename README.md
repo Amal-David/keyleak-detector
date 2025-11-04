@@ -6,11 +6,11 @@
 
 A web application that scans websites for potential API keys, secrets, and sensitive information leaks. This tool helps developers and security professionals identify and fix security vulnerabilities in their web applications.
 
-**🔍 Detection Capability:** Comprehensive secret scanning with detection patterns dynamically loaded from [GitLeaks](https://github.com/gitleaks/gitleaks) and enhanced with custom patterns for runtime web scanning.
+**Detection Capability:** Comprehensive secret scanning with detection patterns dynamically loaded from [GitLeaks](https://github.com/gitleaks/gitleaks) and enhanced with custom patterns for runtime web scanning.
 
 **Pattern Sources:** Detection patterns dynamically imported from [GitLeaks](https://github.com/gitleaks/gitleaks) and enhanced with custom patterns inspired by [Keyleaksecret](https://github.com/0xSojalSec/Keyleaksecret), all optimized for runtime web scanning.
 
-## 📸 Preview
+## Preview
 
 ![KeyLeak Detector Interface](image-preview.png)
 
@@ -72,7 +72,7 @@ docker compose logs -f keyleak-detector
 
 For detailed Docker instructions, deployment options, and troubleshooting, see [DOCKER.md](DOCKER.md)
 
-### Option 2: Manual Installation
+### Option 2: Manual Installation (Poetry - Recommended for local)
 
 1. Clone this repository:
    ```bash
@@ -80,21 +80,35 @@ For detailed Docker instructions, deployment options, and troubleshooting, see [
    cd keyleak-detector
    ```
 
-2. Create and activate a virtual environment (recommended):
+2. Install Poetry (if not installed):
    ```bash
-   python -m venv venv
-   source venv/bin/activate  # On Windows: venv\Scripts\activate
+   curl -sSL https://install.python-poetry.org | python3 -
+   # Ensure Poetry is on PATH (restart shell or eval as needed)
    ```
 
-3. Install the required dependencies:
+3. Install dependencies with Poetry:
    ```bash
-   pip install -r requirements.txt
+   poetry install
    ```
 
 4. Install Playwright browsers (required for scanning):
    ```bash
-   playwright install chromium
-   playwright install-deps
+   poetry run playwright install chromium
+   # Linux only:
+   poetry run playwright install-deps chromium
+   ```
+
+### Option 3: Manual Installation (UV - Alternative)
+
+1. Using UV without managing a venv manually:
+   ```bash
+   # Install dependencies from requirements.txt into a UV-managed environment
+   uv pip install -r requirements.txt
+
+   # Install Playwright browsers
+   uv run playwright install chromium
+   # Linux only:
+   uv run playwright install-deps chromium
    ```
 
 ## Usage
@@ -111,9 +125,13 @@ Then open your web browser and navigate to **http://localhost:5002**
 
 ### Manual Installation
 
-1. Start the application:
+1. Start the application (choose one):
    ```bash
-   python app.py
+   # Poetry
+   poetry run python app.py
+
+   # UV (alternative)
+   uv run python app.py
    ```
 
 2. Open your web browser and navigate to:
@@ -212,7 +230,7 @@ When the scanner detects potential secrets, it provides:
 - **Actionable recommendations** for remediation
 - **Best practices** for secure credential management
 
-## ⚠️ Disclaimer
+## Disclaimer
 
 **FOR EDUCATIONAL AND AUTHORIZED TESTING PURPOSES ONLY**
 
@@ -230,13 +248,13 @@ By using KeyLeak Detector, you acknowledge that you have read, understood, and a
 ## Legal and Ethical Use
 
 ### Authorization Required
-- ✅ **DO** scan your own websites and applications
-- ✅ **DO** scan websites where you have explicit written authorization
-- ✅ **DO** use for security research with proper permissions
-- ✅ **DO** use for educational purposes in controlled environments
-- ❌ **DON'T** scan websites without explicit permission
-- ❌ **DON'T** use for malicious purposes
-- ❌ **DON'T** share or exploit found credentials
+- **DO** scan your own websites and applications
+- **DO** scan websites where you have explicit written authorization
+- **DO** use for security research with proper permissions
+- **DO** use for educational purposes in controlled environments
+- **DON'T** scan websites without explicit permission
+- **DON'T** use for malicious purposes
+- **DON'T** share or exploit found credentials
 
 ### Best Practices
 - Always obtain written permission before scanning any system
