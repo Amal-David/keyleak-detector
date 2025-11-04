@@ -7,7 +7,7 @@ license = "MIT"
 readme = "README.md"
 
 [tool.poetry.dependencies]
-python = ">=3.8,<4.0"
+python = ">=3.9,<4.0"
 Flask = "2.2.5"
 requests = "2.32.5"
 beautifulsoup4 = "4.12.2"

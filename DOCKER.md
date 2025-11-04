@@ -51,7 +51,7 @@ docker rm keyleak-detector
 - Docker 20.10+
 - Docker Compose 2.0+ (for docker compose.yml)
 - 2GB RAM minimum
-- 5GB disk space for image
+- 1GB disk space (image size: ~690MB, optimized with full browser automation)
 
 ---
 
@@ -303,7 +303,7 @@ deploy:
 
 ## 📦 Image Size Optimization
 
-Current image size: ~1.5GB (due to Chromium browser)
+Current image size: ~690MB (optimized with full browser automation)
 
 To reduce size:
 1. Use multi-stage builds
@@ -417,4 +417,3 @@ If you encounter issues:
 ---
 
 **Happy Scanning!** 🔍🐳
-

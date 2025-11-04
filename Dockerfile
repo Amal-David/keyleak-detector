@@ -7,6 +7,9 @@ WORKDIR /app
 # Copy requirements first for better layer caching
 COPY requirements.txt .
 
+# Ensure Playwright browsers are installed to a persistent, non-cache path
+ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
+
 # Install dependencies with aggressive space optimization
 RUN set -eux && \
     # Configure apt to minimize cache
@@ -20,6 +23,8 @@ RUN set -eux && \
     apt-get clean && rm -rf /var/lib/apt/lists/* /var/cache/apt/* && \
     # Install Python packages
     pip install --no-cache-dir -r requirements.txt && \
+    # Prepare Playwright browsers directory (persist across cleanup)
+    mkdir -p "$PLAYWRIGHT_BROWSERS_PATH" && chmod -R 0755 "$PLAYWRIGHT_BROWSERS_PATH" && \
     # Install Playwright browser
     playwright install chromium && \
     # Install system deps for Playwright
@@ -58,4 +63,3 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
 
 # Run the application
 CMD ["python", "app.py"]
-
