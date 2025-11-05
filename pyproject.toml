@@ -1,0 +1,25 @@
+[tool.poetry]
+name = "keyleak-detector"
+version = "0.1.0"
+description = "Web app that scans websites for potential API keys, secrets, and sensitive information leaks."
+authors = ["Amal David <amal@example.com>"]
+license = "MIT"
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = ">=3.9,<4.0"
+Flask = "2.2.5"
+requests = "2.32.5"
+beautifulsoup4 = "4.12.2"
+python-dotenv = "1.0.0"
+regex = "2023.10.3"
+mitmproxy = "9.0.1"
+playwright = "1.55.0"
+PyJWT = "2.10.1"
+
+[tool.poetry.group.dev.dependencies]
+# Add dev dependencies here if needed
+
+[build-system]
+requires = ["poetry-core>=1.8.0"]
+build-backend = "poetry.core.masonry.api"
