@@ -52,13 +52,25 @@
                     </div>
                     <button 
                         id="scanButton" 
-                        class="bg-emerald-600 hover:bg-emerald-500 text-slate-900 font-semibold py-3 px-8 rounded transition-all duration-200 flex items-center justify-center gap-2 min-w-[120px] font-mono text-sm"
+                        class="bg-emerald-600 hover:bg-emerald-500 text-slate-900 font-semibold py-3 px-6 rounded transition-all duration-200 flex items-center justify-center gap-2 min-w-[160px] font-mono text-sm"
                     >
-                        <span id="buttonText">SCAN</span>
+                        <span id="buttonText">BASIC SCAN</span>
                         <span id="buttonSpinner" class="hidden">
                             <div class="loading-spinner-dark"></div>
                         </span>
                     </button>
+                </div>
+                <button 
+                    id="extensiveScanButton" 
+                    class="w-full mt-3 bg-violet-600 hover:bg-violet-500 text-white font-semibold py-3 px-6 rounded transition-all duration-200 flex items-center justify-center gap-2 font-mono text-sm border-2 border-violet-400/50"
+                    title="Switch to extensive authenticated scan"
+                >
+                    🛡 EXTENSIVE SCAN (AUTHENTICATED)
+                </button>
+                <p class="text-violet-300 text-xs mt-2 font-mono">Use the big "🛡 EXTENSIVE SCAN (AUTHENTICATED)" button above for authenticated testing.</p>
+                <div class="mt-3 border border-violet-800/50 bg-violet-900/10 rounded p-3">
+                    <p class="text-violet-300 text-xs font-mono">HOW TO SWITCH: click the <strong>🛡 EXTENSIVE SCAN</strong> button shown above → fill token/cookie in popup → click <strong>Run Extensive Scan</strong>.</p>
+                    <p class="text-slate-500 text-xs mt-1 font-mono">Use throwaway test credentials only. Basic scan stays unauthenticated.</p>
                 </div>
             </div>
         </div>
@@ -138,6 +150,53 @@
             </div>
         </div>
     </main>
+
+    <!-- Extensive Scan Modal -->
+    <div id="extensiveScanModal" class="hidden fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
+        <div class="w-full max-w-2xl bg-slate-800 border border-slate-700 rounded-lg shadow-2xl">
+            <div class="px-6 py-4 border-b border-slate-700 flex items-center justify-between">
+                <h3 class="text-emerald-400 font-mono font-bold text-sm">EXTENSIVE AUTHENTICATED SCAN</h3>
+                <button id="closeExtensiveModal" class="text-slate-400 hover:text-slate-200"><i class="fas fa-times"></i></button>
+            </div>
+            <div class="p-6 space-y-4">
+                <div class="bg-yellow-900/20 border border-yellow-700/40 rounded p-3">
+                    <p class="text-yellow-300 text-xs font-mono">Use throwaway / test credentials only. Never paste production credentials.</p>
+                </div>
+                <p class="text-slate-400 text-xs">Stage 1 runs basic discovery. Stage 2 replays with authenticated context to spot user-to-user object access issues (IDOR/BAC).</p>
+
+                <div>
+                    <label class="block text-xs text-slate-400 font-mono mb-2">AUTH MODE</label>
+                    <select id="authMode" class="w-full bg-slate-900 border border-slate-700 rounded px-3 py-2 text-sm text-slate-200">
+                        <option value="none">No auth (just run extensive heuristics)</option>
+                        <option value="bearer">Bearer token (JWT/API token)</option>
+                        <option value="cookie">Session cookie header</option>
+                        <option value="both">Both bearer + cookie</option>
+                    </select>
+                </div>
+
+                <div>
+                    <label class="block text-xs text-slate-400 font-mono mb-2">Bearer token (optional)</label>
+                    <textarea id="bearerTokenInput" rows="3" placeholder="eyJhbGciOi..." class="w-full bg-slate-900 border border-slate-700 rounded px-3 py-2 text-xs font-mono text-slate-200"></textarea>
+                </div>
+
+                <div>
+                    <label class="block text-xs text-slate-400 font-mono mb-2">Cookie header value (optional)</label>
+                    <textarea id="cookieInput" rows="3" placeholder="sessionid=abc123; csrftoken=xyz" class="w-full bg-slate-900 border border-slate-700 rounded px-3 py-2 text-xs font-mono text-slate-200"></textarea>
+                </div>
+
+                <div>
+                    <label class="block text-xs text-slate-400 font-mono mb-2">Known logged-in user ID (optional)</label>
+                    <input id="claimedUserIdInput" type="text" placeholder="e.g. 1001" class="w-full bg-slate-900 border border-slate-700 rounded px-3 py-2 text-sm text-slate-200">
+                </div>
+
+                <div class="flex justify-end gap-3">
+                    <button id="cancelExtensiveScan" class="px-4 py-2 border border-slate-600 rounded text-slate-300 text-sm">Cancel</button>
+                    <button id="runExtensiveScan" class="px-4 py-2 bg-violet-600 hover:bg-violet-500 rounded text-white text-sm font-mono">Run Extensive Scan</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
 
     <!-- Footer -->
     <footer class="border-t border-slate-800 mt-12">

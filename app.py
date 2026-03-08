@@ -291,6 +291,21 @@ TEST_PATTERNS = [
 # Compile test patterns
 COMPILED_TEST_PATTERNS = [re.compile(pattern, re.IGNORECASE) for pattern in TEST_PATTERNS]
 
+SENSITIVE_RESOURCE_NAMES = {
+    'user', 'users', 'account', 'accounts', 'profile', 'profiles', 'customer', 'customers',
+    'order', 'orders', 'invoice', 'invoices', 'document', 'documents', 'payment', 'payments',
+    'subscription', 'subscriptions', 'admin', 'employee', 'employees', 'member', 'members',
+    'record', 'records',
+}
+
+AUTH_HEADERS = {
+    'authorization', 'cookie', 'x-api-key', 'x-auth-token', 'x-access-token',
+}
+
+AUTH_QUERY_KEYS = {
+    'access_token', 'token', 'api_key', 'apikey', 'auth', 'authorization',
+}
+
 # Context for findings
 FINDING_CONTEXT = {
     'api_key': 'API key found in request or response',
@@ -366,6 +381,8 @@ FINDING_CONTEXT = {
     'ssn': 'Social Security Number found in request or response',
     'phone_number': 'Phone number found in request or response',
     'date_of_birth': 'Date of birth found in request or response',
+    'idor': 'Potential IDOR pattern detected: direct object ID access without clear ownership checks',
+    'broken_access_control': 'Potential broken access control detected on object-level endpoint',
 }
 
 # Severity levels for findings
@@ -379,7 +396,8 @@ SEVERITY_LEVELS = {
         'openai_api_key', 'anthropic_api_key', 'gemini_api_key', 'huggingface_token', 'cohere_api_key',
         'openrouter_api_key', 'replicate_api_key', 'together_api_key', 'perplexity_api_key',
         'mistral_api_key', 'ai21_api_key', 'anyscale_api_key', 'deepinfra_api_key', 'groq_api_key', 'fireworks_api_key',
-        'private_key', 'ssh_private_key', 'credit_card', 'credit_card_cvv', 'ssn'
+        'private_key', 'ssh_private_key', 'credit_card', 'credit_card_cvv', 'ssn',
+        'idor', 'broken_access_control'
     ],
     'medium': [
         'api_key', 'jwt_token', 'bearer_token', 'oauth_token', 'aws_account_id',
@@ -859,6 +877,163 @@ def analyze_content(content: str, source: str = '') -> List[Dict[str, Any]]:
     
     return list(value_location_map.values())
 
+def has_authentication_context(flow: http.HTTPFlow) -> bool:
+    """Best-effort check for request authentication context."""
+    header_names = {name.lower() for name in flow.request.headers.keys()}
+    if any(header in header_names for header in AUTH_HEADERS):
+        return True
+
+    for key in AUTH_QUERY_KEYS:
+        if flow.request.query.get(key):
+            return True
+
+    return False
+
+def extract_authenticated_subject_ids(flow: http.HTTPFlow) -> List[str]:
+    """Extract likely requester identity values from auth artifacts (best-effort)."""
+    subject_ids = set()
+
+    authorization = flow.request.headers.get('authorization', '')
+    if authorization.lower().startswith('bearer '):
+        token = authorization.split(' ', 1)[1].strip()
+        if token.count('.') == 2:
+            try:
+                claims = jwt.decode(token, options={'verify_signature': False})
+                for key in ('sub', 'uid', 'user_id', 'id', 'account_id', 'customer_id'):
+                    claim_value = claims.get(key)
+                    if claim_value is not None:
+                        subject_ids.add(str(claim_value))
+            except Exception:
+                pass
+
+    for header_key in ('x-user-id', 'x-account-id', 'x-customer-id'):
+        header_value = flow.request.headers.get(header_key)
+        if header_value:
+            subject_ids.add(str(header_value).strip())
+
+    for query_key in ('user_id', 'userid', 'uid', 'account_id', 'customer_id'):
+        query_value = flow.request.query.get(query_key)
+        if query_value:
+            subject_ids.add(str(query_value).strip())
+
+    return [value for value in subject_ids if value]
+
+def analyze_access_control_issues(flow: http.HTTPFlow, phase: str = 'request') -> List[Dict[str, Any]]:
+    """Detect potential IDOR and broken access control patterns."""
+    findings = []
+    request_url = flow.request.pretty_url
+    parsed_url = urlparse(request_url)
+    path_segments = [segment for segment in parsed_url.path.split('/') if segment]
+
+    id_candidates = []
+    for index, segment in enumerate(path_segments):
+        if segment.isdigit():
+            parent_segment = path_segments[index - 1].lower() if index > 0 else ''
+            id_candidates.append((parent_segment, segment, 'path'))
+
+    for key, values in parse_qs(parsed_url.query).items():
+        lowered_key = key.lower()
+        if lowered_key.endswith('id') or lowered_key in {'id', 'uid'}:
+            for value in values:
+                if value.isdigit():
+                    id_candidates.append((lowered_key, value, 'query'))
+
+    if not id_candidates:
+        return findings
+
+    method = flow.request.method.upper()
+    if method not in {'GET', 'POST', 'PUT', 'PATCH', 'DELETE'}:
+        return findings
+
+    has_sensitive_resource = any(
+        resource in SENSITIVE_RESOURCE_NAMES
+        for resource, _, _ in id_candidates
+        if resource
+    )
+
+    if not has_sensitive_resource:
+        return findings
+
+    auth_present = has_authentication_context(flow)
+    subject_ids = extract_authenticated_subject_ids(flow)
+
+    status_suffix = ''
+    status_code = None
+    if phase == 'response' and getattr(flow, 'response', None) is not None:
+        status_code = flow.response.status_code
+        status_suffix = f" Response status: {status_code}."
+
+    candidate_summary = ', '.join([f"{resource or 'resource'}={value} ({origin})" for resource, value, origin in id_candidates[:3]])
+
+    if not auth_present:
+        findings.append({
+            'type': 'idor',
+            'value': f"{method} {parsed_url.path}",
+            'severity': 'high',
+            'context': (
+                f"Endpoint {method} {parsed_url.path} uses direct object identifiers "
+                f"({candidate_summary}) without visible auth context "
+                f"(Authorization/Cookie/API token missing)."
+                f"{status_suffix}"
+            ),
+            'source': 'Access Control Analysis',
+            'line': 1,
+            'recommendation': get_recommendation('idor', f"{method} {parsed_url.path}", 'Access Control Analysis'),
+        })
+
+        findings.append({
+            'type': 'broken_access_control',
+            'value': f"{method} {parsed_url.path}",
+            'severity': 'high',
+            'context': (
+                'Potential broken access control: object-level endpoint appears reachable '
+                f"without explicit authorization enforcement signals.{status_suffix}"
+            ),
+            'source': 'Access Control Analysis',
+            'line': 1,
+            'recommendation': get_recommendation('broken_access_control', f"{method} {parsed_url.path}", 'Access Control Analysis'),
+        })
+        return findings
+
+    if phase != 'response' or status_code is None or status_code >= 400 or not subject_ids:
+        return findings
+
+    candidate_ids = {value for _, value, _ in id_candidates}
+    mismatched_ids = sorted(candidate_ids - set(subject_ids))
+
+    if not mismatched_ids:
+        return findings
+
+    findings.append({
+        'type': 'idor',
+        'value': f"{method} {parsed_url.path}",
+        'severity': 'high',
+        'context': (
+            f"Authenticated request identity ({', '.join(subject_ids[:3])}) accessed direct object ID(s) "
+            f"{', '.join(mismatched_ids[:3])} on {parsed_url.path}. This can indicate cross-tenant/object access "
+            f"if ownership checks are missing.{status_suffix}"
+        ),
+        'source': 'Access Control Analysis',
+        'line': 1,
+        'recommendation': get_recommendation('idor', f"{method} {parsed_url.path}", 'Access Control Analysis'),
+    })
+
+    findings.append({
+        'type': 'broken_access_control',
+        'value': f"{method} {parsed_url.path}",
+        'severity': 'high',
+        'context': (
+            f"Potential broken access control for authenticated user: endpoint returned success while requested "
+            f"object IDs ({', '.join(mismatched_ids[:3])}) differ from requester identity claims "
+            f"({', '.join(subject_ids[:3])}). Validate RBAC/ABAC and ownership checks.{status_suffix}"
+        ),
+        'source': 'Access Control Analysis',
+        'line': 1,
+        'recommendation': get_recommendation('broken_access_control', f"{method} {parsed_url.path}", 'Access Control Analysis'),
+    })
+
+    return findings
+
 def get_recommendation(finding_type: str, value: str, source: str) -> str:
     """Get a recommendation for fixing a finding with validation instructions."""
     recommendations = {
@@ -916,7 +1091,9 @@ def get_recommendation(finding_type: str, value: str, source: str) -> str:
         'potential_base64_secret': 'MEDIUM: Potential base64-encoded secret. Decode and verify. If it\'s a credential, remove and use secure storage.',
         'single_line_comment_credential': 'HIGH: Credential in code comment. Remove from version control history using tools like BFG Repo-Cleaner or git-filter-repo.',
         'multi_line_comment_credential': 'HIGH: Credential in multi-line comment. Remove and ensure it\'s purged from git history.',
-        'comment_credential': 'HIGH: Credential found in comment. Comments are stored in version control. Remove and rotate the credential.'
+        'comment_credential': 'HIGH: Credential found in comment. Comments are stored in version control. Remove and rotate the credential.',
+        'idor': 'HIGH: Potential IDOR risk detected. Test as authenticated low-privilege users by swapping object IDs and verify access is denied. Enforce object ownership checks on EVERY request, avoid predictable sequential IDs, and prefer UUIDs for externally exposed references. Add authorization tests for ID tampering.',
+        'broken_access_control': 'HIGH: Potential broken access control detected. Implement centralized RBAC/ABAC middleware, validate who can access what on each endpoint, and add API gateway policy enforcement with audit logs/pentests. Apply least privilege and encrypt sensitive data at rest.'
     }
     
     # Default recommendation if specific one not found
@@ -974,6 +1151,9 @@ class RequestHandler:
             if flow.request.text:
                 body_findings = analyze_content(flow.request.text, 'Request Body')
                 self.findings.extend(body_findings)
+
+            access_control_findings = analyze_access_control_issues(flow, phase='request')
+            self.findings.extend(access_control_findings)
                 
         except Exception as e:
             logger.error(f"Error processing request: {e}")
@@ -1042,6 +1222,9 @@ class RequestHandler:
                         # Skip binary content that can't be decoded
                         logger.debug(f"Skipping binary content from {flow.request.url}")
                         pass
+
+            access_control_findings = analyze_access_control_issues(flow, phase='response')
+            self.findings.extend(access_control_findings)
                     
         except Exception as e:
             logger.error(f"Error processing response from {flow.request.url}: {e}")
@@ -1119,6 +1302,23 @@ def start_proxy_in_thread(port: int = 8080):
 mitm_thread = None
 mitm_running = False
 
+def parse_cookie_header(cookie_header: str) -> Dict[str, str]:
+    """Parse Cookie header value into key/value pairs."""
+    cookies = {}
+    if not cookie_header:
+        return cookies
+
+    for part in cookie_header.split(';'):
+        if '=' not in part:
+            continue
+        key, value = part.split('=', 1)
+        key = key.strip()
+        value = value.strip()
+        if key:
+            cookies[key] = value
+
+    return cookies
+
 @app.route('/')
 def index():
     return render_template('index.html')
@@ -1132,6 +1332,8 @@ async def scan():
         return jsonify({'error': 'Invalid request format. JSON body required.'}), 400
     
     url = request.json.get('url', '').strip()
+    scan_mode = request.json.get('scan_mode', 'basic').strip().lower()
+    auth_config = request.json.get('auth_config', {}) or {}
     if not url:
         return jsonify({'error': 'URL is required'}), 400
     
@@ -1146,6 +1348,9 @@ async def scan():
             return jsonify({'error': 'Invalid URL format'}), 400
     except Exception as e:
         return jsonify({'error': f'Invalid URL: {str(e)}'}), 400
+
+    if scan_mode not in {'basic', 'extensive'}:
+        return jsonify({'error': 'Invalid scan mode. Use basic or extensive.'}), 400
     
     try:
         # Reset findings
@@ -1169,12 +1374,42 @@ async def scan():
         # Launch browser with Playwright
         async with async_playwright() as p:
             browser = await p.chromium.launch(headless=True, proxy=proxy)
-            context = await browser.new_context(
-                ignore_https_errors=True,
-                viewport={'width': 1280, 'height': 1024},
-                user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-            )
-            
+            extra_headers = {}
+            auth_mode = str(auth_config.get('mode', 'none')).lower()
+            bearer_token = str(auth_config.get('bearer_token', '')).strip()
+            cookie_header = str(auth_config.get('cookie', '')).strip()
+            claimed_user_id = str(auth_config.get('claimed_user_id', '')).strip()
+
+            if scan_mode == 'extensive' and auth_mode in {'bearer', 'both'} and bearer_token:
+                extra_headers['Authorization'] = f'Bearer {bearer_token}'
+
+            if scan_mode == 'extensive' and claimed_user_id:
+                extra_headers['X-User-Id'] = claimed_user_id
+
+            context_kwargs = {
+                'ignore_https_errors': True,
+                'viewport': {'width': 1280, 'height': 1024},
+                'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+            }
+
+            if extra_headers:
+                context_kwargs['extra_http_headers'] = extra_headers
+
+            context = await browser.new_context(**context_kwargs)
+
+            if scan_mode == 'extensive' and auth_mode in {'cookie', 'both'} and cookie_header:
+                cookies = parse_cookie_header(cookie_header)
+                if cookies:
+                    cookie_payload = []
+                    for cookie_name, cookie_value in cookies.items():
+                        cookie_payload.append({
+                            'name': cookie_name,
+                            'value': cookie_value,
+                            'domain': parsed_url.hostname,
+                            'path': '/',
+                        })
+                    await context.add_cookies(cookie_payload)
+
             page = await context.new_page()
             
             try:
@@ -1309,6 +1544,8 @@ async def scan():
         response_data = {
             'url': url,
             'status': 'completed',
+            'scan_mode': scan_mode,
+            'auth_context_used': scan_mode == 'extensive' and bool(auth_config),
             'findings': findings,
             'scan_summary': {
                 'total_findings': len(findings),

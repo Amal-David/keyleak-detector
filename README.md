@@ -23,6 +23,7 @@ A web application that scans websites for potential API keys, secrets, and sensi
 - User-friendly web interface
 - Real-time scanning results
 - Categorizes findings by severity
+- Detects potential API authorization issues, including IDOR and broken access control patterns on object-level endpoints (including authenticated user/object-ID mismatch heuristics)
 - Pattern caching with 24-hour refresh interval (updates on application restart after cache expiry)
 
 ## Installation
@@ -144,9 +145,13 @@ Then open your web browser and navigate to **http://localhost:5002**
 ### Scanning Websites
 
 1. Enter the URL you want to scan in the input field
-2. Click "Scan Now"
-3. Wait for the scan to complete (typically 30-60 seconds)
-4. View the results, which will show any potential security issues found organized by severity
+2. Run a **Basic Scan** first for unauthenticated discovery
+3. To switch modes, click the purple **EXTENSIVE SCAN** button in the UI
+4. In the popup, add throwaway auth context (Bearer token and/or cookie), then click **Run Extensive Scan**
+5. Wait for the scan to complete (typically 30-60 seconds)
+6. View the results, which will show any potential security issues found organized by severity
+
+> **Important:** Only use non-production / throwaway credentials for authenticated scanning.
 
 ## How It Works
 
