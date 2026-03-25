@@ -219,7 +219,6 @@ document.addEventListener('DOMContentLoaded', function() {
             if (total_findings === 0) {
                 noFindings.classList.remove('hidden');
                 scanSummary.innerHTML = scanModeBadge;
-                return;
             }
 
             scanSummary.innerHTML = `

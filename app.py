@@ -1028,7 +1028,7 @@ def analyze_access_control_issues(flow: http.HTTPFlow, phase: str = 'request') -
     if phase != 'response' or status_code is None or status_code >= 400 or not subject_ids:
         return findings
 
-    candidate_ids = {value for _, value, _ in id_candidates}
+    candidate_ids = {value for resource, value, _ in id_candidates if resource in SENSITIVE_RESOURCE_NAMES}
     mismatched_ids = sorted(candidate_ids - set(subject_ids))
 
     if not mismatched_ids:
@@ -1275,7 +1275,7 @@ def start_proxy(port: int = 8080):
         )
         
         # Add our request handler
-        master.addons.add(RequestHandler())
+        master.addons.add(request_handler)
         
         # Add our custom image view
         master.addons.add(load_custom_image_view(None))
