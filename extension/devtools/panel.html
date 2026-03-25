@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+      font-size: 12px;
+      background: #0f172a;
+      color: #94a3b8;
+    }
+    .toolbar {
+      padding: 8px 12px;
+      border-bottom: 1px solid #1e293b;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      background: #0f172a;
+      position: sticky;
+      top: 0;
+      z-index: 10;
+    }
+    .toolbar h1 {
+      font-size: 13px;
+      color: #34d399;
+      font-weight: 700;
+    }
+    .toolbar .stats {
+      display: flex;
+      gap: 8px;
+      font-size: 11px;
+    }
+    .stat {
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-weight: 600;
+    }
+    .stat-high { background: #7f1d1d; color: #fca5a5; }
+    .stat-medium { background: #78350f; color: #fcd34d; }
+    .stat-low { background: #1e3a5f; color: #93c5fd; }
+    .stat-total { background: #064e3b; color: #34d399; }
+    .clear-btn {
+      margin-left: auto;
+      background: none;
+      border: 1px solid #334155;
+      color: #64748b;
+      padding: 3px 10px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-family: inherit;
+      font-size: 10px;
+    }
+    .clear-btn:hover { border-color: #64748b; color: #94a3b8; }
+
+    .filters {
+      padding: 6px 12px;
+      display: flex;
+      gap: 6px;
+      border-bottom: 1px solid #1e293b;
+    }
+    .filter-btn {
+      font-family: inherit;
+      font-size: 9px;
+      padding: 2px 8px;
+      border-radius: 3px;
+      border: 1px solid #334155;
+      background: none;
+      cursor: pointer;
+      font-weight: 600;
+    }
+    .filter-btn.active { opacity: 1; }
+    .filter-btn.inactive { opacity: 0.3; }
+    .filter-high { color: #fca5a5; border-color: #7f1d1d; }
+    .filter-medium { color: #fcd34d; border-color: #78350f; }
+    .filter-low { color: #93c5fd; border-color: #1e3a5f; }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+    th {
+      text-align: left;
+      padding: 6px 12px;
+      font-size: 10px;
+      font-weight: 700;
+      color: #475569;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      border-bottom: 1px solid #1e293b;
+      background: #0f172a;
+      position: sticky;
+      top: 72px;
+      z-index: 5;
+    }
+    td {
+      padding: 6px 12px;
+      border-bottom: 1px solid #1e293b;
+      vertical-align: top;
+    }
+    tr:hover td { background: #1e293b; }
+    .sev-cell { width: 60px; }
+    .severity-badge {
+      font-size: 9px;
+      font-weight: 700;
+      padding: 1px 6px;
+      border-radius: 3px;
+      text-transform: uppercase;
+    }
+    .sev-high { background: #7f1d1d; color: #fca5a5; }
+    .sev-medium { background: #78350f; color: #fcd34d; }
+    .sev-low { background: #1e3a5f; color: #93c5fd; }
+    .type-cell { font-weight: 600; color: #e2e8f0; white-space: nowrap; }
+    .value-cell {
+      color: #34d399;
+      max-width: 400px;
+      word-break: break-all;
+      font-size: 11px;
+    }
+    .source-cell { color: #64748b; font-size: 11px; max-width: 200px; }
+    .context-cell {
+      color: #475569;
+      font-size: 10px;
+      max-width: 300px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .empty {
+      padding: 40px;
+      text-align: center;
+      color: #475569;
+    }
+  </style>
+</head>
+<body>
+  <div class="toolbar">
+    <h1>KeyLeak Secrets</h1>
+    <div class="stats" id="stats"></div>
+    <button class="clear-btn" id="clearBtn">CLEAR</button>
+  </div>
+  <div class="filters" id="filters">
+    <button class="filter-btn filter-high active" data-severity="high">HIGH</button>
+    <button class="filter-btn filter-medium active" data-severity="medium">MEDIUM</button>
+    <button class="filter-btn filter-low active" data-severity="low">LOW</button>
+  </div>
+  <div id="content">
+    <div class="empty">Monitoring... Browse a page to see findings.</div>
+  </div>
+  <script src="panel.js"></script>
+</body>
+</html>

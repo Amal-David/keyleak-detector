@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      width: 400px;
+      max-height: 500px;
+      font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+      font-size: 12px;
+      background: #0f172a;
+      color: #94a3b8;
+      overflow-y: auto;
+    }
+    .header {
+      padding: 12px 16px;
+      border-bottom: 1px solid #1e293b;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      background: #0f172a;
+      position: sticky;
+      top: 0;
+      z-index: 10;
+    }
+    .header h1 {
+      font-size: 13px;
+      font-weight: 700;
+      color: #34d399;
+    }
+    .header .count {
+      font-size: 11px;
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-weight: 600;
+    }
+    .count-zero { background: #064e3b; color: #34d399; }
+    .count-warn { background: #78350f; color: #fbbf24; }
+    .count-danger { background: #7f1d1d; color: #f87171; }
+    .clear-btn {
+      background: none;
+      border: 1px solid #334155;
+      color: #64748b;
+      padding: 2px 8px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-family: inherit;
+      font-size: 10px;
+    }
+    .clear-btn:hover { border-color: #64748b; color: #94a3b8; }
+    .status {
+      padding: 16px;
+      text-align: center;
+      color: #64748b;
+    }
+    .status .icon { font-size: 24px; margin-bottom: 8px; }
+    .finding {
+      padding: 10px 16px;
+      border-bottom: 1px solid #1e293b;
+      cursor: default;
+    }
+    .finding:hover { background: #1e293b; }
+    .finding-header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 4px;
+    }
+    .severity-badge {
+      font-size: 9px;
+      font-weight: 700;
+      padding: 1px 6px;
+      border-radius: 3px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .sev-high { background: #7f1d1d; color: #fca5a5; }
+    .sev-medium { background: #78350f; color: #fcd34d; }
+    .sev-low { background: #1e3a5f; color: #93c5fd; }
+    .finding-type {
+      font-size: 11px;
+      font-weight: 600;
+      color: #e2e8f0;
+    }
+    .finding-value {
+      font-size: 10px;
+      color: #34d399;
+      background: #0c1222;
+      padding: 4px 8px;
+      border-radius: 4px;
+      margin: 4px 0;
+      word-break: break-all;
+      max-height: 40px;
+      overflow: hidden;
+    }
+    .finding-source {
+      font-size: 10px;
+      color: #475569;
+    }
+    .filters {
+      padding: 8px 16px;
+      display: flex;
+      gap: 6px;
+      border-bottom: 1px solid #1e293b;
+      background: #0f172a;
+      position: sticky;
+      top: 40px;
+      z-index: 9;
+    }
+    .filter-btn {
+      font-family: inherit;
+      font-size: 9px;
+      padding: 2px 8px;
+      border-radius: 3px;
+      border: 1px solid #334155;
+      background: none;
+      cursor: pointer;
+      font-weight: 600;
+    }
+    .filter-btn.active { opacity: 1; }
+    .filter-btn.inactive { opacity: 0.35; }
+    .filter-high { color: #fca5a5; border-color: #7f1d1d; }
+    .filter-medium { color: #fcd34d; border-color: #78350f; }
+    .filter-low { color: #93c5fd; border-color: #1e3a5f; }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h1>keyleak-detector</h1>
+    <span id="findingCount" class="count count-zero">0</span>
+    <button id="clearBtn" class="clear-btn">CLEAR</button>
+  </div>
+  <div id="filters" class="filters" style="display: none;">
+    <button class="filter-btn filter-high active" data-severity="high">HIGH</button>
+    <button class="filter-btn filter-medium active" data-severity="medium">MED</button>
+    <button class="filter-btn filter-low active" data-severity="low">LOW</button>
+  </div>
+  <div id="content">
+    <div class="status">
+      <div class="icon">&#x2714;</div>
+      <div>Monitoring active. Browse normally.</div>
+    </div>
+  </div>
+  <script src="popup.js"></script>
+</body>
+</html>
