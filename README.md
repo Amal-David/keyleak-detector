@@ -4,11 +4,9 @@
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/Python-3.9%2B-blue)](https://www.python.org/)
 
-A web application that scans websites for potential API keys, secrets, and sensitive information leaks. This tool helps developers and security professionals identify and fix security vulnerabilities in their web applications.
+A web application that scans websites for exposed API keys, secrets, sensitive data, and access control issues. Combines headless browser automation with network traffic interception to catch secrets in JavaScript, headers, API responses, and dynamic content.
 
-**Detection Capability:** Comprehensive secret scanning with detection patterns dynamically loaded from [GitLeaks](https://github.com/gitleaks/gitleaks) and enhanced with custom patterns for runtime web scanning.
-
-**Pattern Sources:** Detection patterns dynamically imported from [GitLeaks](https://github.com/gitleaks/gitleaks) and enhanced with custom patterns inspired by [Keyleaksecret](https://github.com/0xSojalSec/Keyleaksecret), all optimized for runtime web scanning.
+Detection patterns are dynamically loaded from [GitLeaks](https://github.com/gitleaks/gitleaks) and enhanced with custom patterns optimized for runtime web scanning.
 
 ## Preview
 
@@ -16,289 +14,135 @@ A web application that scans websites for potential API keys, secrets, and sensi
 
 ## Features
 
-- **Comprehensive Pattern Detection** - Dynamic pattern loading from GitLeaks combined with custom patterns
-- Scans web pages for common secret patterns (API keys, passwords, tokens, etc.)
-- Checks response headers for sensitive information
-- Validates security headers
-- User-friendly web interface
-- Real-time scanning results
-- Categorizes findings by severity
-- Pattern caching with 24-hour refresh interval (updates on application restart after cache expiry)
+- **200+ Detection Patterns** — Dynamic pattern loading from GitLeaks combined with custom patterns, cached for 24 hours
+- **Two Scan Modes** — Unauthenticated basic scan and authenticated extensive scan with Bearer token / cookie support
+- **Access Control Detection** — Identifies potential IDOR and broken access control patterns on object-level endpoints, with confidence-based severity scoring
+- **Attack Surface Analysis** — Subdomain enumeration, missing security headers, exposed files (`.env`, `.git`), TLS issues, admin endpoints, technology fingerprinting
+- **Real-Time Progress** — Server-Sent Events stream scan progress to the UI as it happens
+- **Smart False Positive Filtering** — Context-aware filtering for CSS, JavaScript builtins, placeholder values, and common non-secrets
+- **Severity Filtering** — Results sorted by severity with clickable filter toggles to focus on what matters
 
-## Installation
+## Quick Start
 
-### Option 1: Docker (Recommended)
+### Docker (Recommended)
 
-The easiest way to run KeyLeak Detector is using Docker. This method includes all dependencies and browser automation components pre-configured.
-
-**Quick Start:**
 ```bash
-# Clone the repository
 git clone https://github.com/Amal-David/keyleak-detector.git
 cd keyleak-detector
-
-# Start with Docker Compose
-docker compose up -d
-
-# View logs
-docker compose logs -f
-
-# Stop the container
-docker compose down
-```
-
-**The application will be available at http://localhost:5002**
-
-**Requirements:**
-- Docker 20.10+
-- Docker Compose 2.0+
-- 2GB RAM minimum
-- 1GB disk space (image size: ~690MB)
-
-**Common Docker Commands:**
-```bash
-# Check container status
-docker compose ps
-
-# Restart container
-docker compose restart
-
-# Rebuild after code changes
-docker compose up -d --build
-
-# View real-time logs
-docker compose logs -f keyleak-detector
-```
-
-For detailed Docker instructions, deployment options, and troubleshooting, see [DOCKER.md](DOCKER.md)
-
-### Option 2: Manual Installation (Poetry - Recommended for local)
-
-1. Clone this repository:
-   ```bash
-   git clone https://github.com/Amal-David/keyleak-detector.git
-   cd keyleak-detector
-   ```
-
-2. Install Poetry (if not installed):
-   ```bash
-   curl -sSL https://install.python-poetry.org | python3 -
-   # Ensure Poetry is on PATH (restart shell or eval as needed)
-   ```
-
-3. Install dependencies with Poetry:
-   ```bash
-   poetry install
-   ```
-
-4. Install Playwright browsers (required for scanning):
-   ```bash
-   poetry run playwright install chromium
-   # Linux only:
-   poetry run playwright install-deps chromium
-   ```
-
-### Option 3: Manual Installation (UV - Alternative)
-
-1. Using UV without managing a venv manually:
-   ```bash
-   # Install dependencies from requirements.txt into a UV-managed environment
-   uv pip install -r requirements.txt
-
-   # Install Playwright browsers
-   uv run playwright install chromium
-   # Linux only:
-   uv run playwright install-deps chromium
-   ```
-
-## Usage
-
-### Using Docker (Recommended)
-
-If you're running with Docker, the application starts automatically:
-
-```bash
 docker compose up -d
 ```
 
-Then open your web browser and navigate to **http://localhost:5002**
+Open **http://localhost:5002** in your browser.
+
+```bash
+docker compose logs -f          # View logs
+docker compose up -d --build    # Rebuild after changes
+docker compose down             # Stop
+```
+
+**Requirements:** Docker 20.10+, Docker Compose 2.0+, 2GB RAM, 1GB disk (~690MB image)
+
+For detailed Docker instructions, see [DOCKER.md](DOCKER.md).
 
 ### Manual Installation
 
-1. Start the application (choose one):
-   ```bash
-   # Poetry
-   poetry run python app.py
+```bash
+git clone https://github.com/Amal-David/keyleak-detector.git
+cd keyleak-detector
 
-   # UV (alternative)
-   uv run python app.py
-   ```
+# Install dependencies (choose one)
+poetry install                    # Poetry
+uv pip install -r requirements.txt  # UV
 
-2. Open your web browser and navigate to:
-   ```
-   http://localhost:5002
-   ```
-   
-   > **Note:** The app runs on port 5002 instead of 5000 as port 5000 is commonly used by AirPlay on macOS.
+# Install browser (required)
+playwright install chromium
+# Linux only: playwright install-deps chromium
 
-### Scanning Websites
+# Run
+python app.py
+```
 
-1. Enter the URL you want to scan in the input field
-2. Click "Scan Now"
-3. Wait for the scan to complete (typically 30-60 seconds)
-4. View the results, which will show any potential security issues found organized by severity
+Open **http://localhost:5002**. The app uses port 5002 to avoid conflict with AirPlay on macOS.
+
+## Scanning
+
+### Basic Scan
+
+Enter a URL and click **BASIC SCAN**. This runs an unauthenticated scan that:
+
+1. Loads the page in a headless browser through an intercepting proxy
+2. Captures all HTTP requests and responses
+3. Analyzes inline scripts, data attributes, headers, and API responses
+4. Runs attack surface checks (subdomains, security headers, exposed files, TLS)
+5. Returns findings sorted by severity
+
+### Extensive Scan (Authenticated)
+
+Click the **EXTENSIVE SCAN** button, provide a throwaway Bearer token and/or cookie, then run. This adds:
+
+- Authenticated browsing with your credentials injected into the session
+- IDOR detection — flags endpoints where object IDs in the URL don't match the authenticated user's identity (extracted from JWT claims)
+- Confidence-based severity — GET requests to public-looking endpoints default to medium; mutating methods (PUT/DELETE) with success responses escalate to high
+
+> Only use throwaway / non-production credentials for authenticated scanning.
+
+### Attack Vector Settings
+
+Optional configuration via environment variables:
+
+| Variable | Default | Description |
+|---|---|---|
+| `SCAN_TIME_BUDGET_SECONDS` | `600` | Time limit for attack surface scanning |
+| `SUBDOMAIN_ENUMERATOR` | `subfinder` | Preferred tool (`subfinder` or `amass`) |
+| `SUBDOMAIN_PROXY` | — | HTTP proxy for the enumerator |
+| `HTTP_PROXY` / `HTTPS_PROXY` | — | Outbound request routing |
 
 ## How It Works
 
-The application uses a combination of browser automation and network traffic analysis to find secrets:
-
-1. **Browser Automation**: Uses Playwright to load the target website in a headless browser
-2. **Network Monitoring**: Intercepts HTTP requests and responses using mitmproxy
-3. **Content Analysis**: Analyzes JavaScript, HTML, headers, and dynamic content
-4. **Pattern Matching**: Uses regex patterns to detect various types of secrets
-5. **Smart Filtering**: Filters false positives using context-aware analysis
-6. **Categorization**: Groups findings by severity (Critical, High, Medium, Low)
+1. **Browser Automation** — Playwright loads the target in a headless Chromium instance
+2. **Network Interception** — mitmproxy captures all HTTP/HTTPS traffic as a man-in-the-middle proxy
+3. **Content Analysis** — Parses JavaScript, HTML, headers, JSON responses, and dynamic content
+4. **Pattern Matching** — 200+ compiled regex patterns detect secrets across all captured content
+5. **Access Control Analysis** — Detects IDOR patterns by comparing URL object IDs against JWT subject claims
+6. **Smart Filtering** — Multi-layer false positive filtering (CSS patterns, JS builtins, placeholders, reserved IPs)
+7. **Real-Time Progress** — SSE streams scan status to the frontend as each phase completes
 
 ## Patterns Detected
 
-The scanner detects a wide range of sensitive information including:
+**Cloud & Infrastructure:** AWS Keys, Google API/OAuth/Service Account Keys, Firebase, Heroku, Vertex AI
 
-**Cloud Provider Credentials:**
-- AWS Access Keys & Secret Keys
-- Google API Keys & OAuth Tokens
-- Google Cloud Service Account Keys
-- Google Vertex AI API Keys
-- Firebase API Keys
-- Heroku API Keys
+**Services:** Stripe, Slack, GitHub (PAT + fine-grained), GitLab, npm, SendGrid, Square, Mailgun, Mailchimp, Twilio, PyPI
 
-**Service Credentials:**
-- Stripe API Keys
-- Slack Tokens
-- GitHub Tokens & OAuth
-- GitLab Tokens
-- Mailgun, Mailchimp, Twilio API Keys
-- npm Tokens
+**AI/LLM Providers:** OpenAI, Anthropic, Gemini, Hugging Face, Cohere, OpenRouter, Replicate, Together AI, Perplexity, Mistral, AI21, Groq, Fireworks, DeepInfra, Anyscale
 
-**LLM/AI Inference Provider Keys:**
-- OpenAI API Keys (GPT-4, ChatGPT, etc.)
-- Anthropic API Keys (Claude)
-- Google Gemini & Vertex AI API Keys
-- Hugging Face Tokens
-- Cohere API Keys
-- OpenRouter API Keys
-- Replicate API Keys
-- Together AI API Keys
-- Perplexity AI API Keys
-- Mistral AI API Keys
-- AI21 Labs API Keys
-- Anyscale API Keys
-- DeepInfra API Keys
-- Groq API Keys
-- Fireworks AI API Keys
+**Databases:** MongoDB, PostgreSQL, MySQL, Redis, SQL Server connection strings
 
-**Database Credentials:**
-- MongoDB, PostgreSQL, MySQL, Redis connection strings
-- SQL Server connection strings
+**Authentication:** JWT, Bearer, OAuth, session tokens, Basic Auth, API keys
 
-**Authentication:**
-- JWT Tokens
-- Bearer Tokens
-- OAuth Tokens
-- Session Tokens
-- Basic Auth credentials
-- API Keys
+**Sensitive Data:** Private SSH keys, credit card numbers, SSNs, hardcoded passwords, encrypted credentials in JavaScript
 
-**Sensitive Data:**
-- Private SSH Keys
-- Credit Card Numbers
-- Social Security Numbers
-- Email Addresses
-- Phone Numbers
+**Access Control:** IDOR patterns, broken access control on object-level endpoints
 
-**Other:**
-- Webhook URLs
-- Callback URLs
-- Hardcoded passwords
-- Encrypted credentials in JavaScript
+## Responsible Use
 
-## Findings and Recommendations
+Only scan systems you own or have written permission to test. Unauthorized scanning may be illegal in your jurisdiction. Handle findings securely, rotate any exposed credentials immediately, and report through responsible disclosure programs.
 
-When the scanner detects potential secrets, it provides:
-
-- **Severity classification** (Critical, High, Medium, Low)
-- **Context information** showing where the secret was found
-- **Actionable recommendations** for remediation
-- **Best practices** for secure credential management
-
-## Disclaimer
-
-**FOR EDUCATIONAL AND AUTHORIZED TESTING PURPOSES ONLY**
-
-This tool is provided for educational purposes and authorized security testing only. By using this software, you agree to the following:
-
-- **You may ONLY scan websites and applications that you own or have explicit written permission to test**
-- **Unauthorized scanning of third-party websites may be illegal in your jurisdiction**
-- **The authors and contributors are NOT responsible for any misuse or damage caused by this tool**
-- **Users are solely responsible for ensuring compliance with all applicable laws and regulations**
-- **This tool is provided "AS IS" without warranty of any kind, express or implied**
-- **The authors assume NO liability for any consequences resulting from the use or misuse of this software**
-
-By using KeyLeak Detector, you acknowledge that you have read, understood, and agreed to these terms. If you do not agree, do not use this tool.
-
-## Legal and Ethical Use
-
-### Authorization Required
-- **DO** scan your own websites and applications
-- **DO** scan websites where you have explicit written authorization
-- **DO** use for security research with proper permissions
-- **DO** use for educational purposes in controlled environments
-- **DON'T** scan websites without explicit permission
-- **DON'T** use for malicious purposes
-- **DON'T** share or exploit found credentials
-
-### Best Practices
-- Always obtain written permission before scanning any system
-- Handle scan results securely and responsibly
-- If you find valid credentials, rotate them immediately
-- Report findings through responsible disclosure programs
-- Be cautious when scanning production environments
-- Understand and comply with applicable laws in your jurisdiction
-
-### Liability
-**THE AUTHORS AND CONTRIBUTORS OF THIS SOFTWARE DISCLAIM ALL LIABILITY FOR ANY MISUSE, DAMAGES, OR LEGAL CONSEQUENCES ARISING FROM THE USE OF THIS TOOL. USERS ASSUME FULL RESPONSIBILITY FOR THEIR ACTIONS.**
+This tool is provided under the MIT License without warranty. See [LICENSE](LICENSE) for details.
 
 ## Acknowledgments
 
-This project uses detection patterns from:
-
-- **[GitLeaks](https://github.com/gitleaks/gitleaks)** - Industry-standard SAST tool. We dynamically import their pattern database for enhanced detection.
-- **[Keyleaksecret](https://github.com/0xSojalSec/Keyleaksecret)** - Additional pattern inspiration.
-
-Thanks to these projects for their contributions, which helped us integrate better detection patterns and make our solution more comprehensive.
+- **[GitLeaks](https://github.com/gitleaks/gitleaks)** — Industry-standard SAST tool. We dynamically import their pattern database.
+- **[Keyleaksecret](https://github.com/0xSojalSec/Keyleaksecret)** — Additional pattern inspiration.
 
 ## Contributing
 
-Contributions are welcome! Please feel free to:
+1. Fork the repository
+2. Create a feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes
+4. Push and open a Pull Request
 
-1. Fork the repository: [https://github.com/Amal-David/keyleak-detector](https://github.com/Amal-David/keyleak-detector)
-2. Create a feature branch (`git checkout -b feature/AmazingFeature`)
-3. Commit your changes (`git commit -m 'Add some AmazingFeature'`)
-4. Push to the branch (`git push origin feature/AmazingFeature`)
-5. Open a Pull Request
-
-## Issues and Support
-
-Found a bug or have a feature request? Please open an issue on GitHub:
-[https://github.com/Amal-David/keyleak-detector/issues](https://github.com/Amal-David/keyleak-detector/issues)
-
-## License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+Issues and feature requests: [GitHub Issues](https://github.com/Amal-David/keyleak-detector/issues)
 
 ## Author
 
-Created and maintained by [Amal David](https://github.com/Amal-David)
-
-## Repository
-
-**GitHub:** [https://github.com/Amal-David/keyleak-detector](https://github.com/Amal-David/keyleak-detector)
+Created by [Amal David](https://github.com/Amal-David)
