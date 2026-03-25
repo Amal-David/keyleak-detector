@@ -28,6 +28,8 @@ from mitmproxy import http, ctx
 from mitmproxy.tools.dump import DumpMaster
 from mitmproxy.options import Options
 import threading
+import uuid as _uuid
+from queue import Queue, Empty
 import jwt
 
 # Import our custom views
@@ -35,6 +37,9 @@ from custom_views import load as load_custom_image_view
 
 # Import pattern manager for enhanced detection
 from pattern_importer import get_enhanced_patterns
+
+# Import attack vector scanner
+from attack_vector_scanner import run_attack_vector_scan
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
@@ -291,6 +296,26 @@ TEST_PATTERNS = [
 # Compile test patterns
 COMPILED_TEST_PATTERNS = [re.compile(pattern, re.IGNORECASE) for pattern in TEST_PATTERNS]
 
+SENSITIVE_RESOURCE_NAMES = {
+    'user', 'users', 'account', 'accounts', 'profile', 'profiles', 'customer', 'customers',
+    'order', 'orders', 'invoice', 'invoices', 'document', 'documents', 'payment', 'payments',
+    'subscription', 'subscriptions', 'admin', 'employee', 'employees', 'member', 'members',
+    'record', 'records',
+}
+
+AUTH_HEADERS = {
+    'authorization', 'cookie', 'x-api-key', 'x-auth-token', 'x-access-token',
+}
+
+AUTH_QUERY_KEYS = {
+    'access_token', 'token', 'api_key', 'apikey', 'auth', 'authorization',
+}
+
+# Patterns for detecting object identifiers in URL segments
+_UUID_RE = re.compile(
+    r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$', re.I)
+_HEX_ID_RE = re.compile(r'^[0-9a-f]{16,32}$', re.I)
+
 # Context for findings
 FINDING_CONTEXT = {
     'api_key': 'API key found in request or response',
@@ -366,6 +391,7 @@ FINDING_CONTEXT = {
     'ssn': 'Social Security Number found in request or response',
     'phone_number': 'Phone number found in request or response',
     'date_of_birth': 'Date of birth found in request or response',
+    'access_control_issue': 'Potential access control issue detected: direct object reference may lack proper authorization checks',
 }
 
 # Severity levels for findings
@@ -386,7 +412,7 @@ SEVERITY_LEVELS = {
         'google_oauth', 'mongo_uri', 'postgres_uri', 'mysql_uri', 'redis_uri',
         'sql_connection_string', 'basic_auth', 'session_token', 'webhook_url',
         'callback_url', 'redirect_uri', 'auth_header', 'ssh_public_key',
-        'credit_card_expiry', 'private_ip'
+        'credit_card_expiry', 'private_ip', 'access_control_issue'
     ],
     'low': [
         'session_id', 'csrf_token', 'cookie_header', 'password_param', 'token_param',
@@ -859,6 +885,172 @@ def analyze_content(content: str, source: str = '') -> List[Dict[str, Any]]:
     
     return list(value_location_map.values())
 
+def has_authentication_context(flow: http.HTTPFlow) -> bool:
+    """Best-effort check for request authentication context."""
+    header_names = {name.lower() for name in flow.request.headers.keys()}
+    if any(header in header_names for header in AUTH_HEADERS):
+        return True
+
+    for key in AUTH_QUERY_KEYS:
+        if flow.request.query.get(key):
+            return True
+
+    return False
+
+def extract_authenticated_subject_ids(flow: http.HTTPFlow) -> List[str]:
+    """Extract likely requester identity values from auth artifacts (best-effort)."""
+    subject_ids = set()
+
+    authorization = flow.request.headers.get('authorization', '')
+    if authorization.lower().startswith('bearer '):
+        token = authorization.split(' ', 1)[1].strip()
+        if token.count('.') == 2:
+            try:
+                claims = jwt.decode(token, options={'verify_signature': False})
+                for key in ('sub', 'uid', 'user_id', 'id', 'account_id', 'customer_id'):
+                    claim_value = claims.get(key)
+                    if claim_value is not None:
+                        subject_ids.add(str(claim_value))
+            except Exception:
+                pass
+
+    for header_key in ('x-user-id', 'x-account-id', 'x-customer-id'):
+        header_value = flow.request.headers.get(header_key)
+        if header_value:
+            subject_ids.add(str(header_value).strip())
+
+    for query_key in ('user_id', 'userid', 'uid', 'account_id', 'customer_id'):
+        query_value = flow.request.query.get(query_key)
+        if query_value:
+            subject_ids.add(str(query_value).strip())
+
+    return [value for value in subject_ids if value]
+
+def _looks_like_object_id(segment: str) -> bool:
+    """Check if a URL segment looks like an object identifier."""
+    if segment.isdigit():
+        return True
+    if _UUID_RE.match(segment):
+        return True
+    if _HEX_ID_RE.match(segment):
+        return True
+    return False
+
+def _score_access_control_severity(
+    method: str,
+    auth_present: bool,
+    subject_ids: List[str],
+    mismatched_ids: set,
+    status_code: Optional[int],
+) -> str:
+    """Compute severity from heuristic signals. Default medium, escalate to high on strong signals."""
+    score = 0
+    # Mutating methods are higher risk
+    if method in ('PUT', 'PATCH', 'DELETE'):
+        score += 2
+    elif method == 'POST':
+        score += 1
+    # Successful response to a potentially unauthorized request is concerning
+    if status_code is not None and 200 <= status_code < 300:
+        score += 2
+    # Auth mismatch with confirmed identity is more significant
+    if auth_present and subject_ids and mismatched_ids:
+        score += 2
+    # No auth at all on a sensitive resource endpoint
+    if not auth_present:
+        score += 1
+    return 'high' if score >= 5 else 'medium'
+
+def analyze_access_control_issues(flow: http.HTTPFlow, phase: str = 'request') -> List[Dict[str, Any]]:
+    """Detect potential IDOR and broken access control patterns."""
+    findings = []
+    request_url = flow.request.pretty_url
+    parsed_url = urlparse(request_url)
+    path_segments = [segment for segment in parsed_url.path.split('/') if segment]
+
+    id_candidates = []
+    for index, segment in enumerate(path_segments):
+        if _looks_like_object_id(segment):
+            parent_segment = path_segments[index - 1].lower() if index > 0 else ''
+            id_candidates.append((parent_segment, segment, 'path'))
+
+    for key, values in parse_qs(parsed_url.query).items():
+        lowered_key = key.lower()
+        if lowered_key.endswith('id') or lowered_key in {'id', 'uid'}:
+            for value in values:
+                if _looks_like_object_id(value):
+                    id_candidates.append((lowered_key, value, 'query'))
+
+    if not id_candidates:
+        return findings
+
+    method = flow.request.method.upper()
+    if method not in {'GET', 'POST', 'PUT', 'PATCH', 'DELETE'}:
+        return findings
+
+    has_sensitive_resource = any(
+        resource in SENSITIVE_RESOURCE_NAMES
+        for resource, _, _ in id_candidates
+        if resource
+    )
+
+    if not has_sensitive_resource:
+        return findings
+
+    auth_present = has_authentication_context(flow)
+    subject_ids = extract_authenticated_subject_ids(flow)
+
+    status_suffix = ''
+    status_code = None
+    if phase == 'response' and getattr(flow, 'response', None) is not None:
+        status_code = flow.response.status_code
+        status_suffix = f" Response status: {status_code}."
+
+    candidate_summary = ', '.join([f"{resource or 'resource'}={value} ({origin})" for resource, value, origin in id_candidates[:3]])
+
+    if not auth_present:
+        severity = _score_access_control_severity(method, False, [], set(), status_code)
+        findings.append({
+            'type': 'access_control_issue',
+            'value': f"{method} {parsed_url.path}",
+            'severity': severity,
+            'context': (
+                f"Endpoint {method} {parsed_url.path} uses direct object identifiers "
+                f"({candidate_summary}) without visible auth context "
+                f"(Authorization/Cookie/API token missing).{status_suffix}"
+            ),
+            'source': 'Access Control Analysis',
+            'line': 1,
+            'recommendation': get_recommendation('access_control_issue', f"{method} {parsed_url.path}", 'Access Control Analysis'),
+        })
+        return findings
+
+    if phase != 'response' or status_code is None or status_code >= 400 or not subject_ids:
+        return findings
+
+    candidate_ids = {value for _, value, _ in id_candidates}
+    mismatched_ids = sorted(candidate_ids - set(subject_ids))
+
+    if not mismatched_ids:
+        return findings
+
+    severity = _score_access_control_severity(method, True, subject_ids, mismatched_ids, status_code)
+    findings.append({
+        'type': 'access_control_issue',
+        'value': f"{method} {parsed_url.path}",
+        'severity': severity,
+        'context': (
+            f"Authenticated request identity ({', '.join(subject_ids[:3])}) accessed direct object ID(s) "
+            f"{', '.join(mismatched_ids[:3])} on {parsed_url.path}. This can indicate cross-tenant/object access "
+            f"if ownership checks are missing.{status_suffix}"
+        ),
+        'source': 'Access Control Analysis',
+        'line': 1,
+        'recommendation': get_recommendation('access_control_issue', f"{method} {parsed_url.path}", 'Access Control Analysis'),
+    })
+
+    return findings
+
 def get_recommendation(finding_type: str, value: str, source: str) -> str:
     """Get a recommendation for fixing a finding with validation instructions."""
     recommendations = {
@@ -916,7 +1108,8 @@ def get_recommendation(finding_type: str, value: str, source: str) -> str:
         'potential_base64_secret': 'MEDIUM: Potential base64-encoded secret. Decode and verify. If it\'s a credential, remove and use secure storage.',
         'single_line_comment_credential': 'HIGH: Credential in code comment. Remove from version control history using tools like BFG Repo-Cleaner or git-filter-repo.',
         'multi_line_comment_credential': 'HIGH: Credential in multi-line comment. Remove and ensure it\'s purged from git history.',
-        'comment_credential': 'HIGH: Credential found in comment. Comments are stored in version control. Remove and rotate the credential.'
+        'comment_credential': 'HIGH: Credential found in comment. Comments are stored in version control. Remove and rotate the credential.',
+        'access_control_issue': 'Potential access control issue. Enforce object ownership checks on every request. Prefer UUIDs over sequential IDs for external references. Implement centralized RBAC/ABAC middleware. Test by swapping object IDs as low-privilege users and verify access is denied. Add authorization tests for ID tampering.'
     }
     
     # Default recommendation if specific one not found
@@ -974,6 +1167,9 @@ class RequestHandler:
             if flow.request.text:
                 body_findings = analyze_content(flow.request.text, 'Request Body')
                 self.findings.extend(body_findings)
+
+            access_control_findings = analyze_access_control_issues(flow, phase='request')
+            self.findings.extend(access_control_findings)
                 
         except Exception as e:
             logger.error(f"Error processing request: {e}")
@@ -1042,6 +1238,9 @@ class RequestHandler:
                         # Skip binary content that can't be decoded
                         logger.debug(f"Skipping binary content from {flow.request.url}")
                         pass
+
+            access_control_findings = analyze_access_control_issues(flow, phase='response')
+            self.findings.extend(access_control_findings)
                     
         except Exception as e:
             logger.error(f"Error processing response from {flow.request.url}: {e}")
@@ -1119,6 +1318,56 @@ def start_proxy_in_thread(port: int = 8080):
 mitm_thread = None
 mitm_running = False
 
+def parse_cookie_header(cookie_header: str) -> Dict[str, str]:
+    """Parse Cookie header value into key/value pairs."""
+    cookies = {}
+    if not cookie_header:
+        return cookies
+
+    for part in cookie_header.split(';'):
+        if '=' not in part:
+            continue
+        key, value = part.split('=', 1)
+        key = key.strip()
+        value = value.strip()
+        if key:
+            cookies[key] = value
+
+    return cookies
+
+# SSE progress tracking for scans
+_scan_queues: Dict[str, Queue] = {}
+
+def _emit_progress(scan_id: Optional[str], message: str):
+    """Push a progress message to the SSE queue for a scan."""
+    if scan_id and scan_id in _scan_queues:
+        _scan_queues[scan_id].put({'type': 'progress', 'message': message})
+
+@app.route('/scan/events/<scan_id>')
+def scan_events(scan_id):
+    """SSE endpoint for real-time scan progress."""
+    # Pre-create queue so the scan POST finds it already waiting
+    if scan_id not in _scan_queues:
+        _scan_queues[scan_id] = Queue()
+
+    def generate():
+        q = _scan_queues.get(scan_id)
+        if not q:
+            yield f"data: {json.dumps({'type': 'error', 'message': 'Unknown scan'})}\n\n"
+            return
+        while True:
+            try:
+                msg = q.get(timeout=120)
+            except Empty:
+                yield f"data: {json.dumps({'type': 'error', 'message': 'Scan timed out'})}\n\n"
+                break
+            yield f"data: {json.dumps(msg)}\n\n"
+            if msg.get('type') in ('result', 'error'):
+                break
+        _scan_queues.pop(scan_id, None)
+    return Response(stream_with_context(generate()), mimetype='text/event-stream',
+                    headers={'Cache-Control': 'no-cache', 'X-Accel-Buffering': 'no'})
+
 @app.route('/')
 def index():
     return render_template('index.html')
@@ -1132,6 +1381,22 @@ async def scan():
         return jsonify({'error': 'Invalid request format. JSON body required.'}), 400
     
     url = request.json.get('url', '').strip()
+    scan_mode = request.json.get('scan_mode', 'basic').strip().lower()
+    auth_config = request.json.get('auth_config', {}) or {}
+    scan_id = request.json.get('scan_id')
+
+    # Set up SSE progress queue if scan_id provided (reuse if SSE endpoint pre-created it)
+    if scan_id and scan_id not in _scan_queues:
+        _scan_queues[scan_id] = Queue()
+
+    # Fall back to basic mode if extensive scan has no auth artifacts
+    if scan_mode == 'extensive':
+        has_auth = bool((auth_config.get('bearer_token') or '').strip() or
+                        (auth_config.get('cookie') or '').strip())
+        if not has_auth:
+            scan_mode = 'basic'
+            logger.info("Extensive scan requested without auth artifacts, falling back to basic mode")
+
     if not url:
         return jsonify({'error': 'URL is required'}), 400
     
@@ -1146,6 +1411,9 @@ async def scan():
             return jsonify({'error': 'Invalid URL format'}), 400
     except Exception as e:
         return jsonify({'error': f'Invalid URL: {str(e)}'}), 400
+
+    if scan_mode not in {'basic', 'extensive'}:
+        return jsonify({'error': 'Invalid scan mode. Use basic or extensive.'}), 400
     
     try:
         # Reset findings
@@ -1156,6 +1424,7 @@ async def scan():
             mitm_thread = start_proxy_in_thread(8080)
             mitm_running = True
             logger.info("Started mitmproxy in background")
+            _emit_progress(scan_id, "Initializing browser...")
             
             # Give the proxy a moment to start
             await asyncio.sleep(2)
@@ -1169,17 +1438,48 @@ async def scan():
         # Launch browser with Playwright
         async with async_playwright() as p:
             browser = await p.chromium.launch(headless=True, proxy=proxy)
-            context = await browser.new_context(
-                ignore_https_errors=True,
-                viewport={'width': 1280, 'height': 1024},
-                user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-            )
-            
+            extra_headers = {}
+            auth_mode = str(auth_config.get('mode', 'none')).lower()
+            bearer_token = str(auth_config.get('bearer_token', '')).strip()
+            cookie_header = str(auth_config.get('cookie', '')).strip()
+            claimed_user_id = str(auth_config.get('claimed_user_id', '')).strip()
+
+            if scan_mode == 'extensive' and auth_mode in {'bearer', 'both'} and bearer_token:
+                extra_headers['Authorization'] = f'Bearer {bearer_token}'
+
+            if scan_mode == 'extensive' and claimed_user_id:
+                extra_headers['X-User-Id'] = claimed_user_id
+
+            context_kwargs = {
+                'ignore_https_errors': True,
+                'viewport': {'width': 1280, 'height': 1024},
+                'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+            }
+
+            if extra_headers:
+                context_kwargs['extra_http_headers'] = extra_headers
+
+            context = await browser.new_context(**context_kwargs)
+
+            if scan_mode == 'extensive' and auth_mode in {'cookie', 'both'} and cookie_header:
+                cookies = parse_cookie_header(cookie_header)
+                if cookies:
+                    cookie_payload = []
+                    for cookie_name, cookie_value in cookies.items():
+                        cookie_payload.append({
+                            'name': cookie_name,
+                            'value': cookie_value,
+                            'domain': parsed_url.hostname,
+                            'path': '/',
+                        })
+                    await context.add_cookies(cookie_payload)
+
             page = await context.new_page()
             
             try:
                 # Navigate to the URL with a more reliable wait strategy
                 logger.info(f"Navigating to {url}")
+                _emit_progress(scan_id, f"Loading {parsed_url.hostname}...")
                 try:
                     response = await page.goto(url, wait_until='domcontentloaded', timeout=30000)
                     logger.info(f"Page loaded, status: {response.status if response else 'unknown'}")
@@ -1190,6 +1490,7 @@ async def scan():
                 
                 # Wait a bit for JavaScript to execute
                 logger.info("Waiting for dynamic content...")
+                _emit_progress(scan_id, "Waiting for dynamic content...")
                 await asyncio.sleep(3)
                 
                 # Try to wait for network idle, but don't fail if it times out
@@ -1220,6 +1521,7 @@ async def scan():
                     # Analyze inline scripts
                     scripts = soup.find_all('script')
                     logger.info(f"Found {len(scripts)} script tags, analyzing...")
+                    _emit_progress(scan_id, f"Analyzing {len(scripts)} scripts...")
                     for idx, script in enumerate(scripts):
                         if script.string and len(script.string.strip()) > 0:
                             script_findings = analyze_content(script.string, f'Page Script #{idx+1}')
@@ -1298,17 +1600,47 @@ async def scan():
                     value_location_map[key] = finding
         
         findings = list(value_location_map.values())
-        
+
+        # Sort by severity: critical > high > medium > low > info
+        _SEV_ORDER = {'critical': 0, 'high': 1, 'medium': 2, 'low': 3, 'info': 4}
+        findings.sort(key=lambda f: _SEV_ORDER.get(f.get('severity', 'low'), 3))
+
         # Categorize findings by severity
         critical_severity = [f for f in findings if f.get('severity') == 'critical']
         high_severity = [f for f in findings if f.get('severity') == 'high']
         medium_severity = [f for f in findings if f.get('severity') == 'medium']
         low_severity = [f for f in findings if f.get('severity') == 'low']
+
+        # Run attack vector scan in a background thread to avoid blocking
+        _emit_progress(scan_id, "Scanning attack surface...")
+        try:
+            attack_vectors = await asyncio.to_thread(
+                run_attack_vector_scan,
+                url,
+                time_budget_seconds=int(os.getenv("SCAN_TIME_BUDGET_SECONDS", "600")),
+                proxy=os.getenv("SUBDOMAIN_PROXY"),
+            )
+        except Exception as e:
+            logger.warning(f"Attack vector scan failed: {e}")
+            attack_vectors = {
+                "status": "error",
+                "error": str(e),
+                "summary": {
+                    "total_findings": 0,
+                    "critical_severity": 0,
+                    "high_severity": 0,
+                    "medium_severity": 0,
+                    "low_severity": 0,
+                },
+                "subdomains": [],
+            }
         
         # Prepare the response
         response_data = {
             'url': url,
             'status': 'completed',
+            'scan_mode': scan_mode,
+            'auth_context_used': scan_mode == 'extensive' and bool(auth_config),
             'findings': findings,
             'scan_summary': {
                 'total_findings': len(findings),
@@ -1317,6 +1649,7 @@ async def scan():
                 'medium_severity': len(medium_severity),
                 'low_severity': len(low_severity),
             },
+            'attack_vectors': attack_vectors,
             'details': {
                 'requests_analyzed': len(request_handler.findings),
                 'unique_findings': len(findings),
@@ -1324,8 +1657,12 @@ async def scan():
             }
         }
         
+        # Push final result to SSE stream if streaming
+        if scan_id and scan_id in _scan_queues:
+            _scan_queues[scan_id].put({'type': 'result', 'data': response_data})
+
         return jsonify(response_data)
-        
+
     except asyncio.TimeoutError:
         return jsonify({
             'error': 'Scan timeout: The website took too long to respond. Please try again or scan a different URL.',

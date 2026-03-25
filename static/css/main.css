@@ -82,6 +82,14 @@ html {
     scroll-behavior: smooth;
 }
 
+details summary {
+    list-style: none;
+}
+
+details summary::-webkit-details-marker {
+    display: none;
+}
+
 /* Custom Scrollbar */
 ::-webkit-scrollbar {
     width: 10px;
@@ -139,6 +147,10 @@ button:disabled {
 
 .finding-card:hover {
     background-color: #f8fafc;
+}
+
+.finding-card.filtered-out {
+    display: none;
 }
 
 /* Code Block Styling */
@@ -201,4 +213,3 @@ code {
     transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
     transition-duration: 150ms;
 }
-
