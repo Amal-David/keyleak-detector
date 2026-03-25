@@ -27,6 +27,7 @@ from playwright.async_api import async_playwright
 from mitmproxy import http, ctx
 from mitmproxy.tools.dump import DumpMaster
 from mitmproxy.options import Options
+import time
 import threading
 import uuid as _uuid
 from queue import Queue, Empty
@@ -977,9 +978,15 @@ def analyze_access_control_issues(flow: http.HTTPFlow, phase: str = 'request') -
     for key, values in parse_qs(parsed_url.query).items():
         lowered_key = key.lower()
         if lowered_key.endswith('id') or lowered_key in {'id', 'uid'}:
+            # Normalize key to match SENSITIVE_RESOURCE_NAMES (e.g. user_id → user)
+            resource_key = lowered_key
+            if lowered_key.endswith('_id'):
+                resource_key = lowered_key[:-3]
+            elif lowered_key in {'userid', 'uid'}:
+                resource_key = 'user'
             for value in values:
                 if _looks_like_object_id(value):
-                    id_candidates.append((lowered_key, value, 'query'))
+                    id_candidates.append((resource_key, value, 'query'))
 
     if not id_candidates:
         return findings
@@ -1009,6 +1016,9 @@ def analyze_access_control_issues(flow: http.HTTPFlow, phase: str = 'request') -
     candidate_summary = ', '.join([f"{resource or 'resource'}={value} ({origin})" for resource, value, origin in id_candidates[:3]])
 
     if not auth_present:
+        # Only emit on response phase so we have the status code for scoring
+        if phase != 'response' or status_code is None:
+            return findings
         severity = _score_access_control_severity(method, False, [], set(), status_code)
         findings.append({
             'type': 'access_control_issue',
@@ -1337,9 +1347,22 @@ def parse_cookie_header(cookie_header: str) -> Dict[str, str]:
 
 # SSE progress tracking for scans
 _scan_queues: Dict[str, Queue] = {}
+_scan_queue_created: Dict[str, float] = {}
+_QUEUE_TTL_SECONDS = 600
+_SSE_IDLE_TIMEOUT = int(os.getenv("SCAN_TIME_BUDGET_SECONDS", "600")) + 30
+
+def _cleanup_stale_queues():
+    """Remove queues older than TTL to prevent memory leaks."""
+    now = time.monotonic()
+    stale = [k for k, created in _scan_queue_created.items()
+             if now - created > _QUEUE_TTL_SECONDS]
+    for k in stale:
+        _scan_queues.pop(k, None)
+        _scan_queue_created.pop(k, None)
 
 def _emit_progress(scan_id: Optional[str], message: str):
     """Push a progress message to the SSE queue for a scan."""
+    _cleanup_stale_queues()
     if scan_id and scan_id in _scan_queues:
         _scan_queues[scan_id].put({'type': 'progress', 'message': message})
 
@@ -1349,6 +1372,7 @@ def scan_events(scan_id):
     # Pre-create queue so the scan POST finds it already waiting
     if scan_id not in _scan_queues:
         _scan_queues[scan_id] = Queue()
+        _scan_queue_created[scan_id] = time.monotonic()
 
     def generate():
         q = _scan_queues.get(scan_id)
@@ -1357,7 +1381,7 @@ def scan_events(scan_id):
             return
         while True:
             try:
-                msg = q.get(timeout=120)
+                msg = q.get(timeout=_SSE_IDLE_TIMEOUT)
             except Empty:
                 yield f"data: {json.dumps({'type': 'error', 'message': 'Scan timed out'})}\n\n"
                 break
@@ -1365,6 +1389,7 @@ def scan_events(scan_id):
             if msg.get('type') in ('result', 'error'):
                 break
         _scan_queues.pop(scan_id, None)
+        _scan_queue_created.pop(scan_id, None)
     return Response(stream_with_context(generate()), mimetype='text/event-stream',
                     headers={'Cache-Control': 'no-cache', 'X-Accel-Buffering': 'no'})
 
@@ -1380,14 +1405,19 @@ async def scan():
     if not request.json:
         return jsonify({'error': 'Invalid request format. JSON body required.'}), 400
     
-    url = request.json.get('url', '').strip()
-    scan_mode = request.json.get('scan_mode', 'basic').strip().lower()
-    auth_config = request.json.get('auth_config', {}) or {}
-    scan_id = request.json.get('scan_id')
+    raw_url = request.json.get('url', '')
+    url = raw_url.strip() if isinstance(raw_url, str) else ''
 
-    # Set up SSE progress queue if scan_id provided (reuse if SSE endpoint pre-created it)
-    if scan_id and scan_id not in _scan_queues:
-        _scan_queues[scan_id] = Queue()
+    raw_scan_mode = request.json.get('scan_mode', 'basic')
+    if not isinstance(raw_scan_mode, str):
+        return jsonify({'error': 'scan_mode must be a string'}), 400
+    scan_mode = raw_scan_mode.strip().lower()
+
+    auth_config = request.json.get('auth_config', {}) or {}
+    if not isinstance(auth_config, dict):
+        return jsonify({'error': 'auth_config must be an object'}), 400
+
+    scan_id = request.json.get('scan_id')
 
     # Fall back to basic mode if extensive scan has no auth artifacts
     if scan_mode == 'extensive':
@@ -1399,11 +1429,11 @@ async def scan():
 
     if not url:
         return jsonify({'error': 'URL is required'}), 400
-    
+
     # Validate URL format
     if not url.startswith(('http://', 'https://')):
         return jsonify({'error': 'URL must start with http:// or https://'}), 400
-    
+
     # Parse and validate URL
     try:
         parsed_url = urlparse(url)
@@ -1411,6 +1441,11 @@ async def scan():
             return jsonify({'error': 'Invalid URL format'}), 400
     except Exception as e:
         return jsonify({'error': f'Invalid URL: {str(e)}'}), 400
+
+    # Set up SSE progress queue after validation (reuse if SSE endpoint pre-created it)
+    if scan_id and scan_id not in _scan_queues:
+        _scan_queues[scan_id] = Queue()
+        _scan_queue_created[scan_id] = time.monotonic()
 
     if scan_mode not in {'basic', 'extensive'}:
         return jsonify({'error': 'Invalid scan mode. Use basic or extensive.'}), 400

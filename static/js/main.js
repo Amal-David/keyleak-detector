@@ -257,11 +257,12 @@ document.addEventListener('DOMContentLoaded', function() {
                 btn.dataset.active = 'true';
                 btn.textContent = sev.toUpperCase();
                 btn.addEventListener('click', () => {
-                    const active = btn.dataset.active === 'true';
-                    btn.dataset.active = active ? 'false' : 'true';
-                    btn.style.opacity = active ? '0.3' : '1';
+                    const wasActive = btn.dataset.active === 'true';
+                    const nowActive = !wasActive;
+                    btn.dataset.active = nowActive ? 'true' : 'false';
+                    btn.style.opacity = nowActive ? '1' : '0.3';
                     document.querySelectorAll(`.finding-card.severity-${sev}`).forEach(el => {
-                        el.classList.toggle('filtered-out', active);
+                        el.classList.toggle('filtered-out', !nowActive);
                     });
                 });
                 filterDiv.appendChild(btn);
