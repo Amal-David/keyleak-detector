@@ -2,6 +2,7 @@ const content = document.getElementById('content');
 const findingCount = document.getElementById('findingCount');
 const clearBtn = document.getElementById('clearBtn');
 const filtersEl = document.getElementById('filters');
+const scanStatsEl = document.getElementById('scanStats');
 
 const activeFilters = new Set(['high', 'medium', 'low']);
 
@@ -13,17 +14,26 @@ async function loadFindings() {
     if (chrome.runtime.lastError || !data) return;
 
     const findings = data.findings || [];
+    const stats = data.stats || { requests: 0, bodies: 0, scripts: 0, dataAttrs: 0, metaTags: 0 };
+
     updateCount(findings);
+    renderStats(stats, findings.length);
 
     if (findings.length === 0) {
-      content.innerHTML = `
-        <div class="status">
-          <div class="icon">&#x2714;</div>
-          <div>No secrets found on this page.</div>
-          <div style="margin-top: 8px; font-size: 10px; color: #475569;">
-            Passively monitoring all traffic.
-          </div>
-        </div>`;
+      const totalScanned = stats.requests + stats.bodies + stats.scripts + stats.dataAttrs + stats.metaTags;
+      if (totalScanned > 0) {
+        content.innerHTML = `
+          <div class="status">
+            <div class="icon">&#x2714;</div>
+            <div>No secrets detected</div>
+          </div>`;
+      } else {
+        content.innerHTML = `
+          <div class="status">
+            <div class="icon">&#x2714;</div>
+            <div>Monitoring active. Browse normally.</div>
+          </div>`;
+      }
       filtersEl.style.display = 'none';
       return;
     }
@@ -31,6 +41,37 @@ async function loadFindings() {
     filtersEl.style.display = 'flex';
     renderFindings(findings);
   });
+}
+
+function renderStats(stats, findingsCount) {
+  const totalScanned = stats.requests + stats.bodies + stats.scripts + stats.dataAttrs + stats.metaTags;
+  if (totalScanned === 0) {
+    scanStatsEl.style.display = 'none';
+    return;
+  }
+
+  scanStatsEl.style.display = 'block';
+
+  const lines = [];
+  if (stats.requests > 0) lines.push({ count: stats.requests, label: 'network requests' });
+  if (stats.bodies > 0)   lines.push({ count: stats.bodies, label: 'response bodies' });
+  if (stats.scripts > 0)  lines.push({ count: stats.scripts, label: 'inline scripts' });
+  if (stats.dataAttrs > 0) lines.push({ count: stats.dataAttrs, label: 'data attributes' });
+  if (stats.metaTags > 0) lines.push({ count: stats.metaTags, label: 'meta tags' });
+
+  const statsHtml = lines.map(l =>
+    `<div class="stat-line"><span class="stat-count">${l.count}</span><span class="stat-label">${l.label}</span></div>`
+  ).join('');
+
+  const cleanLine = findingsCount === 0
+    ? '<div class="all-clean">all clean</div>'
+    : '';
+
+  scanStatsEl.innerHTML = `
+    <div class="stats-header">scan activity</div>
+    ${statsHtml}
+    ${cleanLine}
+  `;
 }
 
 function updateCount(findings) {

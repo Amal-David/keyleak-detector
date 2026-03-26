@@ -5,8 +5,19 @@
 
 import { analyzeContent, analyzeHeaders, analyzeUrl } from './lib/analyzer.js';
 
-// Per-tab findings storage
-const tabFindings = new Map(); // tabId -> { findings: [], url: '' }
+// Per-tab findings + stats storage
+const tabFindings = new Map(); // tabId -> { findings: [], url: '', stats: {...} }
+
+const EMPTY_STATS = { requests: 0, bodies: 0, scripts: 0, dataAttrs: 0, metaTags: 0 };
+
+function ensureTabData(tabId, pageUrl) {
+  if (!tabFindings.has(tabId)) {
+    tabFindings.set(tabId, { findings: [], url: pageUrl || '', stats: { ...EMPTY_STATS } });
+  }
+  const data = tabFindings.get(tabId);
+  if (pageUrl) data.url = pageUrl;
+  return data;
+}
 
 // --- Badge Management ---
 
@@ -22,7 +33,7 @@ function updateBadge(tabId) {
 
   chrome.action.setBadgeText({ text: String(count), tabId });
   chrome.action.setBadgeBackgroundColor({
-    color: hasHigh ? '#DC2626' : '#F59E0B', // red for high, amber for medium
+    color: hasHigh ? '#DC2626' : '#F59E0B',
     tabId,
   });
 }
@@ -30,12 +41,7 @@ function updateBadge(tabId) {
 function addFindings(tabId, newFindings, pageUrl) {
   if (!newFindings || newFindings.length === 0) return;
 
-  if (!tabFindings.has(tabId)) {
-    tabFindings.set(tabId, { findings: [], url: pageUrl || '' });
-  }
-
-  const data = tabFindings.get(tabId);
-  if (pageUrl) data.url = pageUrl;
+  const data = ensureTabData(tabId, pageUrl);
 
   // Deduplicate by type+value
   const existing = new Set(data.findings.map(f => `${f.type}:${f.value}`));
@@ -67,34 +73,34 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
   if (message.action === 'analyze_intercepted') {
     const { url, body, headers, pageUrl } = message.data;
+    const data = ensureTabData(tabId, pageUrl);
+    data.stats.bodies++;
+
     const findings = [];
-
-    // Analyze URL
     findings.push(...analyzeUrl(url));
-
-    // Analyze response headers
-    if (headers) {
-      findings.push(...analyzeHeaders(headers, 'Response Header'));
-    }
-
-    // Analyze response body
-    if (body) {
-      findings.push(...analyzeContent(body, 'Response Body'));
-    }
+    if (headers) findings.push(...analyzeHeaders(headers, 'Response Header'));
+    if (body) findings.push(...analyzeContent(body, 'Response Body'));
 
     addFindings(tabId, findings, pageUrl);
   }
 
   if (message.action === 'analyze_content') {
     const { content, source, pageUrl } = message.data;
+    const data = ensureTabData(tabId, pageUrl);
+
+    // Categorize by source
+    if (source && source.includes('Script')) data.stats.scripts++;
+    else if (source && source.includes('data attribute')) data.stats.dataAttrs++;
+    else if (source && source.includes('Meta tag')) data.stats.metaTags++;
+
     const findings = analyzeContent(content, source);
     addFindings(tabId, findings, pageUrl);
   }
 
   if (message.action === 'get_findings') {
-    const data = tabFindings.get(message.tabId || tabId) || { findings: [], url: '' };
+    const data = tabFindings.get(message.tabId || tabId) || { findings: [], url: '', stats: { ...EMPTY_STATS } };
     sendResponse(data);
-    return true; // async response
+    return true;
   }
 
   if (message.action === 'clear_findings') {
@@ -129,6 +135,9 @@ chrome.webRequest.onBeforeSendHeaders.addListener(
     if (!details.tabId || details.tabId < 0) return;
     if (!details.requestHeaders) return;
 
+    const data = ensureTabData(details.tabId, details.url);
+    data.stats.requests++;
+
     const headers = details.requestHeaders.map(h => ({ name: h.name, value: h.value || '' }));
     const findings = analyzeHeaders(headers, 'Request Header');
     const urlFindings = analyzeUrl(details.url);
@@ -144,6 +153,8 @@ chrome.webRequest.onHeadersReceived.addListener(
   (details) => {
     if (!details.tabId || details.tabId < 0) return;
     if (!details.responseHeaders) return;
+
+    ensureTabData(details.tabId, details.url);
 
     const headers = details.responseHeaders.map(h => ({ name: h.name, value: h.value || '' }));
     const findings = analyzeHeaders(headers, 'Response Header');

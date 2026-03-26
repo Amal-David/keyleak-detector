@@ -123,6 +123,32 @@
     .filter-high { color: #fca5a5; border-color: #7f1d1d; }
     .filter-medium { color: #fcd34d; border-color: #78350f; }
     .filter-low { color: #93c5fd; border-color: #1e3a5f; }
+    .scan-stats {
+      padding: 10px 16px;
+      border-bottom: 1px solid #1e293b;
+      font-size: 10px;
+    }
+    .stats-header {
+      color: #475569;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 6px;
+    }
+    .stat-line {
+      display: flex;
+      justify-content: space-between;
+      padding: 1px 0;
+    }
+    .stat-count { color: #34d399; font-weight: 600; min-width: 28px; }
+    .stat-label { color: #475569; }
+    .all-clean {
+      color: #34d399;
+      font-weight: 600;
+      margin-top: 6px;
+      padding-top: 6px;
+      border-top: 1px solid #1e293b;
+    }
   </style>
 </head>
 <body>
@@ -136,6 +162,7 @@
     <button class="filter-btn filter-medium active" data-severity="medium">MED</button>
     <button class="filter-btn filter-low active" data-severity="low">LOW</button>
   </div>
+  <div id="scanStats" class="scan-stats" style="display: none;"></div>
   <div id="content">
     <div class="status">
       <div class="icon">&#x2714;</div>
