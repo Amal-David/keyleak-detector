@@ -1,6 +1,10 @@
 # Use Python 3.11 on Debian Bookworm (stable) for reliable apt repos
 FROM python:3.11-slim-bookworm
 
+# Tool versions
+ARG SUBFINDER_VERSION=2.12.0
+ARG AMASS_VERSION=5.0.1
+
 # Set working directory
 WORKDIR /app
 
@@ -18,7 +22,16 @@ RUN set -eux && \
     echo 'APT::Keep-Downloaded-Packages "false";' > /etc/apt/apt.conf.d/99-no-cache && \
     # Update package lists and install dependencies
     apt-get update && \
-    apt-get install -y --no-install-recommends wget ca-certificates && \
+    apt-get install -y --no-install-recommends wget ca-certificates unzip && \
+    # Install subdomain enumeration tools
+    wget -qO /tmp/subfinder.zip "https://github.com/projectdiscovery/subfinder/releases/download/v${SUBFINDER_VERSION}/subfinder_${SUBFINDER_VERSION}_linux_amd64.zip" && \
+    unzip -q /tmp/subfinder.zip -d /usr/local/bin && \
+    chmod +x /usr/local/bin/subfinder && \
+    wget -qO /tmp/amass.tar.gz "https://github.com/owasp-amass/amass/releases/download/v${AMASS_VERSION}/amass_linux_amd64.tar.gz" && \
+    tar -xzf /tmp/amass.tar.gz -C /tmp && \
+    mv /tmp/amass_linux_amd64/amass /usr/local/bin/amass && \
+    chmod +x /usr/local/bin/amass && \
+    rm -rf /tmp/subfinder.zip /tmp/amass.tar.gz /tmp/amass_linux_amd64 && \
     # Clean apt cache
     apt-get clean && rm -rf /var/lib/apt/lists/* /var/cache/apt/* && \
     # Install Python packages
@@ -31,7 +44,7 @@ RUN set -eux && \
     apt-get update && \
     playwright install-deps chromium && \
     # Final aggressive cleanup
-    apt-get purge -y wget && \
+    apt-get purge -y wget unzip && \
     apt-get autoremove -y && \
     apt-get clean && \
     rm -rf \

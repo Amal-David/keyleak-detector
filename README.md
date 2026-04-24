@@ -4,27 +4,65 @@
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/Python-3.9%2B-blue)](https://www.python.org/)
 
-A web application that scans websites for exposed API keys, secrets, sensitive data, and access control issues. Combines headless browser automation with network traffic interception to catch secrets in JavaScript, headers, API responses, and dynamic content.
+KeyLeak Detector is a local-first runtime leak detector for modern web apps.
 
-Detection patterns are dynamically loaded from [GitLeaks](https://github.com/gitleaks/gitleaks) and enhanced with custom patterns optimized for runtime web scanning.
+It catches secrets and risky exposures that only show up after your app runs: JavaScript bundles, API responses, request/response headers, DOM data attributes, authenticated pages, exposed files, subdomains, source maps, MCP/agent configs, and AI provider keys.
 
-## Preview
+The default trust model is simple: run it locally, scan systems you own, and keep test credentials on your machine.
 
-![KeyLeak Detector Interface](image-preview.png)
+## Why This Exists
 
-## Features
+Static scanners are essential, but they miss leaks that appear at runtime:
 
-- **200+ Detection Patterns** — Dynamic pattern loading from GitLeaks combined with custom patterns, cached for 24 hours
-- **Two Scan Modes** — Unauthenticated basic scan and authenticated extensive scan with Bearer token / cookie support
-- **Access Control Detection** — Identifies potential IDOR and broken access control patterns on object-level endpoints, with confidence-based severity scoring
-- **Attack Surface Analysis** — Subdomain enumeration, missing security headers, exposed files (`.env`, `.git`), TLS issues, admin endpoints, technology fingerprinting
-- **Real-Time Progress** — Server-Sent Events stream scan progress to the UI as it happens
-- **Smart False Positive Filtering** — Context-aware filtering for CSS, JavaScript builtins, placeholder values, and common non-secrets
-- **Severity Filtering** — Results sorted by severity with clickable filter toggles to focus on what matters
+- A frontend bundle contains an AI provider key after build-time injection.
+- An API response includes a token only after login.
+- A preview deploy exposes `.env`, `.git`, backups, source maps, or debug bundles.
+- A generated app ships object IDs and weak authorization paths.
+- Agent/MCP config files collect powerful tool tokens in local project folders.
+
+KeyLeak is meant to answer one launch question quickly:
+
+```text
+Can I ship this preview without leaking something obvious and expensive?
+```
+
+## The Delta Four Result
+
+Every serious scan should lead to four things:
+
+- `Verdict`: `SAFE TO SHIP`, `REVIEW`, or `BLOCK SHIP`.
+- `Proof`: redacted evidence, source, detector, and confidence.
+- `Fix`: exact remediation and rotation guidance.
+- `Re-test`: the command or profile to run after fixing.
+
+Example CLI result:
+
+```bash
+keyleak scan https://preview.example.com
+BLOCK SHIP: 1 critical, 0 high, 2 medium, 3 low
+Critical or high-confidence exposures need fixing before release.
+Re-test: keyleak scan https://preview.example.com
+```
+
+## What It Checks
+
+| Area | Status | Notes |
+|---|---:|---|
+| Runtime JS/API response secrets | Strong | Browser + proxy capture scans scripts, headers, URLs, and responses. |
+| AI/LLM provider keys | Strong | OpenAI, Anthropic, Gemini, OpenRouter, Groq, Hugging Face, and more. |
+| Cloud/SaaS/PAT/webhooks | Strong | AWS, GitHub, Stripe, Slack, SendGrid, PyPI, database URLs, private keys. |
+| Auth-only leaks | Partial | Authenticated bearer/cookie scan support exists; two-user diff is planned. |
+| IDOR/BOLA hints | Early | Flags obvious direct object references and auth mismatch signals. |
+| Attack surface | Partial | Security headers, TLS, exposed files, admin paths, subdomain enumeration. |
+| Local config leaks | New | `keyleak local` scans `.env`, MCP, CI, Docker, source maps, and logs. |
+| Source maps/debug bundles | New | Local scanner detects source map content and provider keys. |
+| GraphQL/LLM/agent hints | Early | Local detectors catch GraphQL introspection and prompt-injection style text. |
+
+KeyLeak is not a full DAST, not exploit automation, and not a replacement for GitLeaks, TruffleHog, GitHub secret scanning, or GitGuardian. It is the runtime/browser/local-config layer that complements them.
 
 ## Quick Start
 
-### Docker (Recommended)
+### Docker Web UI
 
 ```bash
 git clone https://github.com/Amal-David/keyleak-detector.git
@@ -32,117 +70,148 @@ cd keyleak-detector
 docker compose up -d
 ```
 
-Open **http://localhost:5002** in your browser.
+Open `http://localhost:5002`.
+
+### Local Web UI
 
 ```bash
-docker compose logs -f          # View logs
-docker compose up -d --build    # Rebuild after changes
-docker compose down             # Stop
+poetry install
+poetry run playwright install chromium
+poetry run python app.py
 ```
 
-**Requirements:** Docker 20.10+, Docker Compose 2.0+, 2GB RAM, 1GB disk (~690MB image)
+Open `http://localhost:5002`.
 
-For detailed Docker instructions, see [DOCKER.md](DOCKER.md).
-
-### Manual Installation
+### CLI
 
 ```bash
-git clone https://github.com/Amal-David/keyleak-detector.git
-cd keyleak-detector
-
-# Install dependencies (choose one)
-poetry install                    # Poetry
-uv pip install -r requirements.txt  # UV
-
-# Install browser (required)
-playwright install chromium
-# Linux only: playwright install-deps chromium
-
-# Run
-python app.py
+poetry install
+poetry run keyleak local fixtures/vulnerable-demo
+poetry run keyleak local . --json
+poetry run keyleak local . --sarif --fail-on high
 ```
 
-Open **http://localhost:5002**. The app uses port 5002 to avoid conflict with AirPlay on macOS.
+The URL scanner uses the local web scanner API:
 
-## Scanning
+```bash
+poetry run python app.py
+poetry run keyleak scan https://preview.example.com --json
+poetry run keyleak scan https://preview.example.com --bearer "$TOKEN" --fail-on medium
+```
 
-### Basic Scan
+## Safe Demo
 
-Enter a URL and click **BASIC SCAN**. This runs an unauthenticated scan that:
+The repo includes an intentionally vulnerable local fixture:
 
-1. Loads the page in a headless browser through an intercepting proxy
-2. Captures all HTTP requests and responses
-3. Analyzes inline scripts, data attributes, headers, and API responses
-4. Runs attack surface checks (subdomains, security headers, exposed files, TLS)
-5. Returns findings sorted by severity
+```bash
+poetry run keyleak local fixtures/vulnerable-demo --markdown
+```
 
-### Extensive Scan (Authenticated)
+This gives contributors and Hacker News readers a safe way to see a `BLOCK SHIP` result without scanning random systems.
 
-Click the **EXTENSIVE SCAN** button, provide a throwaway Bearer token and/or cookie, then run. This adds:
+## Web Scanner
 
-- Authenticated browsing with your credentials injected into the session
-- IDOR detection — flags endpoints where object IDs in the URL don't match the authenticated user's identity (extracted from JWT claims)
-- Confidence-based severity — GET requests to public-looking endpoints default to medium; mutating methods (PUT/DELETE) with success responses escalate to high
+Basic scan:
 
-> Only use throwaway / non-production credentials for authenticated scanning.
+1. Loads the target in headless Chromium through mitmproxy.
+2. Captures URLs, headers, responses, inline scripts, and DOM config data.
+3. Applies custom and GitLeaks-derived secret patterns.
+4. Runs attack-surface checks for exposed files, security headers, admin paths, TLS, and subdomains.
+5. Returns a verdict, summary, findings, proof, fix guidance, and re-test command.
 
-### Attack Vector Settings
+Authenticated scan:
 
-Optional configuration via environment variables:
+1. Adds a throwaway bearer token and/or cookie to the browser context.
+2. Scans authenticated pages and traffic.
+3. Applies best-effort access-control heuristics for direct object references.
 
-| Variable | Default | Description |
-|---|---|---|
-| `SCAN_TIME_BUDGET_SECONDS` | `600` | Time limit for attack surface scanning |
-| `SUBDOMAIN_ENUMERATOR` | `subfinder` | Preferred tool (`subfinder` or `amass`) |
-| `SUBDOMAIN_PROXY` | — | HTTP proxy for the enumerator |
-| `HTTP_PROXY` / `HTTPS_PROXY` | — | Outbound request routing |
+Use throwaway credentials only.
 
-## How It Works
+## Chrome Extension
 
-1. **Browser Automation** — Playwright loads the target in a headless Chromium instance
-2. **Network Interception** — mitmproxy captures all HTTP/HTTPS traffic as a man-in-the-middle proxy
-3. **Content Analysis** — Parses JavaScript, HTML, headers, JSON responses, and dynamic content
-4. **Pattern Matching** — 200+ compiled regex patterns detect secrets across all captured content
-5. **Access Control Analysis** — Detects IDOR patterns by comparing URL object IDs against JWT subject claims
-6. **Smart Filtering** — Multi-layer false positive filtering (CSS patterns, JS builtins, placeholders, reserved IPs)
-7. **Real-Time Progress** — SSE streams scan status to the frontend as each phase completes
+The `extension/` folder contains an experimental local Chrome extension that passively monitors pages as you browse.
 
-## Patterns Detected
+It scans:
 
-**Cloud & Infrastructure:** AWS Keys, Google API/OAuth/Service Account Keys, Firebase, Heroku, Vertex AI
+- request and response headers
+- URLs and query parameters
+- fetch/XHR response bodies
+- inline scripts
+- data attributes and page config
 
-**Services:** Stripe, Slack, GitHub (PAT + fine-grained), GitLab, npm, SendGrid, Square, Mailgun, Mailchimp, Twilio, PyPI
+It requests powerful browser permissions because it needs to observe web traffic locally. See [docs/SECURITY_MODEL.md](docs/SECURITY_MODEL.md) before using it on sensitive browsing sessions.
 
-**AI/LLM Providers:** OpenAI, Anthropic, Gemini, Hugging Face, Cohere, OpenRouter, Replicate, Together AI, Perplexity, Mistral, AI21, Groq, Fireworks, DeepInfra, Anyscale
+## Reports
 
-**Databases:** MongoDB, PostgreSQL, MySQL, Redis, SQL Server connection strings
+CLI output formats:
 
-**Authentication:** JWT, Bearer, OAuth, session tokens, Basic Auth, API keys
+```bash
+poetry run keyleak local . --json
+poetry run keyleak local . --markdown
+poetry run keyleak local . --sarif
+poetry run keyleak scan https://preview.example.com --baseline keyleak-baseline.json --fail-on high
+```
 
-**Sensitive Data:** Private SSH keys, credit card numbers, SSNs, hardcoded passwords, encrypted credentials in JavaScript
+Each normalized finding includes:
 
-**Access Control:** IDOR patterns, broken access control on object-level endpoints
+- `id`
+- `type`
+- `severity`
+- `confidence`
+- `detector_id`
+- `source`
+- `evidence`
+- `redacted_value`
+- `risk_reason`
+- `remediation`
+- `references`
+- `validation_status`
 
-## Responsible Use
+Baselines and allowlists are intentionally simple. A baseline can be a previous KeyLeak JSON report; those finding IDs/signatures are suppressed so CI fails only on new findings. An allowlist can be JSON (`ids`, `detector_ids`, `types`, `source_contains`) or a line file using entries like `id:finding_...`, `detector:local:openai_api_key`, `type:source_map_reference`, or `source:fixtures/vulnerable-demo`.
 
-Only scan systems you own or have written permission to test. Unauthorized scanning may be illegal in your jurisdiction. Handle findings securely, rotate any exposed credentials immediately, and report through responsible disclosure programs.
+## Security Model
 
-This tool is provided under the MIT License without warranty. See [LICENSE](LICENSE) for details.
+- Local-first: scans run on your machine or self-hosted Docker container.
+- No hosted credential upload is required.
+- Values are redacted in normalized reports by default.
+- Authenticated scans should use throwaway test credentials.
+- Only scan systems you own or have explicit permission to test.
 
-## Acknowledgments
-
-- **[GitLeaks](https://github.com/gitleaks/gitleaks)** — Industry-standard SAST tool. We dynamically import their pattern database.
-- **[Keyleaksecret](https://github.com/0xSojalSec/Keyleaksecret)** — Additional pattern inspiration.
+Read [docs/SECURITY_MODEL.md](docs/SECURITY_MODEL.md) for details and limits.
 
 ## Contributing
 
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes
-4. Push and open a Pull Request
+Useful PRs are very welcome. The best contribution lanes are:
 
-Issues and feature requests: [GitHub Issues](https://github.com/Amal-David/keyleak-detector/issues)
+- add provider patterns with fixtures
+- add safe vulnerable fixtures
+- improve false-positive handling
+- add remediation playbooks
+- improve Chrome extension UX or tests
+- add report exporters
+- improve CLI profiles and CI behavior
+- add MCP/agent/LLM leak detectors
 
-## Author
+Start with [CONTRIBUTING.md](CONTRIBUTING.md) and [docs/DETECTOR_AUTHORING.md](docs/DETECTOR_AUTHORING.md).
 
-Created by [Amal David](https://github.com/Amal-David)
+## Roadmap
+
+- Shared scanner core for web UI, CLI, and extension.
+- More detector fixtures and report tests.
+- GitHub Action and CI mode.
+- Two-user authenticated comparison for IDOR/BOLA.
+- GraphQL, OAuth/OIDC, CORS, source-map, and agent-web safety detectors.
+- Generated extension pattern bundle from the shared registry.
+
+## Responsible Use
+
+Only scan systems you own or have written permission to test. Unauthorized scanning may be illegal. Handle findings securely, rotate exposed credentials immediately, and report vulnerabilities through responsible disclosure.
+
+## Acknowledgments
+
+- [GitLeaks](https://github.com/gitleaks/gitleaks) for the industry-standard secret scanning rules that KeyLeak imports.
+- [Keyleaksecret](https://github.com/0xSojalSec/Keyleaksecret) for additional pattern inspiration.
+
+## License
+
+MIT. See [LICENSE](LICENSE).
