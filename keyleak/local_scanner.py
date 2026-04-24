@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import re
 from pathlib import Path
 from typing import Iterable, List, Sequence
 
@@ -133,5 +134,28 @@ def _is_placeholder(value: object) -> bool:
     text = str(value or "").strip().lower()
     if len(text) < 8:
         return True
-    placeholders = ("example", "placeholder", "your_", "your-", "changeme", "dummy", "fake", "test")
-    return any(marker in text for marker in placeholders)
+    exact = {"example", "placeholder", "changeme", "dummy", "fake", "test"}
+    if text in exact:
+        return True
+    prefixes = (
+        "your_",
+        "your-",
+        "example_",
+        "example-",
+        "placeholder_",
+        "placeholder-",
+        "changeme_",
+        "changeme-",
+        "dummy_",
+        "dummy-",
+        "fake_",
+        "fake-",
+        "test_",
+        "test-",
+        "xxxx",
+        "abcd1234",
+    )
+    if text.startswith(prefixes):
+        return True
+    tokens = {token for token in re.split(r"[^a-z0-9]+", text) if token}
+    return bool(tokens) and tokens.issubset(exact)

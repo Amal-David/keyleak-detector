@@ -48,6 +48,7 @@ def apply_suppressions(
         findings=findings,
         generated_at=report.generated_at,
         retest_command=report.retest_command,
+        extra=report.extra,
     )
 
 
@@ -88,6 +89,8 @@ def finding_signature(finding: Finding) -> str:
         [
             finding.detector_id,
             finding.source,
+            "" if finding.evidence.line is None else str(finding.evidence.line),
+            finding.evidence.request_url,
             finding.evidence.redacted_value,
         ]
     )
@@ -131,8 +134,10 @@ def _from_lines(lines: Iterable[str]) -> SuppressionSet:
             suppressions.source_contains.append(value)
         elif key == "signature":
             suppressions.signatures.add(value)
-        else:
+        elif key == "":
             suppressions.ids.add(value)
+        else:
+            raise ValueError(f"Unknown suppression rule key {key!r} in line: {line!r}")
     return suppressions
 
 
@@ -157,15 +162,25 @@ def _signature_from_dict(item: Dict[str, Any]) -> Optional[str]:
     detector_id = item.get("detector_id")
     source = item.get("source")
     evidence = item.get("evidence") or {}
+    line = evidence.get("line")
+    request_url = evidence.get("request_url") or ""
     redacted_value = item.get("redacted_value") or evidence.get("redacted_value")
     if not detector_id or not source or not redacted_value:
         return None
-    return "|".join([str(detector_id), str(source), str(redacted_value)])
+    return "|".join(
+        [
+            str(detector_id),
+            str(source),
+            "" if line is None else str(line),
+            str(request_url),
+            str(redacted_value),
+        ]
+    )
 
 
 def _add_strings(target: Any, values: Any) -> None:
     if isinstance(values, str):
-        target.add(values) if hasattr(target, "add") else target.append(values)
+        _append_or_add(target, values)
         return
     for value in values or []:
         _add_optional(target, value)
@@ -177,7 +192,14 @@ def _add_optional(target: Any, value: Any) -> None:
     text = str(value).strip()
     if not text:
         return
-    target.add(text) if hasattr(target, "add") else target.append(text)
+    _append_or_add(target, text)
+
+
+def _append_or_add(target: Any, value: str) -> None:
+    if hasattr(target, "add"):
+        target.add(value)
+    else:
+        target.append(value)
 
 
 def _split_line_rule(line: str):

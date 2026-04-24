@@ -9,6 +9,7 @@ from typing import Any, Dict, List, Optional
 import requests
 
 from .local_scanner import DEFAULT_INCLUDES, scan_path
+from .models import ScanReport
 from .reporting import (
     build_report,
     fail_threshold_met,
@@ -57,7 +58,7 @@ def build_parser() -> argparse.ArgumentParser:
     scan = subparsers.add_parser("scan", help="Scan a running web app through the local KeyLeak web scanner.")
     scan.add_argument("url")
     scan.add_argument("--server", default=DEFAULT_SERVER)
-    scan.add_argument("--profile", default="browser", choices=["quick", "browser", "authenticated", "attack-surface", "ci"])
+    scan.add_argument("--profile", default="browser", choices=["browser", "authenticated"])
     scan.add_argument("--bearer", default="")
     scan.add_argument("--cookie", default="")
     scan.add_argument("--fail-on", default="high", choices=["low", "medium", "high", "critical"])
@@ -94,6 +95,8 @@ def _scan_url(args: argparse.Namespace):
     )
     response.raise_for_status()
     data = response.json()
+    if isinstance(data.get("report"), dict):
+        return ScanReport.from_dict(data["report"])
     return build_report(
         args.url,
         data.get("findings", []),

@@ -193,11 +193,11 @@
             </section>
         </main>
 
-        <div id="extensiveScanModal" class="hidden fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
-            <div class="w-full max-w-2xl panel modal-panel">
+        <div id="extensiveScanModal" class="hidden fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-labelledby="extensiveScanTitle">
+            <div class="w-full max-w-2xl panel modal-panel" tabindex="-1">
                 <div class="px-6 py-4 border-b border-slate-700 flex items-center justify-between">
-                    <h3 class="text-emerald-400 font-mono font-bold text-sm">EXTENSIVE AUTHENTICATED SCAN</h3>
-                    <button id="closeExtensiveModal" class="text-slate-400 hover:text-slate-200"><i class="fas fa-times"></i></button>
+                    <h3 id="extensiveScanTitle" class="text-emerald-400 font-mono font-bold text-sm">EXTENSIVE AUTHENTICATED SCAN</h3>
+                    <button id="closeExtensiveModal" aria-label="Close extensive scan modal" class="text-slate-400 hover:text-slate-200"><i class="fas fa-times" aria-hidden="true"></i></button>
                 </div>
                 <div class="modal-content">
                     <div class="bg-yellow-900/20 border border-yellow-700/40 rounded-lg p-3">

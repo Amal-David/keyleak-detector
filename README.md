@@ -56,7 +56,7 @@ Re-test: keyleak scan https://preview.example.com
 | Attack surface | Partial | Security headers, TLS, exposed files, admin paths, subdomain enumeration. |
 | Local config leaks | New | `keyleak local` scans `.env`, MCP, CI, Docker, source maps, and logs. |
 | Source maps/debug bundles | New | Local scanner detects source map content and provider keys. |
-| GraphQL/LLM/agent hints | Early | Local detectors catch GraphQL introspection and prompt-injection style text. |
+| GraphQL/LLM/agent hints | Early | Local detectors catch GraphQL introspection and prompt-injection-style text. |
 
 KeyLeak is not a full DAST, not exploit automation, and not a replacement for GitLeaks, TruffleHog, GitHub secret scanning, or GitGuardian. It is the runtime/browser/local-config layer that complements them.
 

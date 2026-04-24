@@ -41,6 +41,17 @@ class Evidence:
             "redacted_value": self.redacted_value,
         }
 
+    @classmethod
+    def from_dict(cls, payload: Dict[str, Any]) -> "Evidence":
+        return cls(
+            source=str(payload.get("source") or ""),
+            snippet=str(payload.get("snippet") or ""),
+            line=payload.get("line"),
+            request_url=str(payload.get("request_url") or ""),
+            response_status=payload.get("response_status"),
+            redacted_value=str(payload.get("redacted_value") or ""),
+        )
+
 
 @dataclass
 class Finding:
@@ -59,7 +70,14 @@ class Finding:
     def __post_init__(self) -> None:
         self.severity = normalize_severity(self.severity)
         if not self.id:
-            self.id = stable_id(self.type, self.detector_id, self.source, self.evidence.redacted_value)
+            self.id = stable_id(
+                self.type,
+                self.detector_id,
+                self.source,
+                self.evidence.redacted_value,
+                self.evidence.line,
+                self.evidence.request_url,
+            )
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -70,12 +88,37 @@ class Finding:
             "detector_id": self.detector_id,
             "source": self.source,
             "evidence": self.evidence.to_dict(),
+            # Back-compat for older UI/API consumers; evidence.redacted_value is canonical.
             "redacted_value": self.evidence.redacted_value,
             "risk_reason": self.risk_reason,
             "remediation": self.remediation,
             "references": self.references,
             "validation_status": self.validation_status,
         }
+
+    @classmethod
+    def from_dict(cls, payload: Dict[str, Any]) -> "Finding":
+        evidence_payload = payload.get("evidence") or {}
+        evidence = Evidence.from_dict(
+            {
+                **evidence_payload,
+                "source": evidence_payload.get("source") or payload.get("source") or "",
+                "redacted_value": evidence_payload.get("redacted_value") or payload.get("redacted_value") or "",
+            }
+        )
+        return cls(
+            type=str(payload.get("type") or "unknown"),
+            severity=normalize_severity(payload.get("severity")),
+            confidence=float(payload.get("confidence") if payload.get("confidence") is not None else 0.55),
+            detector_id=str(payload.get("detector_id") or "runtime:unknown"),
+            source=str(payload.get("source") or evidence.source or "unknown"),
+            evidence=evidence,
+            risk_reason=str(payload.get("risk_reason") or ""),
+            remediation=str(payload.get("remediation") or ""),
+            validation_status=str(payload.get("validation_status") or "not_validated"),
+            references=list(payload.get("references") or []),
+            id=str(payload.get("id") or ""),
+        )
 
 
 @dataclass
@@ -85,6 +128,7 @@ class ScanReport:
     findings: List[Finding]
     generated_at: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
     retest_command: str = ""
+    extra: Dict[str, Any] = field(default_factory=dict)
 
     @property
     def summary(self) -> Dict[str, int]:
@@ -123,7 +167,8 @@ class ScanReport:
         }
 
     def to_dict(self) -> Dict[str, Any]:
-        return {
+        payload = dict(self.extra)
+        payload.update({
             "target": redact_url(self.target),
             "scan_mode": self.scan_mode,
             "generated_at": self.generated_at,
@@ -131,7 +176,28 @@ class ScanReport:
             "summary": self.summary,
             "retest_command": self.retest_command,
             "findings": [finding.to_dict() for finding in self.findings],
+        })
+        return payload
+
+    @classmethod
+    def from_dict(cls, payload: Dict[str, Any]) -> "ScanReport":
+        known_keys = {
+            "target",
+            "scan_mode",
+            "generated_at",
+            "retest_command",
+            "findings",
+            "verdict",
+            "summary",
         }
+        return cls(
+            target=str(payload.get("target") or ""),
+            scan_mode=str(payload.get("scan_mode") or "runtime"),
+            findings=[Finding.from_dict(finding) for finding in payload.get("findings") or []],
+            generated_at=str(payload.get("generated_at") or datetime.now(timezone.utc).isoformat()),
+            retest_command=str(payload.get("retest_command") or ""),
+            extra={key: value for key, value in payload.items() if key not in known_keys},
+        )
 
 
 def normalize_severity(severity: object) -> str:
@@ -156,9 +222,14 @@ def finding_from_legacy(raw: Dict[str, Any], detector_prefix: str = "runtime") -
     finding_type = str(raw.get("type") or "unknown")
     severity = normalize_severity(raw.get("severity"))
     source = str(raw.get("source") or "unknown")
-    raw_value = raw.get("value", raw.get("match", ""))
+    raw_value = raw.get("value") if raw.get("value") is not None else raw.get("match", "")
     redacted_value = redact_value(raw_value)
     snippet = raw.get("context_lines") or raw.get("context") or raw.get("details") or ""
+    confidence = (
+        float(raw.get("confidence"))
+        if raw.get("confidence") is not None
+        else float(confidence_for_severity(severity, source))
+    )
 
     evidence = Evidence(
         source=source,
@@ -172,7 +243,7 @@ def finding_from_legacy(raw: Dict[str, Any], detector_prefix: str = "runtime") -
     return Finding(
         type=finding_type,
         severity=severity,
-        confidence=float(raw.get("confidence") or confidence_for_severity(severity, source)),
+        confidence=confidence,
         detector_id=str(raw.get("detector_id") or f"{detector_prefix}:{finding_type}"),
         source=source,
         evidence=evidence,

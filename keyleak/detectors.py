@@ -27,7 +27,7 @@ DETECTORS = [
         "critical",
         "OpenAI API key exposed.",
         "Rotate the OpenAI key, remove it from client/config files, and load it server-side from a secret manager.",
-        ["env", "ci", "mcp", "sourcemaps", "logs"],
+        ["env", "ci", "docker", "mcp", "sourcemaps", "logs"],
     ),
     Detector(
         "anthropic_api_key",
@@ -35,7 +35,7 @@ DETECTORS = [
         "critical",
         "Anthropic API key exposed.",
         "Rotate the Anthropic key and move model calls behind a trusted server boundary.",
-        ["env", "ci", "mcp", "sourcemaps", "logs"],
+        ["env", "ci", "docker", "mcp", "sourcemaps", "logs"],
     ),
     Detector(
         "openrouter_api_key",
@@ -43,7 +43,7 @@ DETECTORS = [
         "critical",
         "OpenRouter API key exposed.",
         "Rotate the OpenRouter key and audit usage because this can proxy access to multiple model providers.",
-        ["env", "ci", "mcp", "sourcemaps", "logs"],
+        ["env", "ci", "docker", "mcp", "sourcemaps", "logs"],
     ),
     Detector(
         "groq_api_key",
@@ -51,7 +51,7 @@ DETECTORS = [
         "critical",
         "Groq API key exposed.",
         "Rotate the Groq key and keep inference credentials out of browser and agent config files.",
-        ["env", "ci", "mcp", "sourcemaps", "logs"],
+        ["env", "ci", "docker", "mcp", "sourcemaps", "logs"],
     ),
     Detector(
         "github_pat",
@@ -59,7 +59,7 @@ DETECTORS = [
         "critical",
         "GitHub token exposed.",
         "Revoke the token, review repository access, and regenerate with the smallest necessary scope.",
-        ["env", "ci", "mcp", "sourcemaps", "logs"],
+        ["env", "ci", "docker", "mcp", "sourcemaps", "logs"],
     ),
     Detector(
         "aws_access_key",
@@ -67,7 +67,7 @@ DETECTORS = [
         "high",
         "AWS access key ID exposed.",
         "Rotate the access key and prefer IAM roles or workload identity over static credentials.",
-        ["env", "ci", "mcp", "sourcemaps", "logs"],
+        ["env", "ci", "docker", "mcp", "sourcemaps", "logs"],
     ),
     Detector(
         "stripe_secret_key",
@@ -75,7 +75,7 @@ DETECTORS = [
         "critical",
         "Stripe secret key exposed.",
         "Rotate the Stripe key and move payment operations behind server-side endpoints.",
-        ["env", "ci", "sourcemaps", "logs"],
+        ["env", "ci", "docker", "sourcemaps", "logs"],
     ),
     Detector(
         "slack_webhook",
@@ -83,7 +83,7 @@ DETECTORS = [
         "high",
         "Slack webhook URL exposed.",
         "Regenerate the webhook and keep it out of browser bundles and public config.",
-        ["env", "ci", "mcp", "sourcemaps", "logs"],
+        ["env", "ci", "docker", "mcp", "sourcemaps", "logs"],
     ),
     Detector(
         "database_url",
@@ -91,15 +91,15 @@ DETECTORS = [
         "critical",
         "Database connection string with credentials exposed.",
         "Rotate database credentials, restrict network access, and move connection strings to server-only configuration.",
-        ["env", "ci", "mcp", "sourcemaps", "logs"],
+        ["env", "ci", "docker", "mcp", "sourcemaps", "logs"],
     ),
     Detector(
         "private_key",
-        r"-----BEGIN (?:RSA|DSA|EC|OPENSSH|PRIVATE) PRIVATE KEY-----[\s\S]+?-----END (?:RSA|DSA|EC|OPENSSH|PRIVATE) PRIVATE KEY-----",
+        r"-----BEGIN (?:(?:RSA|DSA|EC|OPENSSH) )?PRIVATE KEY-----[\s\S]+?-----END (?:(?:RSA|DSA|EC|OPENSSH) )?PRIVATE KEY-----",
         "critical",
         "Private key exposed.",
         "Revoke and rotate the key immediately, then audit every system where it was trusted.",
-        ["env", "ci", "mcp", "logs"],
+        ["env", "ci", "docker", "mcp", "logs"],
     ),
     Detector(
         "mcp_config_secret",
@@ -107,7 +107,7 @@ DETECTORS = [
         "high",
         "MCP or agent tool credential exposed.",
         "Move agent/tool credentials to local secret storage and review connected tool permissions.",
-        ["mcp", "env", "logs"],
+        ["mcp", "env", "docker", "logs"],
     ),
     Detector(
         "hidden_prompt_injection",
@@ -127,7 +127,7 @@ DETECTORS = [
     ),
     Detector(
         "source_map_reference",
-        r"sourceMappingURL=.*\.map\b",
+        r"sourceMappingURL=[^\s'\"<>]+\.map\b",
         "low",
         "Browser bundle references a source map.",
         "Review generated source maps for embedded secrets and avoid publishing private source in production.",

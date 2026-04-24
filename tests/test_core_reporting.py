@@ -3,10 +3,12 @@ import tempfile
 import unittest
 
 from keyleak.local_scanner import scan_path
-from keyleak.models import Finding, Evidence
+from keyleak.detectors import DETECTORS
+from keyleak.local_scanner import _is_placeholder
+from keyleak.models import Finding, Evidence, ScanReport, finding_from_legacy
 from keyleak.redaction import redact_value
 from keyleak.reporting import build_report, fail_threshold_met, format_sarif
-from keyleak.suppressions import apply_suppressions
+from keyleak.suppressions import apply_suppressions, load_suppressions
 
 
 class ReportingTests(unittest.TestCase):
@@ -29,6 +31,61 @@ class ReportingTests(unittest.TestCase):
         self.assertEqual(report.verdict["status"], "BLOCK_SHIP")
         self.assertTrue(fail_threshold_met(report, "high"))
         self.assertIn("sarif", format_sarif(report).lower())
+
+    def test_retest_command_quotes_local_paths(self):
+        report = build_report("/tmp/my repo", [], scan_mode="local")
+
+        self.assertEqual(report.retest_command, "keyleak local '/tmp/my repo'")
+
+    def test_report_round_trips_server_payload(self):
+        report = build_report("https://preview.example.com", [], scan_mode="basic")
+        payload = report.to_dict()
+        payload["generated_at"] = "2026-04-24T00:00:00+00:00"
+        payload["future_enrichment"] = {"kept": True}
+
+        restored = ScanReport.from_dict(payload)
+
+        self.assertEqual(restored.generated_at, "2026-04-24T00:00:00+00:00")
+        self.assertEqual(restored.to_dict()["future_enrichment"], {"kept": True})
+
+    def test_legacy_finding_preserves_falsy_values(self):
+        finding = finding_from_legacy(
+            {
+                "type": "token",
+                "severity": "low",
+                "source": "fixture",
+                "value": None,
+                "match": "real-token-value-abcdefghijklmnopqrstuvwxyz",
+                "confidence": 0,
+            }
+        )
+
+        self.assertEqual(finding.confidence, 0)
+        self.assertEqual(finding.evidence.redacted_value, "real-t...[redacted]...wxyz")
+
+    def test_finding_ids_include_location(self):
+        first = Finding(
+            type="token",
+            severity="high",
+            confidence=0.9,
+            detector_id="test:token",
+            source="fixture",
+            evidence=Evidence(source="fixture", line=1, redacted_value="token"),
+            risk_reason="risk",
+            remediation="fix",
+        )
+        second = Finding(
+            type="token",
+            severity="high",
+            confidence=0.9,
+            detector_id="test:token",
+            source="fixture",
+            evidence=Evidence(source="fixture", line=2, redacted_value="token"),
+            risk_reason="risk",
+            remediation="fix",
+        )
+
+        self.assertNotEqual(first.id, second.id)
 
 
 class LocalScannerTests(unittest.TestCase):
@@ -59,6 +116,45 @@ class LocalScannerTests(unittest.TestCase):
 
         self.assertEqual(filtered.verdict["status"], "SAFE_TO_SHIP")
         self.assertEqual(filtered.findings, [])
+
+    def test_placeholder_filter_does_not_drop_stripe_test_keys(self):
+        self.assertFalse(_is_placeholder("sk_test_4eC39HqLyjWDarjtT1zdp7dc"))
+        self.assertTrue(_is_placeholder("test-placeholder-value"))
+
+    def test_unknown_allowlist_prefix_fails_loudly(self):
+        with tempfile.NamedTemporaryFile("w") as handle:
+            handle.write("detctor:local:openai_api_key\n")
+            handle.flush()
+
+            with self.assertRaises(ValueError):
+                load_suppressions(handle.name)
+
+
+class DetectorTests(unittest.TestCase):
+    def test_private_key_detector_matches_pkcs8(self):
+        detector = _detector("private_key")
+        content = "-----BEGIN PRIVATE KEY-----\nabc123\n-----END PRIVATE KEY-----"
+
+        self.assertIsNotNone(detector.compile().search(content))
+
+    def test_source_map_detector_is_bounded_per_reference(self):
+        detector = _detector("source_map_reference")
+        content = "sourceMappingURL=a.js.map\nmiddle\nsourceMappingURL=b.js.map"
+        matches = [match.group(0) for match in detector.compile().finditer(content)]
+
+        self.assertEqual(matches, ["sourceMappingURL=a.js.map", "sourceMappingURL=b.js.map"])
+
+    def test_docker_category_selects_secret_detectors(self):
+        docker_detectors = {detector.id for detector in DETECTORS if "docker" in detector.categories}
+
+        self.assertIn("openai_api_key", docker_detectors)
+
+
+def _detector(detector_id):
+    for detector in DETECTORS:
+        if detector.id == detector_id:
+            return detector
+    raise AssertionError(f"missing detector {detector_id}")
 
 
 if __name__ == "__main__":

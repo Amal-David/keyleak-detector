@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import shlex
 from typing import Any, Dict, Iterable, List, Optional
 
 from .models import Finding, ScanReport, SEVERITY_ORDER, finding_from_legacy
@@ -164,7 +165,7 @@ def _attack_vector_findings(attack_vectors: Dict[str, Any]) -> List[Finding]:
 
 
 def _retest_command(target: str, scan_mode: str) -> str:
-    safe_target = redact_url(target)
+    safe_target = shlex.quote(redact_url(target))
     if scan_mode == "local":
         return f"keyleak local {safe_target}"
     return f"keyleak scan {safe_target}"

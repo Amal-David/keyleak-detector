@@ -34,6 +34,8 @@ document.addEventListener('DOMContentLoaded', function() {
     const bearerTokenInput = document.getElementById('bearerTokenInput');
     const cookieInput = document.getElementById('cookieInput');
     const claimedUserIdInput = document.getElementById('claimedUserIdInput');
+    const modalFocusableSelector = 'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])';
+    let extensiveModalOpener = null;
 
     scanButton.addEventListener('click', () => startScan('basic'));
     extensiveScanButton.addEventListener('click', openExtensiveModal);
@@ -69,6 +71,8 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
+    document.addEventListener('keydown', handleModalKeydown);
+
     urlInput.addEventListener('keypress', function(e) {
         if (e.key === 'Enter') {
             startScan('basic');
@@ -79,11 +83,54 @@ document.addEventListener('DOMContentLoaded', function() {
         if (!validateUrl()) {
             return;
         }
+        extensiveModalOpener = document.activeElement;
         extensiveScanModal.classList.remove('hidden');
+        setTimeout(() => authMode.focus(), 0);
     }
 
     function closeExtensiveScanModal() {
         extensiveScanModal.classList.add('hidden');
+        if (extensiveModalOpener && typeof extensiveModalOpener.focus === 'function') {
+            extensiveModalOpener.focus();
+        }
+        extensiveModalOpener = null;
+    }
+
+    function handleModalKeydown(event) {
+        if (!isExtensiveModalOpen()) {
+            return;
+        }
+        if (event.key === 'Escape') {
+            event.preventDefault();
+            closeExtensiveScanModal();
+            return;
+        }
+        if (event.key === 'Tab') {
+            trapModalFocus(event);
+        }
+    }
+
+    function isExtensiveModalOpen() {
+        return extensiveScanModal && !extensiveScanModal.classList.contains('hidden');
+    }
+
+    function trapModalFocus(event) {
+        const focusable = Array.from(extensiveScanModal.querySelectorAll(modalFocusableSelector))
+            .filter(el => el.offsetParent !== null);
+        if (focusable.length === 0) {
+            event.preventDefault();
+            return;
+        }
+
+        const first = focusable[0];
+        const last = focusable[focusable.length - 1];
+        if (event.shiftKey && document.activeElement === first) {
+            event.preventDefault();
+            last.focus();
+        } else if (!event.shiftKey && document.activeElement === last) {
+            event.preventDefault();
+            first.focus();
+        }
     }
 
     function validateUrl() {
