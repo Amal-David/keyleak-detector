@@ -1,8 +1,9 @@
 import json
 import tempfile
 import unittest
+from pathlib import Path
 
-from keyleak.local_scanner import scan_path
+from keyleak.local_scanner import scan_file, scan_path
 from keyleak.detectors import DETECTORS
 from keyleak.local_scanner import _is_placeholder
 from keyleak.models import Finding, Evidence, ScanReport, finding_from_legacy
@@ -120,6 +121,16 @@ class LocalScannerTests(unittest.TestCase):
     def test_placeholder_filter_does_not_drop_stripe_test_keys(self):
         self.assertFalse(_is_placeholder("sk_test_4eC39HqLyjWDarjtT1zdp7dc"))
         self.assertTrue(_is_placeholder("test-placeholder-value"))
+
+    def test_graphql_type_hint_is_not_filtered_as_short_placeholder(self):
+        detector = _detector("graphql_introspection_hint")
+        with tempfile.NamedTemporaryFile("w", suffix=".html") as handle:
+            handle.write("query { __type(name: \"User\") { name } }")
+            handle.flush()
+
+            findings = scan_file(Path(handle.name), [detector])
+
+        self.assertEqual([finding.type for finding in findings], ["graphql_introspection_hint"])
 
     def test_unknown_allowlist_prefix_fails_loudly(self):
         with tempfile.NamedTemporaryFile("w") as handle:

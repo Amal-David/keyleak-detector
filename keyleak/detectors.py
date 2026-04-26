@@ -15,6 +15,7 @@ class Detector:
     description: str
     remediation: str
     categories: List[str]
+    min_match_length: int = 8
 
     def compile(self) -> Pattern[str]:
         return re.compile(self.pattern, re.IGNORECASE | re.MULTILINE | re.DOTALL)
@@ -124,6 +125,7 @@ DETECTORS = [
         "GraphQL introspection or schema content exposed.",
         "Confirm introspection is intentionally exposed and protected on production APIs.",
         ["sourcemaps", "logs"],
+        1,
     ),
     Detector(
         "source_map_reference",

@@ -52,7 +52,7 @@ def scan_file(file_path: Path, detectors: Iterable[Detector]) -> List[Finding]:
         regex = detector.compile()
         for match in regex.finditer(content):
             raw_value = match.group(1) if match.groups() else match.group(0)
-            if _is_placeholder(raw_value):
+            if _is_placeholder(raw_value, min_length=detector.min_match_length):
                 continue
             line = content.count("\n", 0, match.start()) + 1
             snippet = _snippet_for(content, match.start(), match.end())
@@ -130,9 +130,9 @@ def _snippet_for(content: str, start: int, end: int, radius: int = 80) -> str:
     return snippet
 
 
-def _is_placeholder(value: object) -> bool:
+def _is_placeholder(value: object, min_length: int = 8) -> bool:
     text = str(value or "").strip().lower()
-    if len(text) < 8:
+    if min_length > 0 and len(text) < min_length:
         return True
     exact = {"example", "placeholder", "changeme", "dummy", "fake", "test"}
     if text in exact:
