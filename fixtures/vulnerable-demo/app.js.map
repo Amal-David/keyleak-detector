@@ -1,0 +1,9 @@
+{
+  "version": 3,
+  "sources": ["app.ts"],
+  "names": [],
+  "mappings": "",
+  "sourcesContent": [
+    "export const OPENROUTER_KEY = 'sk-or-v1-ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuv0123456789';"
+  ]
+}
