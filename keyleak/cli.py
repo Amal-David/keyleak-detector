@@ -78,19 +78,10 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def _scan_url(args: argparse.Namespace):
-    auth_config: Dict[str, Any] = {"mode": "none"}
-    scan_mode = "basic"
-    if args.bearer or args.cookie or args.profile == "authenticated":
-        scan_mode = "extensive"
-        auth_config = {
-            "mode": "both" if args.bearer and args.cookie else "bearer" if args.bearer else "cookie",
-            "bearer_token": args.bearer,
-            "cookie": args.cookie,
-        }
-
+    payload = _scan_request_payload(args)
     response = requests.post(
         f"{args.server.rstrip('/')}/scan",
-        json={"url": args.url, "scan_mode": scan_mode, "auth_config": auth_config},
+        json=payload,
         timeout=900,
     )
     response.raise_for_status()
@@ -103,6 +94,21 @@ def _scan_url(args: argparse.Namespace):
         scan_mode=data.get("scan_mode", args.profile),
         attack_vectors=data.get("attack_vectors"),
     )
+
+
+def _scan_request_payload(args: argparse.Namespace) -> Dict[str, Any]:
+    bearer = (args.bearer or "").strip()
+    cookie = (args.cookie or "").strip()
+    auth_config: Dict[str, Any] = {"mode": "none"}
+    scan_mode = "basic"
+    if bearer or cookie or args.profile == "authenticated":
+        scan_mode = "extensive"
+        auth_config = {
+            "mode": "both" if bearer and cookie else "bearer" if bearer else "cookie" if cookie else "none",
+            "bearer_token": bearer,
+            "cookie": cookie,
+        }
+    return {"url": args.url, "scan_mode": scan_mode, "auth_config": auth_config}
 
 
 def _emit_report(report, args: argparse.Namespace) -> int:

@@ -1,8 +1,10 @@
 import json
 import tempfile
 import unittest
+from argparse import Namespace
 from pathlib import Path
 
+from keyleak.cli import _scan_request_payload
 from keyleak.local_scanner import scan_file, scan_path
 from keyleak.detectors import DETECTORS
 from keyleak.local_scanner import _is_placeholder
@@ -159,6 +161,44 @@ class DetectorTests(unittest.TestCase):
         docker_detectors = {detector.id for detector in DETECTORS if "docker" in detector.categories}
 
         self.assertIn("openai_api_key", docker_detectors)
+
+    def test_mcp_config_detector_does_not_bridge_lines(self):
+        detector = _detector("mcp_config_secret")
+        unrelated_lines = "server configuration\nTOKEN=abcdefghijklmnopqrstuvwx1234567890"
+        same_line = "mcp server token=abcdefghijklmnopqrstuvwx1234567890"
+
+        self.assertIsNone(detector.compile().search(unrelated_lines))
+        self.assertIsNotNone(detector.compile().search(same_line))
+
+
+class CliTests(unittest.TestCase):
+    def test_authenticated_profile_without_credentials_uses_no_auth_mode(self):
+        payload = _scan_request_payload(
+            Namespace(
+                url="https://preview.example.com",
+                profile="authenticated",
+                bearer="",
+                cookie="",
+            )
+        )
+
+        self.assertEqual(payload["scan_mode"], "extensive")
+        self.assertEqual(payload["auth_config"]["mode"], "none")
+
+    def test_scan_payload_auth_mode_matches_supplied_credentials(self):
+        payload = _scan_request_payload(
+            Namespace(
+                url="https://preview.example.com",
+                profile="browser",
+                bearer=" token ",
+                cookie=" session=abc ",
+            )
+        )
+
+        self.assertEqual(payload["scan_mode"], "extensive")
+        self.assertEqual(payload["auth_config"]["mode"], "both")
+        self.assertEqual(payload["auth_config"]["bearer_token"], "token")
+        self.assertEqual(payload["auth_config"]["cookie"], "session=abc")
 
 
 def _detector(detector_id):

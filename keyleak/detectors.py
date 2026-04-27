@@ -18,7 +18,7 @@ class Detector:
     min_match_length: int = 8
 
     def compile(self) -> Pattern[str]:
-        return re.compile(self.pattern, re.IGNORECASE | re.MULTILINE | re.DOTALL)
+        return re.compile(self.pattern, re.IGNORECASE | re.MULTILINE)
 
 
 DETECTORS = [
