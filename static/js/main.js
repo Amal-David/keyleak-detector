@@ -295,10 +295,26 @@ document.addEventListener('DOMContentLoaded', function() {
                 findingsList.appendChild(renderFinding(finding));
             });
         } else {
-            noFindings.classList.remove('hidden');
+            displayNoFindingsState(data);
         }
 
         displayAttackVectors(data.attack_vectors);
+    }
+
+    function displayNoFindingsState(data) {
+        const title = noFindings.querySelector('h3');
+        const copy = noFindings.querySelector('p');
+        const reportTotal = data.report && data.report.summary ? data.report.summary.total_findings : 0;
+
+        if (reportTotal > 0) {
+            title.textContent = 'NO PAGE SECRETS FOUND';
+            copy.textContent = 'The verdict includes attack-surface findings. Review the attack vectors below.';
+        } else {
+            title.textContent = 'NO SECRETS FOUND';
+            copy.textContent = 'Target appears clean for this scan profile.';
+        }
+
+        noFindings.classList.remove('hidden');
     }
 
     function displayDeltaSummary(data) {

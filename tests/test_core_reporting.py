@@ -35,6 +35,32 @@ class ReportingTests(unittest.TestCase):
         self.assertTrue(fail_threshold_met(report, "high"))
         self.assertIn("sarif", format_sarif(report).lower())
 
+    def test_attack_vector_findings_contribute_to_report_summary(self):
+        report = build_report(
+            "https://preview.example.com",
+            [],
+            scan_mode="basic",
+            attack_vectors={
+                "subdomains": [
+                    {
+                        "host": "preview.example.com",
+                        "url": "https://preview.example.com/admin",
+                        "findings": [
+                            {
+                                "type": "exposed_admin",
+                                "severity": "high",
+                                "details": "Admin panel exposed.",
+                            }
+                        ],
+                    }
+                ]
+            },
+        )
+
+        self.assertEqual(report.summary["total_findings"], 1)
+        self.assertEqual(report.summary["high_severity"], 1)
+        self.assertEqual(report.verdict["status"], "BLOCK_SHIP")
+
     def test_retest_command_quotes_local_paths(self):
         report = build_report("/tmp/my repo", [], scan_mode="local")
 

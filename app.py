@@ -1678,6 +1678,7 @@ async def scan():
             scan_mode=scan_mode,
             attack_vectors=attack_vectors,
         )
+        report_summary = report.summary
 
         # Prepare the response
         response_data = {
@@ -1689,17 +1690,12 @@ async def scan():
             'retest_command': report.retest_command,
             'report': report.to_dict(),
             'findings': findings,
-            'scan_summary': {
-                'total_findings': len(findings),
-                'critical_severity': len(critical_severity),
-                'high_severity': len(high_severity),
-                'medium_severity': len(medium_severity),
-                'low_severity': len(low_severity),
-            },
+            'scan_summary': report_summary,
             'attack_vectors': attack_vectors,
             'details': {
                 'requests_analyzed': len(request_handler.findings),
                 'unique_findings': len(findings),
+                'report_findings': report_summary.get('total_findings', len(findings)),
                 'scan_timestamp': datetime.now().isoformat(),
             }
         }
