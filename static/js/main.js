@@ -422,7 +422,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     <div class="flex items-start gap-3">
                         <span class="${severityColor} text-xl font-mono">${severityIcon}</span>
                         <div>
-                            <h3 class="text-sm font-bold text-slate-200 font-mono">${formatType(finding.type)}</h3>
+                            <h3 class="text-sm font-bold text-slate-200 font-mono">${escapeHtml(formatType(finding.type))}</h3>
                             <span class="text-xs font-mono px-2 py-0.5 rounded border ${badgeClass} inline-block mt-1">
                                 ${(finding.severity || 'low').toUpperCase()}
                             </span>
