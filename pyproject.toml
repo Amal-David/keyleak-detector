@@ -16,9 +16,13 @@ regex = "2023.10.3"
 mitmproxy = "9.0.1"
 playwright = "1.55.0"
 PyJWT = "2.10.1"
+tldextract = "5.1.2"
 
 [tool.poetry.group.dev.dependencies]
 # Add dev dependencies here if needed
+
+[tool.poetry.scripts]
+keyleak = "keyleak.cli:main"
 
 [build-system]
 requires = ["poetry-core>=1.8.0"]

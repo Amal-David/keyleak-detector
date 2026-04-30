@@ -41,6 +41,7 @@ from pattern_importer import get_enhanced_patterns
 
 # Import attack vector scanner
 from attack_vector_scanner import run_attack_vector_scan
+from keyleak.reporting import build_report
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
@@ -406,7 +407,8 @@ SEVERITY_LEVELS = {
         'openai_api_key', 'anthropic_api_key', 'gemini_api_key', 'huggingface_token', 'cohere_api_key',
         'openrouter_api_key', 'replicate_api_key', 'together_api_key', 'perplexity_api_key',
         'mistral_api_key', 'ai21_api_key', 'anyscale_api_key', 'deepinfra_api_key', 'groq_api_key', 'fireworks_api_key',
-        'private_key', 'ssh_private_key', 'credit_card', 'credit_card_cvv', 'ssn'
+        'private_key', 'ssh_private_key', 'credit_card', 'credit_card_cvv', 'ssn',
+        'idor', 'broken_access_control'
     ],
     'medium': [
         'api_key', 'jwt_token', 'bearer_token', 'oauth_token', 'aws_account_id',
@@ -1670,24 +1672,30 @@ async def scan():
                 "subdomains": [],
             }
         
+        report = build_report(
+            target=url,
+            findings=findings,
+            scan_mode=scan_mode,
+            attack_vectors=attack_vectors,
+        )
+        report_summary = report.summary
+
         # Prepare the response
         response_data = {
             'url': url,
             'status': 'completed',
             'scan_mode': scan_mode,
             'auth_context_used': scan_mode == 'extensive' and bool(auth_config),
+            'verdict': report.verdict,
+            'retest_command': report.retest_command,
+            'report': report.to_dict(),
             'findings': findings,
-            'scan_summary': {
-                'total_findings': len(findings),
-                'critical_severity': len(critical_severity),
-                'high_severity': len(high_severity),
-                'medium_severity': len(medium_severity),
-                'low_severity': len(low_severity),
-            },
+            'scan_summary': report_summary,
             'attack_vectors': attack_vectors,
             'details': {
                 'requests_analyzed': len(request_handler.findings),
                 'unique_findings': len(findings),
+                'report_findings': report_summary.get('total_findings', len(findings)),
                 'scan_timestamp': datetime.now().isoformat(),
             }
         }
