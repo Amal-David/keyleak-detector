@@ -26,6 +26,21 @@ KeyLeak is meant to answer one launch question quickly:
 Can I ship this preview without leaking something obvious and expensive?
 ```
 
+## What Changed
+
+The current `main` branch includes the relaunch work that moved KeyLeak beyond a single website scanner:
+
+- A local-first product story for runtime leaks in AI-built and fast-shipped web apps.
+- A normalized finding/report model with verdict, proof, fix guidance, confidence, and re-test commands.
+- A CLI with `keyleak scan` for running web apps and `keyleak local` for local files/configs.
+- JSON, Markdown, and SARIF output for local use, CI gates, and security review workflows.
+- Baseline and allowlist support so teams can suppress known findings and fail only on new risk.
+- A deliberately vulnerable fixture in `fixtures/vulnerable-demo` for safe demos and tests.
+- A Chrome extension in `extension/` for passive local browser monitoring.
+- New local detectors for AI provider keys, MCP/agent configs, GraphQL hints, hidden prompt-injection text, source maps, CI files, Docker files, logs, and classic secrets.
+- Contributor docs, detector authoring docs, issue templates, PR template, and security model docs.
+- UI layout cleanup for the web scanner results, filters, findings, and attack vector sections.
+
 ## The Delta Four Result
 
 Every serious scan should lead to four things:
@@ -60,9 +75,13 @@ Re-test: keyleak scan https://preview.example.com
 
 KeyLeak is not a full DAST, not exploit automation, and not a replacement for GitLeaks, TruffleHog, GitHub secret scanning, or GitGuardian. It is the runtime/browser/local-config layer that complements them.
 
-## Quick Start
+## How To Use It Now
 
-### Docker Web UI
+Use the surface that matches your workflow.
+
+### 1. Run The Web UI With Docker
+
+This is the fastest way to try the browser scanner without installing Python dependencies locally.
 
 ```bash
 git clone https://github.com/Amal-David/keyleak-detector.git
@@ -72,7 +91,11 @@ docker compose up -d
 
 Open `http://localhost:5002`.
 
-### Local Web UI
+Use the page input for a basic runtime scan. Use the authenticated scan modal only with throwaway test credentials.
+
+### 2. Run The Web UI Locally
+
+Use this path when you want to develop the Flask app, scanner, templates, CSS, or JavaScript.
 
 ```bash
 poetry install
@@ -82,7 +105,20 @@ poetry run python app.py
 
 Open `http://localhost:5002`.
 
-### CLI
+If you do not use Poetry, create a virtual environment and install the package locally:
+
+```bash
+python3.11 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+pip install -e .
+python -m playwright install chromium
+python app.py
+```
+
+### 3. Scan Local Files And Configs
+
+Use `keyleak local` before pushing or shipping. It scans local files without starting the web app.
 
 ```bash
 poetry install
@@ -91,12 +127,84 @@ poetry run keyleak local . --json
 poetry run keyleak local . --sarif --fail-on high
 ```
 
-The URL scanner uses the local web scanner API:
+By default, local mode includes `env,mcp,ci,docker,sourcemaps,logs`.
+
+Limit the scan to specific file families:
+
+```bash
+poetry run keyleak local . --include env,mcp,sourcemaps
+```
+
+Exit codes are designed for automation: `0` means the selected threshold passed, `1` means the command failed, and `2` means findings met `--fail-on`.
+
+### 4. Scan A Running Web App From The CLI
+
+Use `keyleak scan` when you have a preview URL, staging URL, or local app URL.
+
+The CLI talks to the local KeyLeak web scanner API, so start the web app first:
 
 ```bash
 poetry run python app.py
 poetry run keyleak scan https://preview.example.com --json
 poetry run keyleak scan https://preview.example.com --bearer "$TOKEN" --fail-on medium
+```
+
+You can also point the CLI at the Docker web scanner:
+
+```bash
+docker compose up -d
+poetry run keyleak scan http://host.docker.internal:3000 --server http://127.0.0.1:5002
+```
+
+### 5. Run Authenticated Scans
+
+Use authenticated mode only against systems you own or have permission to test.
+
+```bash
+poetry run keyleak scan https://preview.example.com \
+  --profile authenticated \
+  --bearer "$THROWAWAY_TOKEN"
+```
+
+Use a cookie instead of a bearer token:
+
+```bash
+poetry run keyleak scan https://preview.example.com \
+  --profile authenticated \
+  --cookie "session=throwaway-session"
+```
+
+Use both when the app requires both:
+
+```bash
+poetry run keyleak scan https://preview.example.com \
+  --profile authenticated \
+  --bearer "$THROWAWAY_TOKEN" \
+  --cookie "session=throwaway-session"
+```
+
+### 6. Generate Reports For CI Or Review
+
+Use JSON for baselines, SARIF for code scanning systems, and Markdown for human review.
+
+```bash
+poetry run keyleak local . --json > keyleak-report.json
+poetry run keyleak local . --sarif > keyleak.sarif
+poetry run keyleak local . --markdown > keyleak-report.md
+```
+
+Fail on high or critical findings:
+
+```bash
+poetry run keyleak local . --fail-on high
+poetry run keyleak scan https://preview.example.com --fail-on critical
+```
+
+Suppress known findings with a previous JSON report or allowlist:
+
+```bash
+poetry run keyleak local . --baseline keyleak-report.json
+poetry run keyleak local . --allowlist keyleak-allowlist.txt
 ```
 
 ## Safe Demo
@@ -139,7 +247,44 @@ It scans:
 - inline scripts
 - data attributes and page config
 
-It requests powerful browser permissions because it needs to observe web traffic locally. See [docs/SECURITY_MODEL.md](docs/SECURITY_MODEL.md) before using it on sensitive browsing sessions.
+### Load It In Chrome
+
+The extension is not published to the Chrome Web Store yet. Load it from this repo:
+
+1. Clone or pull the latest `main` branch.
+2. Open `chrome://extensions` in Chrome.
+3. Enable `Developer mode`.
+4. Click `Load unpacked`.
+5. Select the `extension/` folder, not the repository root.
+6. Pin `KeyLeak Detector` from the Chrome toolbar extensions menu.
+7. Browse an app you own or have permission to test.
+8. Click the KeyLeak toolbar icon to see findings for the current tab.
+
+The exact folder to select is:
+
+```text
+keyleak-detector/extension
+```
+
+### Use The Popup
+
+The popup shows:
+
+- a badge count for findings on the current tab
+- severity filters for `HIGH`, `MED`, and `LOW`
+- scan activity stats for requests, response bodies, scripts, data attributes, and meta tags
+- redacted finding values and sources
+- a `CLEAR` button to reset findings for the current tab
+
+### Use The DevTools Panel
+
+Open Chrome DevTools on a page, then select the `Secrets` panel. It shows a wider table with severity, type, value, source, and context for the inspected tab.
+
+### Extension Permissions
+
+The extension requests `webRequest`, `storage`, `activeTab`, `tabs`, and `<all_urls>` because it observes requests, headers, page content, and fetch/XHR responses locally.
+
+Use it for development, staging, bug bounty scopes, or owned systems. Disable it when browsing unrelated sensitive sites. See [docs/SECURITY_MODEL.md](docs/SECURITY_MODEL.md) before using it on sensitive browsing sessions.
 
 ## Reports
 
