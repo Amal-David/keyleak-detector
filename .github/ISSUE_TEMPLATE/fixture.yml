@@ -1,0 +1,23 @@
+name: Add a vulnerable fixture
+description: Add a safe fixture that demonstrates a leak or false positive.
+title: "fixture: "
+labels: ["fixtures", "good first issue"]
+body:
+  - type: dropdown
+    id: fixture-type
+    attributes:
+      label: Fixture type
+      options:
+        - vulnerable example
+        - false positive
+        - browser/runtime example
+        - local config example
+    validations:
+      required: true
+  - type: textarea
+    id: scenario
+    attributes:
+      label: Scenario
+      description: What should the fixture prove?
+    validations:
+      required: true

@@ -12,242 +12,249 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}">
 </head>
 <body class="bg-slate-900 min-h-screen font-sans text-slate-300">
-    <!-- Header -->
-    <header class="border-b border-slate-800">
-        <div class="container mx-auto px-4 py-4">
-            <div class="flex items-center justify-between">
-                <div class="flex items-center gap-3">
-                    <div class="text-emerald-400 text-2xl">
-                        <i class="fas fa-terminal"></i>
-                    </div>
-                    <div>
-                        <h1 class="text-lg font-bold text-emerald-400 font-mono">keyleak-detector</h1>
-                        <p class="text-xs text-slate-500">secret scanner</p>
-                    </div>
-                </div>
-                <a href="https://github.com/Amal-David/keyleak-detector" target="_blank" class="text-slate-500 hover:text-emerald-400 transition-colors" title="View on GitHub">
-                    <i class="fab fa-github text-xl"></i>
-                </a>
-            </div>
-        </div>
-    </header>
-
-    <!-- Main -->
-    <main class="container mx-auto px-4 py-8">
-        <!-- Scanner -->
-        <div class="max-w-4xl mx-auto mb-8">
-            <div class="bg-slate-800 border border-slate-700 rounded-lg p-6 shadow-2xl">
-                <div class="flex items-center gap-2 mb-4 text-slate-400 text-sm font-mono">
-                    <span class="text-emerald-400">$</span>
-                    <span>./scan --target</span>
-                </div>
-                <div class="flex flex-col md:flex-row gap-3">
-                    <div class="flex-1">
-                        <input 
-                            type="text" 
-                            id="urlInput" 
-                            placeholder="https://target.com" 
-                            class="w-full px-4 py-3 bg-slate-900 border border-slate-700 rounded text-slate-100 placeholder-slate-600 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 font-mono text-sm transition-all"
-                        >
-                    </div>
-                    <button 
-                        id="scanButton" 
-                        class="bg-emerald-600 hover:bg-emerald-500 text-slate-900 font-semibold py-3 px-6 rounded transition-all duration-200 flex items-center justify-center gap-2 min-w-[160px] font-mono text-sm"
-                    >
-                        <span id="buttonText">BASIC SCAN</span>
-                        <span id="buttonSpinner" class="hidden">
-                            <div class="loading-spinner-dark"></div>
-                        </span>
-                    </button>
-                </div>
-                <button 
-                    id="extensiveScanButton" 
-                    class="w-full mt-3 bg-violet-600 hover:bg-violet-500 text-white font-semibold py-3 px-6 rounded transition-all duration-200 flex items-center justify-center gap-2 font-mono text-sm border-2 border-violet-400/50"
-                    title="Switch to extensive authenticated scan"
-                >
-                    🛡 EXTENSIVE SCAN (AUTHENTICATED)
-                </button>
-                <p class="text-violet-300 text-xs mt-2 font-mono">Use the big "🛡 EXTENSIVE SCAN (AUTHENTICATED)" button above for authenticated testing.</p>
-                <div class="mt-3 border border-violet-800/50 bg-violet-900/10 rounded p-3">
-                    <p class="text-violet-300 text-xs font-mono">HOW TO SWITCH: click the <strong>🛡 EXTENSIVE SCAN</strong> button shown above → fill token/cookie in popup → click <strong>Run Extensive Scan</strong>.</p>
-                    <p class="text-slate-500 text-xs mt-1 font-mono">Use throwaway test credentials only. Basic scan stays unauthenticated.</p>
-                </div>
-            </div>
-            <!-- Scan Progress -->
-            <div id="scanProgress" class="hidden mt-4">
-                <div class="bg-slate-900 border border-slate-700 rounded p-3 flex items-center gap-3">
-                    <div class="loading-spinner-dark"></div>
-                    <span id="progressText" class="text-xs font-mono text-slate-400">Initializing...</span>
-                </div>
-            </div>
-        </div>
-
-        <!-- Info Section -->
-        <div class="max-w-4xl mx-auto mb-8">
-            <div class="grid md:grid-cols-2 gap-6">
-                <!-- What it does -->
-                <div class="bg-slate-800/50 border border-slate-700/50 rounded-lg p-5">
-                    <div class="flex items-center gap-2 mb-3">
-                        <span class="text-emerald-400 font-mono text-sm">›</span>
-                        <h3 class="text-emerald-400 font-mono text-sm font-bold">WHAT IT DOES</h3>
-                    </div>
-                    <p class="text-slate-400 text-xs leading-relaxed">
-                        Automated security scanner that crawls web applications to detect exposed credentials, API keys, tokens, and sensitive data that could be exploited by attackers. Analyzes both static and dynamic content.
-                    </p>
-                </div>
-
-                <!-- How it works -->
-                <div class="bg-slate-800/50 border border-slate-700/50 rounded-lg p-5">
-                    <div class="flex items-center gap-2 mb-3">
-                        <span class="text-emerald-400 font-mono text-sm">›</span>
-                        <h3 class="text-emerald-400 font-mono text-sm font-bold">HOW IT WORKS</h3>
-                    </div>
-                    <p class="text-slate-400 text-xs leading-relaxed">
-                        Uses headless browser automation (Playwright) + network interception (mitmproxy) to capture all traffic. Applies regex pattern matching with context-aware filtering to reduce false positives.
-                    </p>
-                </div>
-            </div>
-
-            <!-- What it detects -->
-            <div class="bg-slate-800/50 border border-slate-700/50 rounded-lg p-5 mt-6">
-                <div class="flex items-center gap-2 mb-3">
-                    <span class="text-emerald-400 font-mono text-sm">›</span>
-                    <h3 class="text-emerald-400 font-mono text-sm font-bold">DETECTION PATTERNS</h3>
-                </div>
-                <p class="text-slate-400 text-xs leading-relaxed">
-                    Detects 50+ patterns including AWS Keys, Google Cloud Keys (API Keys, Vertex AI, Service Accounts), Stripe Keys, LLM Inference Provider Keys (OpenAI, Claude, Gemini, OpenRouter, Replicate, Together AI, Perplexity, Mistral, Groq, Fireworks, and more), JWT Tokens, database credentials (PostgreSQL, MySQL, MongoDB, Redis), Private Keys (RSA, SSH), API endpoints, Basic Auth credentials, and other sensitive data commonly exposed in web applications.
-                </p>
-            </div>
-        </div>
-
-        <!-- Error -->
-        <div id="errorMessage" class="hidden max-w-4xl mx-auto mb-6">
-            <div class="bg-red-900/20 border border-red-800 rounded p-4">
-                <div class="flex items-start gap-3">
-                    <i class="fas fa-exclamation-triangle text-red-400 mt-1"></i>
-                    <p id="errorText" class="text-red-300 text-sm font-mono"></p>
-                </div>
-            </div>
-        </div>
-
-        <!-- Results -->
-        <div id="results" class="max-w-4xl mx-auto hidden">
-            <div class="bg-slate-800 border border-slate-700 rounded-lg shadow-2xl overflow-hidden">
-                <div class="bg-slate-900 border-b border-slate-700 px-6 py-4">
-                    <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+    <div class="page-shell">
+        <header class="border-b border-slate-800/80 bg-slate-900/90 backdrop-blur-sm">
+            <div class="page-width py-4">
+                <div class="flex items-center justify-between gap-4">
+                    <div class="flex items-center gap-3">
+                        <div class="text-emerald-400 text-2xl">
+                            <i class="fas fa-terminal"></i>
+                        </div>
                         <div>
-                            <h2 class="text-lg font-bold text-emerald-400 font-mono mb-1">SCAN RESULTS</h2>
-                            <p id="scanUrl" class="text-slate-500 text-xs font-mono"></p>
-                        </div>
-                        <div id="scanSummary" class="flex flex-wrap gap-2"></div>
-                    </div>
-                </div>
-                <div id="findingsList" class="divide-y divide-slate-700">
-                    <!-- Findings here -->
-                </div>
-                <div id="noFindings" class="p-12 text-center hidden">
-                    <div class="text-emerald-400 text-5xl mb-4">
-                        <i class="fas fa-check-circle"></i>
-                    </div>
-                    <h3 class="text-xl font-bold text-slate-300 mb-2 font-mono">NO SECRETS FOUND</h3>
-                    <p class="text-slate-500 text-sm">
-                        Target appears clean
-                    </p>
-                </div>
-            </div>
-
-            <div id="attackVectors" class="mt-8 hidden">
-                <div class="bg-slate-800 border border-slate-700 rounded-lg shadow-2xl overflow-hidden">
-                    <div class="bg-slate-900 border-b border-slate-700 px-6 py-4">
-                        <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-                            <div>
-                                <h2 class="text-lg font-bold text-emerald-400 font-mono mb-1">ATTACK VECTORS</h2>
-                                <p id="attackStatus" class="text-slate-500 text-xs font-mono"></p>
-                            </div>
-                            <div id="attackSummary" class="flex flex-wrap gap-2"></div>
+                            <h1 class="text-lg font-bold text-emerald-400 font-mono">keyleak-detector</h1>
+                            <p class="text-xs text-slate-500">runtime leak scanner</p>
                         </div>
                     </div>
-                    <div id="attackList" class="divide-y divide-slate-700">
-                        <!-- Subdomain results here -->
-                    </div>
-                    <div id="attackEmpty" class="p-10 text-center hidden">
-                        <div class="text-emerald-400 text-4xl mb-3">
-                            <i class="fas fa-shield-alt"></i>
-                        </div>
-                        <h3 class="text-lg font-bold text-slate-300 mb-2 font-mono">NO ATTACK VECTORS FOUND</h3>
-                        <p class="text-slate-500 text-sm">
-                            No high-risk attack vectors detected in the current scan window.
-                        </p>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </main>
-
-    <!-- Extensive Scan Modal -->
-    <div id="extensiveScanModal" class="hidden fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
-        <div class="w-full max-w-2xl bg-slate-800 border border-slate-700 rounded-lg shadow-2xl">
-            <div class="px-6 py-4 border-b border-slate-700 flex items-center justify-between">
-                <h3 class="text-emerald-400 font-mono font-bold text-sm">EXTENSIVE AUTHENTICATED SCAN</h3>
-                <button id="closeExtensiveModal" class="text-slate-400 hover:text-slate-200"><i class="fas fa-times"></i></button>
-            </div>
-            <div class="p-6 space-y-4">
-                <div class="bg-yellow-900/20 border border-yellow-700/40 rounded p-3">
-                    <p class="text-yellow-300 text-xs font-mono">Use throwaway / test credentials only. Never paste production credentials.</p>
-                </div>
-                <p class="text-slate-400 text-xs">Stage 1 runs basic discovery. Stage 2 replays with authenticated context to spot user-to-user object access issues (IDOR/BAC).</p>
-
-                <div>
-                    <label class="block text-xs text-slate-400 font-mono mb-2">AUTH MODE</label>
-                    <select id="authMode" class="w-full bg-slate-900 border border-slate-700 rounded px-3 py-2 text-sm text-slate-200">
-                        <option value="none">No auth (just run extensive heuristics)</option>
-                        <option value="bearer">Bearer token (JWT/API token)</option>
-                        <option value="cookie">Session cookie header</option>
-                        <option value="both">Both bearer + cookie</option>
-                    </select>
-                </div>
-
-                <div>
-                    <label class="block text-xs text-slate-400 font-mono mb-2">Bearer token (optional)</label>
-                    <textarea id="bearerTokenInput" rows="3" placeholder="eyJhbGciOi..." class="w-full bg-slate-900 border border-slate-700 rounded px-3 py-2 text-xs font-mono text-slate-200"></textarea>
-                </div>
-
-                <div>
-                    <label class="block text-xs text-slate-400 font-mono mb-2">Cookie header value (optional)</label>
-                    <textarea id="cookieInput" rows="3" placeholder="sessionid=abc123; csrftoken=xyz" class="w-full bg-slate-900 border border-slate-700 rounded px-3 py-2 text-xs font-mono text-slate-200"></textarea>
-                </div>
-
-                <div>
-                    <label class="block text-xs text-slate-400 font-mono mb-2">Known logged-in user ID (optional)</label>
-                    <input id="claimedUserIdInput" type="text" placeholder="e.g. 1001" class="w-full bg-slate-900 border border-slate-700 rounded px-3 py-2 text-sm text-slate-200">
-                </div>
-
-                <div class="flex justify-end gap-3">
-                    <button id="cancelExtensiveScan" class="px-4 py-2 border border-slate-600 rounded text-slate-300 text-sm">Cancel</button>
-                    <button id="runExtensiveScan" class="px-4 py-2 bg-violet-600 hover:bg-violet-500 rounded text-white text-sm font-mono">Run Extensive Scan</button>
-                </div>
-            </div>
-        </div>
-    </div>
-
-
-    <!-- Footer -->
-    <footer class="border-t border-slate-800 mt-12">
-        <div class="container mx-auto px-4 py-6">
-            <div class="max-w-4xl mx-auto">
-                <div class="mb-3 p-3 bg-slate-800/50 border border-yellow-900/30 rounded text-center">
-                    <p class="text-yellow-500 text-xs font-mono mb-1">⚠ FOR EDUCATIONAL & AUTHORIZED TESTING ONLY</p>
-                    <p class="text-slate-500 text-xs">Only scan systems you own or have written permission to test. Unauthorized scanning may be illegal.</p>
-                </div>
-                <div class="flex flex-wrap items-center justify-between gap-4 text-xs text-slate-600 font-mono">
-                    <span>keyleak-detector v1.0.0 | MIT | No warranty provided</span>
-                    <a href="https://github.com/Amal-David/keyleak-detector" target="_blank" class="hover:text-emerald-400 transition-colors" title="View on GitHub">
-                        <i class="fab fa-github"></i>
+                    <a href="https://github.com/Amal-David/keyleak-detector" target="_blank" class="text-slate-500 hover:text-emerald-400 transition-colors" title="View on GitHub">
+                        <i class="fab fa-github text-xl"></i>
                     </a>
                 </div>
             </div>
+        </header>
+
+        <main class="page-width page-section">
+            <section class="content-block">
+                <div class="panel panel-hero">
+                    <div class="scanner-shell">
+                        <div class="flex items-center gap-2 text-slate-400 text-sm font-mono">
+                            <span class="text-emerald-400">$</span>
+                            <span>./keyleak scan --target</span>
+                        </div>
+                        <div class="scanner-stack">
+                            <div class="flex flex-col lg:flex-row gap-3 items-stretch">
+                                <div class="flex-1">
+                                    <input
+                                        type="text"
+                                        id="urlInput"
+                                        placeholder="https://preview.example.com"
+                                        class="w-full px-4 py-3 bg-slate-900 border border-slate-700 rounded-lg text-slate-100 placeholder-slate-600 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 font-mono text-sm"
+                                    >
+                                </div>
+                                <button
+                                    id="scanButton"
+                                    class="bg-emerald-600 hover:bg-emerald-500 text-slate-900 font-semibold py-3 px-6 rounded-lg transition-all duration-200 flex items-center justify-center gap-2 min-w-[180px] font-mono text-sm"
+                                >
+                                    <span id="buttonText">BASIC SCAN</span>
+                                    <span id="buttonSpinner" class="hidden">
+                                        <div class="loading-spinner-dark"></div>
+                                    </span>
+                                </button>
+                            </div>
+                            <div class="scanner-secondary">
+                                <button
+                                    id="extensiveScanButton"
+                                    class="w-full bg-violet-600 hover:bg-violet-500 text-white font-semibold py-3 px-6 rounded-lg transition-all duration-200 flex items-center justify-center gap-2 font-mono text-sm border border-violet-400/50"
+                                    title="Switch to extensive authenticated scan"
+                                >
+                                    <span aria-hidden="true">AUTH</span>
+                                    <span>EXTENSIVE SCAN (AUTHENTICATED)</span>
+                                </button>
+                                <div class="scanner-helper">
+                                    <p class="text-violet-200 text-xs font-mono leading-relaxed">Use throwaway bearer tokens or session cookies only. Authenticated scans help catch runtime leaks that appear after login.</p>
+                                    <p class="text-slate-500 text-xs font-mono leading-relaxed">Everything runs locally. Basic scan stays unauthenticated.</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div id="scanProgress" class="hidden mt-4">
+                    <div class="panel panel-progress flex items-center gap-3">
+                        <div class="loading-spinner-dark"></div>
+                        <span id="progressText" class="text-xs font-mono text-slate-400">Initializing...</span>
+                    </div>
+                </div>
+            </section>
+
+            <section class="content-block">
+                <div class="info-grid">
+                    <article class="panel panel-subtle info-card">
+                        <div class="section-heading">
+                            <span class="text-emerald-400 font-mono text-sm">›</span>
+                            <h3 class="text-emerald-400 font-mono text-sm font-bold">WHAT IT CATCHES</h3>
+                        </div>
+                        <p class="text-slate-400 text-sm leading-relaxed">
+                            Runtime secrets in JavaScript, API responses, headers, DOM config, authenticated pages, exposed files, and generated app bundles.
+                        </p>
+                    </article>
+
+                    <article class="panel panel-subtle info-card">
+                        <div class="section-heading">
+                            <span class="text-emerald-400 font-mono text-sm">›</span>
+                            <h3 class="text-emerald-400 font-mono text-sm font-bold">HOW IT WORKS</h3>
+                        </div>
+                        <p class="text-slate-400 text-sm leading-relaxed">
+                            Uses Playwright and mitmproxy to inspect the running app locally, then returns a ship verdict with redacted proof, fix guidance, and a re-test command.
+                        </p>
+                    </article>
+                </div>
+
+                <article class="panel panel-subtle info-wide-card">
+                    <div class="section-heading">
+                        <span class="text-emerald-400 font-mono text-sm">›</span>
+                        <h3 class="text-emerald-400 font-mono text-sm font-bold">DETECTION COVERAGE</h3>
+                    </div>
+                    <p class="text-slate-400 text-sm leading-relaxed">
+                        Detects AI provider keys, cloud credentials, SaaS tokens, database URLs, private keys, JWT/session leaks, direct object access hints, exposed files, security headers, admin endpoints, and attack-surface signals.
+                    </p>
+                </article>
+            </section>
+
+            <div id="errorMessage" class="hidden content-block">
+                <div class="panel border-red-800 bg-red-900/20">
+                    <div class="flex items-start gap-3">
+                        <i class="fas fa-exclamation-triangle text-red-400 mt-1"></i>
+                        <p id="errorText" class="text-red-300 text-sm font-mono"></p>
+                    </div>
+                </div>
+            </div>
+
+            <section id="results" class="content-block hidden">
+                <div class="panel overflow-hidden p-0">
+                    <div class="results-header">
+                        <div class="results-header-row">
+                            <div>
+                                <h2 class="text-lg font-bold text-emerald-400 font-mono mb-1">SCAN RESULTS</h2>
+                                <p id="scanUrl" class="text-slate-500 text-xs font-mono break-all"></p>
+                            </div>
+                            <div id="scanSummary" class="flex flex-wrap gap-2"></div>
+                        </div>
+                    </div>
+                    <div id="deltaSummary" class="delta-summary hidden">
+                        <div class="delta-verdict">
+                            <span id="verdictBadge" class="verdict-badge">REVIEW</span>
+                            <div>
+                                <p id="verdictReason" class="text-sm text-slate-300 leading-relaxed">Scan verdict will appear here.</p>
+                                <p id="retestCommand" class="text-xs text-slate-500 font-mono mt-1"></p>
+                            </div>
+                        </div>
+                        <div class="delta-grid">
+                            <div class="delta-card">
+                                <p class="delta-label">PROOF</p>
+                                <p id="proofSummary" class="delta-copy">No proof selected yet.</p>
+                            </div>
+                            <div class="delta-card">
+                                <p class="delta-label">FIX</p>
+                                <p id="fixSummary" class="delta-copy">No fix required yet.</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div id="resultsFilters" class="results-subheader hidden"></div>
+                    <div id="findingsList" class="divide-y divide-slate-700"></div>
+                    <div id="noFindings" class="p-12 text-center hidden">
+                        <div class="text-emerald-400 text-5xl mb-4">
+                            <i class="fas fa-check-circle"></i>
+                        </div>
+                        <h3 class="text-xl font-bold text-slate-300 mb-2 font-mono">NO SECRETS FOUND</h3>
+                        <p class="text-slate-500 text-sm">Target appears clean for this scan profile.</p>
+                    </div>
+                </div>
+
+                <div id="attackVectors" class="content-block hidden">
+                    <div class="panel overflow-hidden p-0">
+                        <div class="results-header">
+                            <div class="results-header-row">
+                                <div>
+                                    <h2 class="text-lg font-bold text-emerald-400 font-mono mb-1">ATTACK VECTORS</h2>
+                                    <p id="attackStatus" class="text-slate-500 text-xs font-mono break-words"></p>
+                                </div>
+                                <div id="attackSummary" class="flex flex-wrap gap-2"></div>
+                            </div>
+                        </div>
+                        <div id="attackList" class="divide-y divide-slate-700"></div>
+                        <div id="attackEmpty" class="p-10 text-center hidden">
+                            <div class="text-emerald-400 text-4xl mb-3">
+                                <i class="fas fa-shield-alt"></i>
+                            </div>
+                            <h3 class="text-lg font-bold text-slate-300 mb-2 font-mono">NO ATTACK VECTORS FOUND</h3>
+                            <p class="text-slate-500 text-sm">No high-risk attack vectors detected in the current scan window.</p>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </main>
+
+        <div id="extensiveScanModal" class="hidden fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-labelledby="extensiveScanTitle">
+            <div class="w-full max-w-2xl panel modal-panel" tabindex="-1">
+                <div class="px-6 py-4 border-b border-slate-700 flex items-center justify-between">
+                    <h3 id="extensiveScanTitle" class="text-emerald-400 font-mono font-bold text-sm">EXTENSIVE AUTHENTICATED SCAN</h3>
+                    <button id="closeExtensiveModal" aria-label="Close extensive scan modal" class="text-slate-400 hover:text-slate-200"><i class="fas fa-times" aria-hidden="true"></i></button>
+                </div>
+                <div class="modal-content">
+                    <div class="bg-yellow-900/20 border border-yellow-700/40 rounded-lg p-3">
+                        <p class="text-yellow-300 text-xs font-mono">Use throwaway / test credentials only. Never paste production credentials.</p>
+                    </div>
+                    <p class="text-slate-400 text-xs">Stage 1 runs basic discovery. Stage 2 replays with authenticated context to spot user-to-user object access issues (IDOR/BAC).</p>
+
+                    <div>
+                        <label class="block text-xs text-slate-400 font-mono mb-2">AUTH MODE</label>
+                        <select id="authMode" class="w-full bg-slate-900 border border-slate-700 rounded px-3 py-2 text-sm text-slate-200">
+                            <option value="none">No auth (just run extensive heuristics)</option>
+                            <option value="bearer">Bearer token (JWT/API token)</option>
+                            <option value="cookie">Session cookie header</option>
+                            <option value="both">Both bearer + cookie</option>
+                        </select>
+                    </div>
+
+                    <div>
+                        <label class="block text-xs text-slate-400 font-mono mb-2">Bearer token (optional)</label>
+                        <textarea id="bearerTokenInput" rows="3" placeholder="eyJhbGciOi..." class="w-full bg-slate-900 border border-slate-700 rounded px-3 py-2 text-xs font-mono text-slate-200"></textarea>
+                    </div>
+
+                    <div>
+                        <label class="block text-xs text-slate-400 font-mono mb-2">Cookie header value (optional)</label>
+                        <textarea id="cookieInput" rows="3" placeholder="sessionid=abc123; csrftoken=xyz" class="w-full bg-slate-900 border border-slate-700 rounded px-3 py-2 text-xs font-mono text-slate-200"></textarea>
+                    </div>
+
+                    <div>
+                        <label class="block text-xs text-slate-400 font-mono mb-2">Known logged-in user ID (optional)</label>
+                        <input id="claimedUserIdInput" type="text" placeholder="e.g. 1001" class="w-full bg-slate-900 border border-slate-700 rounded px-3 py-2 text-sm text-slate-200">
+                    </div>
+
+                    <div class="flex flex-col-reverse sm:flex-row sm:justify-end gap-3">
+                        <button id="cancelExtensiveScan" class="px-4 py-2 border border-slate-600 rounded-lg text-slate-300 text-sm">Cancel</button>
+                        <button id="runExtensiveScan" class="px-4 py-2 bg-violet-600 hover:bg-violet-500 rounded-lg text-white text-sm font-mono">Run Extensive Scan</button>
+                    </div>
+                </div>
+            </div>
         </div>
-    </footer>
+
+        <footer class="border-t border-slate-800/80 mt-12">
+            <div class="page-width py-6">
+                <div class="content-block">
+                    <div class="mb-3 p-3 bg-slate-800/50 border border-yellow-900/30 rounded-lg text-center">
+                        <p class="text-yellow-500 text-xs font-mono mb-1">FOR EDUCATIONAL & AUTHORIZED TESTING ONLY</p>
+                        <p class="text-slate-500 text-xs">Only scan systems you own or have written permission to test. Unauthorized scanning may be illegal.</p>
+                    </div>
+                    <div class="flex flex-wrap items-center justify-between gap-4 text-xs text-slate-600 font-mono">
+                        <span>keyleak-detector v1.0.0 | MIT | No warranty provided</span>
+                        <a href="https://github.com/Amal-David/keyleak-detector" target="_blank" class="hover:text-emerald-400 transition-colors" title="View on GitHub">
+                            <i class="fab fa-github"></i>
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </footer>
+    </div>
 
     <script src="{{ url_for('static', filename='js/main.js') }}"></script>
 </body>

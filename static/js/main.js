@@ -6,11 +6,18 @@ document.addEventListener('DOMContentLoaded', function() {
     const buttonSpinner = document.getElementById('buttonSpinner');
     const resultsSection = document.getElementById('results');
     const findingsList = document.getElementById('findingsList');
+    const resultsFilters = document.getElementById('resultsFilters');
     const noFindings = document.getElementById('noFindings');
     const errorMessage = document.getElementById('errorMessage');
     const errorText = document.getElementById('errorText');
     const scanSummary = document.getElementById('scanSummary');
     const scanUrl = document.getElementById('scanUrl');
+    const deltaSummary = document.getElementById('deltaSummary');
+    const verdictBadge = document.getElementById('verdictBadge');
+    const verdictReason = document.getElementById('verdictReason');
+    const proofSummary = document.getElementById('proofSummary');
+    const fixSummary = document.getElementById('fixSummary');
+    const retestCommand = document.getElementById('retestCommand');
     const attackSection = document.getElementById('attackVectors');
     const attackSummary = document.getElementById('attackSummary');
     const attackStatus = document.getElementById('attackStatus');
@@ -27,6 +34,8 @@ document.addEventListener('DOMContentLoaded', function() {
     const bearerTokenInput = document.getElementById('bearerTokenInput');
     const cookieInput = document.getElementById('cookieInput');
     const claimedUserIdInput = document.getElementById('claimedUserIdInput');
+    const modalFocusableSelector = 'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])';
+    let extensiveModalOpener = null;
 
     scanButton.addEventListener('click', () => startScan('basic'));
     extensiveScanButton.addEventListener('click', openExtensiveModal);
@@ -62,6 +71,8 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
+    document.addEventListener('keydown', handleModalKeydown);
+
     urlInput.addEventListener('keypress', function(e) {
         if (e.key === 'Enter') {
             startScan('basic');
@@ -72,11 +83,54 @@ document.addEventListener('DOMContentLoaded', function() {
         if (!validateUrl()) {
             return;
         }
+        extensiveModalOpener = document.activeElement;
         extensiveScanModal.classList.remove('hidden');
+        setTimeout(() => authMode.focus(), 0);
     }
 
     function closeExtensiveScanModal() {
         extensiveScanModal.classList.add('hidden');
+        if (extensiveModalOpener && typeof extensiveModalOpener.focus === 'function') {
+            extensiveModalOpener.focus();
+        }
+        extensiveModalOpener = null;
+    }
+
+    function handleModalKeydown(event) {
+        if (!isExtensiveModalOpen()) {
+            return;
+        }
+        if (event.key === 'Escape') {
+            event.preventDefault();
+            closeExtensiveScanModal();
+            return;
+        }
+        if (event.key === 'Tab') {
+            trapModalFocus(event);
+        }
+    }
+
+    function isExtensiveModalOpen() {
+        return extensiveScanModal && !extensiveScanModal.classList.contains('hidden');
+    }
+
+    function trapModalFocus(event) {
+        const focusable = Array.from(extensiveScanModal.querySelectorAll(modalFocusableSelector))
+            .filter(el => el.offsetParent !== null);
+        if (focusable.length === 0) {
+            event.preventDefault();
+            return;
+        }
+
+        const first = focusable[0];
+        const last = focusable[focusable.length - 1];
+        if (event.shiftKey && document.activeElement === first) {
+            event.preventDefault();
+            last.focus();
+        } else if (!event.shiftKey && document.activeElement === last) {
+            event.preventDefault();
+            first.focus();
+        }
     }
 
     function validateUrl() {
@@ -104,11 +158,9 @@ document.addEventListener('DOMContentLoaded', function() {
         clearResults();
         hideError();
 
-        // Generate scan ID for SSE progress tracking
         const scanId = crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).slice(2);
-
-        // Open SSE connection for progress updates
         let eventSource = null;
+
         if (scanProgress && progressText) {
             scanProgress.classList.remove('hidden');
             progressText.textContent = 'Initializing...';
@@ -118,14 +170,11 @@ document.addEventListener('DOMContentLoaded', function() {
                     const msg = JSON.parse(event.data);
                     if (msg.type === 'progress') {
                         progressText.textContent = msg.message;
-                    } else if (msg.type === 'result') {
-                        // Results arrive via SSE too, but we use the fetch response as primary
-                        eventSource.close();
-                    } else if (msg.type === 'error') {
+                    } else if (msg.type === 'result' || msg.type === 'error') {
                         eventSource.close();
                     }
                 } catch (e) {
-                    // ignore parse errors
+                    // Ignore malformed progress messages.
                 }
             };
             eventSource.onerror = function() {
@@ -192,11 +241,17 @@ document.addEventListener('DOMContentLoaded', function() {
     function clearResults() {
         findingsList.innerHTML = '';
         scanSummary.innerHTML = '';
-        // Remove severity filter div if present
-        const oldFilter = document.querySelector('.flex.flex-wrap.gap-2.mb-4.px-6.pt-2');
-        if (oldFilter) oldFilter.remove();
         resultsSection.classList.add('hidden');
         noFindings.classList.add('hidden');
+
+        if (resultsFilters) {
+            resultsFilters.innerHTML = '';
+            resultsFilters.classList.add('hidden');
+        }
+        if (deltaSummary) {
+            deltaSummary.classList.add('hidden');
+        }
+
         attackSummary.innerHTML = '';
         attackStatus.textContent = '';
         attackList.innerHTML = '';
@@ -212,14 +267,11 @@ document.addEventListener('DOMContentLoaded', function() {
             scanUrl.textContent = data.url;
         }
 
+        displayDeltaSummary(data);
+
         if (data.scan_summary) {
             const { total_findings, critical_severity, high_severity, medium_severity, low_severity } = data.scan_summary;
             const scanModeBadge = data.scan_mode ? `<div class="bg-violet-900/20 px-3 py-1 rounded border border-violet-800"><span class="text-violet-300">${escapeHtml(data.scan_mode)}</span><span class="text-violet-400 ml-1">mode</span></div>` : '';
-
-            if (total_findings === 0) {
-                noFindings.classList.remove('hidden');
-                scanSummary.innerHTML = scanModeBadge;
-            }
 
             scanSummary.innerHTML = `
                 <div class="flex flex-wrap gap-2 font-mono text-xs">
@@ -236,103 +288,164 @@ document.addEventListener('DOMContentLoaded', function() {
             `;
         }
 
-        // Severity filter toggles
-        if (data.findings && data.findings.length > 0) {
-            const filterDiv = document.createElement('div');
-            filterDiv.className = 'flex flex-wrap gap-2 mb-4 px-6 pt-2';
-            const filterLabel = document.createElement('span');
-            filterLabel.className = 'text-xs font-mono text-slate-500 self-center mr-1';
-            filterLabel.textContent = 'FILTER:';
-            filterDiv.appendChild(filterLabel);
-            const filterColors = {
-                critical: 'border-red-700 text-red-400 bg-red-900/30',
-                high: 'border-red-800 text-red-400 bg-red-900/20',
-                medium: 'border-yellow-800 text-yellow-400 bg-yellow-900/20',
-                low: 'border-blue-800 text-blue-400 bg-blue-900/20',
-            };
-            ['critical', 'high', 'medium', 'low'].forEach(sev => {
-                const btn = document.createElement('button');
-                btn.className = `text-xs font-mono px-2 py-1 rounded border ${filterColors[sev]}`;
-                btn.dataset.severity = sev;
-                btn.dataset.active = 'true';
-                btn.textContent = sev.toUpperCase();
-                btn.addEventListener('click', () => {
-                    const wasActive = btn.dataset.active === 'true';
-                    const nowActive = !wasActive;
-                    btn.dataset.active = nowActive ? 'true' : 'false';
-                    btn.style.opacity = nowActive ? '1' : '0.3';
-                    document.querySelectorAll(`.finding-card.severity-${sev}`).forEach(el => {
-                        el.classList.toggle('filtered-out', !nowActive);
-                    });
-                });
-                filterDiv.appendChild(btn);
-            });
-            findingsList.parentNode.insertBefore(filterDiv, findingsList);
-        }
+        displayFilters(data.findings || []);
 
         if (data.findings && data.findings.length > 0) {
             data.findings.forEach(finding => {
-                const findingElement = document.createElement('div');
-                findingElement.className = `p-6 finding-card severity-${finding.severity || 'low'}`;
-
-                let severityIcon = '○';
-                let severityColor = 'text-blue-400';
-                let badgeClass = 'bg-blue-900/30 border-blue-700 text-blue-400';
-
-                if (finding.severity === 'critical') {
-                    severityIcon = '⚠';
-                    severityColor = 'text-red-400';
-                    badgeClass = 'bg-red-900/30 border-red-700 text-red-400';
-                } else if (finding.severity === 'high') {
-                    severityIcon = '●';
-                    severityColor = 'text-red-400';
-                    badgeClass = 'bg-red-900/20 border-red-800 text-red-400';
-                } else if (finding.severity === 'medium') {
-                    severityIcon = '●';
-                    severityColor = 'text-yellow-400';
-                    badgeClass = 'bg-yellow-900/20 border-yellow-800 text-yellow-400';
-                }
-
-
-                findingElement.innerHTML = `
-                    <div class="space-y-3">
-                        <div class="flex items-start justify-between gap-4">
-                            <div class="flex items-start gap-3">
-                                <span class="${severityColor} text-xl font-mono">${severityIcon}</span>
-                                <div>
-                                    <h3 class="text-sm font-bold text-slate-200 font-mono">${formatType(finding.type)}</h3>
-                                    <span class="text-xs font-mono px-2 py-0.5 rounded border ${badgeClass} inline-block mt-1">
-                                        ${finding.severity.toUpperCase()}
-                                    </span>
-                                </div>
-                            </div>
-                        </div>
-
-                        <div class="space-y-2 text-sm">
-                            <div>
-                                <p class="text-slate-500 text-xs font-mono mb-1">VALUE:</p>
-                                <div class="bg-slate-900 border border-slate-700 rounded p-2 overflow-x-auto">
-                                    <code class="text-xs font-mono text-emerald-400 break-all">${escapeHtml(finding.value || finding.match || 'N/A')}</code>
-                                </div>
-                            </div>
-
-                            ${finding.source ? `<div class="text-xs font-mono"><span class="text-slate-500">SOURCE:</span><span class="text-slate-400 ml-2">${escapeHtml(finding.source)}</span></div>` : ''}
-                            ${finding.line ? `<div class="text-xs font-mono"><span class="text-slate-500">LINE:</span><span class="text-slate-400 ml-2">${finding.line}</span></div>` : ''}
-
-                            ${finding.context_lines ? `<div><p class="text-slate-500 text-xs font-mono mb-1">CONTEXT:</p><div class="bg-slate-900 rounded p-3 overflow-x-auto border border-slate-700"><pre class="text-xs font-mono text-slate-400 whitespace-pre"><code>${escapeHtml(finding.context_lines)}</code></pre></div></div>` : ''}
-
-                            ${finding.recommendation ? `<div class="bg-slate-900/50 border border-slate-700 rounded p-3"><p class="text-slate-500 text-xs font-mono mb-1">FIX:</p><p class="text-slate-400 text-xs leading-relaxed">${escapeHtml(finding.recommendation)}</p></div>` : ''}
-                        </div>
-                    </div>
-                `;
-
-                findingsList.appendChild(findingElement);
+                findingsList.appendChild(renderFinding(finding));
             });
         } else {
-            noFindings.classList.remove('hidden');
+            displayNoFindingsState(data);
         }
 
         displayAttackVectors(data.attack_vectors);
+    }
+
+    function displayNoFindingsState(data) {
+        const title = noFindings.querySelector('h3');
+        const copy = noFindings.querySelector('p');
+        const reportTotal = data.report && data.report.summary ? data.report.summary.total_findings : 0;
+
+        if (reportTotal > 0) {
+            title.textContent = 'NO PAGE SECRETS FOUND';
+            copy.textContent = 'The verdict includes attack-surface findings. Review the attack vectors below.';
+        } else {
+            title.textContent = 'NO SECRETS FOUND';
+            copy.textContent = 'Target appears clean for this scan profile.';
+        }
+
+        noFindings.classList.remove('hidden');
+    }
+
+    function displayDeltaSummary(data) {
+        if (!deltaSummary) {
+            return;
+        }
+
+        const reportFindings = data.report && Array.isArray(data.report.findings) ? data.report.findings : [];
+        const firstFinding = reportFindings[0];
+        const verdict = data.verdict || (data.report && data.report.verdict) || {
+            label: reportFindings.length ? 'REVIEW' : 'SAFE TO SHIP',
+            reason: reportFindings.length ? 'Findings need review.' : 'No medium, high, or critical findings were detected in this scan.',
+            status: reportFindings.length ? 'REVIEW' : 'SAFE_TO_SHIP',
+        };
+
+        verdictBadge.textContent = verdict.label || 'REVIEW';
+        verdictBadge.className = 'verdict-badge';
+        if (verdict.status === 'BLOCK_SHIP') {
+            verdictBadge.classList.add('verdict-block');
+        } else if (verdict.status === 'SAFE_TO_SHIP') {
+            verdictBadge.classList.add('verdict-safe');
+        } else {
+            verdictBadge.classList.add('verdict-review');
+        }
+
+        verdictReason.textContent = verdict.reason || '';
+        retestCommand.textContent = data.retest_command || (data.report && data.report.retest_command) || '';
+
+        if (firstFinding) {
+            const evidence = firstFinding.evidence || {};
+            proofSummary.textContent = `${formatType(firstFinding.type)} in ${evidence.source || firstFinding.source || 'unknown source'}: ${evidence.redacted_value || firstFinding.redacted_value || 'evidence redacted'}`;
+            fixSummary.textContent = firstFinding.remediation || 'Review and remove the exposed sensitive data.';
+        } else {
+            proofSummary.textContent = 'No proof needed: this scan did not find reportable exposures.';
+            fixSummary.textContent = 'No fix required from this scan. Re-test after meaningful deploys or config changes.';
+        }
+
+        deltaSummary.classList.remove('hidden');
+    }
+
+    function displayFilters(findings) {
+        if (!resultsFilters || findings.length === 0) {
+            return;
+        }
+
+        resultsFilters.classList.remove('hidden');
+        const filterDiv = document.createElement('div');
+        filterDiv.className = 'filter-row';
+        const filterLabel = document.createElement('span');
+        filterLabel.className = 'text-xs font-mono text-slate-500';
+        filterLabel.textContent = 'FILTER:';
+        filterDiv.appendChild(filterLabel);
+
+        const filterColors = {
+            critical: 'border-red-700 text-red-400 bg-red-900/30',
+            high: 'border-red-800 text-red-400 bg-red-900/20',
+            medium: 'border-yellow-800 text-yellow-400 bg-yellow-900/20',
+            low: 'border-blue-800 text-blue-400 bg-blue-900/20',
+        };
+
+        ['critical', 'high', 'medium', 'low'].forEach(sev => {
+            const btn = document.createElement('button');
+            btn.className = `filter-button font-mono ${filterColors[sev]}`;
+            btn.dataset.severity = sev;
+            btn.dataset.active = 'true';
+            btn.textContent = sev.toUpperCase();
+            btn.addEventListener('click', () => {
+                const nowActive = btn.dataset.active !== 'true';
+                btn.dataset.active = nowActive ? 'true' : 'false';
+                document.querySelectorAll(`.finding-card.severity-${sev}`).forEach(el => {
+                    el.classList.toggle('filtered-out', !nowActive);
+                });
+            });
+            filterDiv.appendChild(btn);
+        });
+
+        resultsFilters.appendChild(filterDiv);
+    }
+
+    function renderFinding(finding) {
+        const findingElement = document.createElement('div');
+        findingElement.className = `p-6 finding-card severity-${finding.severity || 'low'}`;
+
+        let severityIcon = '○';
+        let severityColor = 'text-blue-400';
+        let badgeClass = 'bg-blue-900/30 border-blue-700 text-blue-400';
+
+        if (finding.severity === 'critical') {
+            severityIcon = '!';
+            severityColor = 'text-red-400';
+            badgeClass = 'bg-red-900/30 border-red-700 text-red-400';
+        } else if (finding.severity === 'high') {
+            severityIcon = '●';
+            severityColor = 'text-red-400';
+            badgeClass = 'bg-red-900/20 border-red-800 text-red-400';
+        } else if (finding.severity === 'medium') {
+            severityIcon = '●';
+            severityColor = 'text-yellow-400';
+            badgeClass = 'bg-yellow-900/20 border-yellow-800 text-yellow-400';
+        }
+
+        findingElement.innerHTML = `
+            <div class="space-y-3">
+                <div class="flex items-start justify-between gap-4 flex-wrap">
+                    <div class="flex items-start gap-3">
+                        <span class="${severityColor} text-xl font-mono">${severityIcon}</span>
+                        <div>
+                            <h3 class="text-sm font-bold text-slate-200 font-mono">${escapeHtml(formatType(finding.type))}</h3>
+                            <span class="text-xs font-mono px-2 py-0.5 rounded border ${badgeClass} inline-block mt-1">
+                                ${(finding.severity || 'low').toUpperCase()}
+                            </span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="space-y-2 text-sm">
+                    <div>
+                        <p class="text-slate-500 text-xs font-mono mb-1">VALUE:</p>
+                        <div class="bg-slate-900 border border-slate-700 rounded p-2 overflow-x-auto">
+                            <code class="text-xs font-mono text-emerald-400 break-all">${escapeHtml(finding.value || finding.match || 'N/A')}</code>
+                        </div>
+                    </div>
+
+                    ${finding.source ? `<div class="text-xs font-mono break-all"><span class="text-slate-500">SOURCE:</span><span class="text-slate-400 ml-2">${escapeHtml(finding.source)}</span></div>` : ''}
+                    ${finding.line ? `<div class="text-xs font-mono"><span class="text-slate-500">LINE:</span><span class="text-slate-400 ml-2">${finding.line}</span></div>` : ''}
+                    ${finding.context_lines ? `<div><p class="text-slate-500 text-xs font-mono mb-1">CONTEXT:</p><div class="bg-slate-900 rounded p-3 overflow-x-auto border border-slate-700"><pre class="text-xs font-mono text-slate-400 whitespace-pre"><code>${escapeHtml(finding.context_lines)}</code></pre></div></div>` : ''}
+                    ${finding.recommendation ? `<div class="bg-slate-900/50 border border-slate-700 rounded p-3"><p class="text-slate-500 text-xs font-mono mb-1">FIX:</p><p class="text-slate-400 text-xs leading-relaxed">${escapeHtml(finding.recommendation)}</p></div>` : ''}
+                </div>
+            </div>
+        `;
+        return findingElement;
     }
 
     function displayAttackVectors(attackVectors) {
@@ -365,7 +478,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
         attackVectors.subdomains.forEach((hostResult, index) => {
             const container = document.createElement('details');
-            container.className = 'group p-4';
+            container.className = 'group p-5';
             container.style.animationDelay = `${index * 0.05}s`;
             container.classList.add('fade-in');
 
@@ -373,12 +486,12 @@ document.addEventListener('DOMContentLoaded', function() {
             const findings = hostResult.findings || [];
 
             container.innerHTML = `
-                <summary class="flex flex-col md:flex-row md:items-center md:justify-between gap-3 cursor-pointer list-none">
+                <summary class="flex flex-col md:flex-row md:items-start md:justify-between gap-3 cursor-pointer list-none">
                     <div class="flex items-start gap-3">
                         <span class="text-emerald-400 font-mono text-sm">+</span>
                         <div>
                             <div class="text-sm font-bold text-slate-200 font-mono">${escapeHtml(hostResult.host || 'unknown')}</div>
-                            <div class="text-xs text-slate-500 font-mono">${escapeHtml(hostResult.url || '')}</div>
+                            <div class="text-xs text-slate-500 font-mono break-all">${escapeHtml(hostResult.url || '')}</div>
                         </div>
                     </div>
                     <div class="attack-summary">${hostSummary}</div>
@@ -402,9 +515,9 @@ document.addEventListener('DOMContentLoaded', function() {
                         </div>
                         <div class="text-xs font-mono text-slate-500">${escapeHtml((finding.severity || 'low').toUpperCase())}</div>
                     </div>
-                    <div class="mt-2 text-xs text-slate-400 font-mono">${escapeHtml(finding.details || finding.value || '')}</div>
+                    <div class="mt-2 text-xs text-slate-400 font-mono break-words">${escapeHtml(finding.details || finding.value || '')}</div>
                     ${finding.url ? `
-                        <div class="mt-2 text-xs text-slate-500 font-mono">URL: ${escapeHtml(finding.url)}</div>
+                        <div class="mt-2 text-xs text-slate-500 font-mono break-all">URL: ${escapeHtml(finding.url)}</div>
                     ` : ''}
                     ${finding.recommendation ? `
                         <div class="mt-3 bg-slate-900/70 border border-slate-700 rounded p-2">
@@ -433,30 +546,10 @@ document.addEventListener('DOMContentLoaded', function() {
                     <span class="text-emerald-400">${total}</span>
                     <span class="text-slate-500 ml-1">total</span>
                 </div>
-                ${critical > 0 ? `
-                    <div class="bg-red-900/30 px-3 py-1 rounded border border-red-700">
-                        <span class="text-red-400">${critical}</span>
-                        <span class="text-red-500 ml-1">crit</span>
-                    </div>
-                ` : ''}
-                ${high > 0 ? `
-                    <div class="bg-red-900/20 px-3 py-1 rounded border border-red-800">
-                        <span class="text-red-400">${high}</span>
-                        <span class="text-red-500 ml-1">high</span>
-                    </div>
-                ` : ''}
-                ${medium > 0 ? `
-                    <div class="bg-yellow-900/20 px-3 py-1 rounded border border-yellow-800">
-                        <span class="text-yellow-400">${medium}</span>
-                        <span class="text-yellow-500 ml-1">med</span>
-                    </div>
-                ` : ''}
-                ${low > 0 ? `
-                    <div class="bg-blue-900/20 px-3 py-1 rounded border border-blue-800">
-                        <span class="text-blue-400">${low}</span>
-                        <span class="text-blue-500 ml-1">low</span>
-                    </div>
-                ` : ''}
+                ${critical > 0 ? `<div class="bg-red-900/30 px-3 py-1 rounded border border-red-700"><span class="text-red-400">${critical}</span><span class="text-red-500 ml-1">crit</span></div>` : ''}
+                ${high > 0 ? `<div class="bg-red-900/20 px-3 py-1 rounded border border-red-800"><span class="text-red-400">${high}</span><span class="text-red-500 ml-1">high</span></div>` : ''}
+                ${medium > 0 ? `<div class="bg-yellow-900/20 px-3 py-1 rounded border border-yellow-800"><span class="text-yellow-400">${medium}</span><span class="text-yellow-500 ml-1">med</span></div>` : ''}
+                ${low > 0 ? `<div class="bg-blue-900/20 px-3 py-1 rounded border border-blue-800"><span class="text-blue-400">${low}</span><span class="text-blue-500 ml-1">low</span></div>` : ''}
             </div>
         `;
     }
@@ -480,17 +573,17 @@ document.addEventListener('DOMContentLoaded', function() {
         if (!type) {
             return 'UNKNOWN';
         }
-        return type.split('_').join(' ').toUpperCase();
+        return String(type).split('_').join(' ').toUpperCase();
     }
 
     function escapeHtml(text) {
         const div = document.createElement('div');
-        div.textContent = text;
+        div.textContent = text || '';
         return div.innerHTML;
     }
 
     document.querySelectorAll('a[href^="#"]').forEach(anchor => {
-        anchor.addEventListener('click', function (e) {
+        anchor.addEventListener('click', function(e) {
             e.preventDefault();
             const target = document.querySelector(this.getAttribute('href'));
             if (target) {

@@ -1,0 +1,29 @@
+name: Add or improve a detector
+description: Suggest a detector, pattern, fixture, or false-positive improvement.
+title: "detector: "
+labels: ["detector", "good first issue"]
+body:
+  - type: input
+    id: detector
+    attributes:
+      label: Detector or provider
+      placeholder: "OpenAI, Anthropic, MCP config, source map, etc."
+    validations:
+      required: true
+  - type: textarea
+    id: leak-shape
+    attributes:
+      label: What should this catch?
+      description: Describe the value shape and where it appears.
+    validations:
+      required: true
+  - type: textarea
+    id: false-positives
+    attributes:
+      label: Known false positives
+      description: Add examples that should not trigger, if known.
+  - type: textarea
+    id: remediation
+    attributes:
+      label: Remediation guidance
+      description: What should users do if this detector fires?
