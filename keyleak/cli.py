@@ -186,7 +186,7 @@ def main(argv: Optional[List[str]] = None) -> int:
                 auth_state_path=args.auth_state or None,
                 scan_budget_seconds=int(args.scan_budget),
                 headless=not args.headed,
-                baas_validate=not args.skip_baas_validation,
+                baas_validate=args.baas_validate,
             )
         except Exception as exc:
             print(f"browser-scan failed: {exc}", file=sys.stderr)
@@ -346,7 +346,7 @@ def build_parser() -> argparse.ArgumentParser:
     browser_scan.add_argument("--auth-state", default="", help="Path to Playwright storageState.json for authenticated scans.")
     browser_scan.add_argument("--scan-budget", default="30", help="Per-page timeout in seconds.")
     browser_scan.add_argument("--headed", action="store_true", help="Show the browser window (debugging).")
-    browser_scan.add_argument("--skip-baas-validation", action="store_true", help="Skip active BaaS (Supabase/Firebase) validation probes. Pattern detection still runs.")
+    browser_scan.add_argument("--baas-validate", action="store_true", help="Enable active BaaS (Supabase/Firebase) validation probes against detected endpoints.")
     browser_scan.add_argument("--baas-tables", default="", help="Comma-separated extra table names to probe during BaaS validation.")
     browser_scan.add_argument("--fail-on", default="high", choices=["low", "medium", "high", "critical"])
     browser_scan.add_argument("--baseline", default="")

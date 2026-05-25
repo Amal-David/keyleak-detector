@@ -759,19 +759,10 @@ DETECTORS = [
         references=("https://supabase.com/docs/guides/auth/row-level-security",),
         attack_scenario="Combined with the anon key, the project URL enables direct REST API queries against every table. Missing or misconfigured RLS makes all data readable by anyone.",
     ),
-    Detector(
-        "supabase_anon_key",
-        r"\beyJ[A-Za-z0-9_-]{30,}\.eyJ[A-Za-z0-9_-]{30,}\.[A-Za-z0-9_-]{20,}\b",
-        "medium",
-        "Supabase anon/publishable key (JWT format) exposed in client bundle.",
-        "Anon keys are designed for client use, but confirm RLS policies protect every table.",
-        ["sourcemaps", "code", "env"],
-        pack="baas",
-        finding_type="supabase_anon_key",
-        validation_status="lead",
-        references=("https://supabase.com/docs/guides/api#api-keys",),
-        attack_scenario="The anon key grants PostgREST API access with the anon role. Without RLS, any table is fully readable and writable.",
-    ),
+    # Note: Supabase JWT-format anon keys are detected by the BaaS validator's
+    # extract_baas_config() via proximity to a Supabase URL, not by a standalone
+    # regex detector.  A standalone JWT regex would overlap with the generic
+    # jwt_token detector and produce false positives on non-Supabase JWTs.
     Detector(
         "supabase_publishable_key",
         r"\bsb_publishable_[A-Za-z0-9_-]{20,}\b",

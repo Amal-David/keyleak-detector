@@ -433,7 +433,7 @@ class WriteAccessTests(unittest.TestCase):
         )
 
     def test_writable_table_confirmed(self):
-        def smart_prober(method, url, headers):
+        def smart_prober(method, url, headers, body=None):
             if method == "GET" and "/rest/v1/" in url and url.endswith("/rest/v1/"):
                 return {"status_code": 200, "body": None, "headers": {}}
             if method == "GET" and "/rest/v1/users" in url:
@@ -452,7 +452,7 @@ class WriteAccessTests(unittest.TestCase):
         assert any(f.type == "baas_writable_table" for f in result.findings)
 
     def test_write_blocked_by_rls(self):
-        def rls_prober(method, url, headers):
+        def rls_prober(method, url, headers, body=None):
             if "rest/v1/" in url and method == "GET" and url.endswith("/rest/v1/"):
                 return {"status_code": 200, "body": None, "headers": {}}
             if "rest/v1/users" in url and method == "GET":

@@ -43,7 +43,7 @@ def normalize_findings(findings: Iterable[Any]) -> List[Finding]:
         if isinstance(raw, Finding):
             normalized.append(raw)
         elif isinstance(raw, dict):
-            if "evidence" in raw or "detector_id" in raw or "risk_reason" in raw:
+            if "evidence" in raw or "risk_reason" in raw:
                 normalized.append(Finding.from_dict(raw))
             else:
                 normalized.append(finding_from_legacy(raw))
@@ -118,15 +118,12 @@ def format_html(report: ScanReport) -> str:
     if verdict_status == "BLOCK_SHIP":
         verdict_cls = "block"
         verdict_badge = "Block Ship"
-        verdict_banner_extra = ""
     elif verdict_status == "REVIEW":
         verdict_cls = "review"
         verdict_badge = "Review"
-        verdict_banner_extra = ""
     else:
         verdict_cls = "safe"
         verdict_badge = "Safe to Ship"
-        verdict_banner_extra = ""
 
     # --- findings cards ---
     finding_cards = []

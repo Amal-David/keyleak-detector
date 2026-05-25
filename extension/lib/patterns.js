@@ -1094,29 +1094,6 @@ const PATTERN_DEFINITIONS = [
       "env"
     ],
     "category": "baas",
-    "description": "Supabase anon/publishable key (JWT format) exposed in client bundle.",
-    "detector_id": "baas.supabase_anon_key",
-    "finding_type": "supabase_anon_key",
-    "flags": "gim",
-    "id": "supabase_anon_key",
-    "min_match_length": 8,
-    "pack": "baas",
-    "pattern": "\\beyJ[A-Za-z0-9_-]{30,}\\.eyJ[A-Za-z0-9_-]{30,}\\.[A-Za-z0-9_-]{20,}\\b",
-    "references": [
-      "https://supabase.com/docs/guides/api#api-keys"
-    ],
-    "remediation": "Anon keys are designed for client use, but confirm RLS policies protect every table.",
-    "severity": "medium",
-    "validation_status": "lead"
-  },
-  {
-    "capture_group": 0,
-    "categories": [
-      "sourcemaps",
-      "code",
-      "env"
-    ],
-    "category": "baas",
     "description": "Supabase publishable key (non-standard format) exposed in client bundle.",
     "detector_id": "baas.supabase_publishable_key",
     "finding_type": "supabase_publishable_key",

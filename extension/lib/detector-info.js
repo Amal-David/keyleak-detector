@@ -1093,25 +1093,6 @@ export const DETECTOR_INFO = {
     "severity": "critical",
     "validation_status": "validated"
   },
-  "supabase_anon_key": {
-    "attack_scenario": "The anon key grants PostgREST API access with the anon role. Without RLS, any table is fully readable and writable.",
-    "categories": [
-      "sourcemaps",
-      "code",
-      "env"
-    ],
-    "description": "Supabase anon/publishable key (JWT format) exposed in client bundle.",
-    "detector_id": "baas.supabase_anon_key",
-    "finding_type": "supabase_anon_key",
-    "id": "supabase_anon_key",
-    "pack": "baas",
-    "references": [
-      "https://supabase.com/docs/guides/api#api-keys"
-    ],
-    "remediation": "Anon keys are designed for client use, but confirm RLS policies protect every table.",
-    "severity": "medium",
-    "validation_status": "lead"
-  },
   "supabase_publishable_key": {
     "attack_scenario": null,
     "categories": [

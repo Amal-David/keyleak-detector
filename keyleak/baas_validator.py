@@ -20,7 +20,7 @@ from typing import Any, Callable, Dict, List, Optional, Tuple
 from .models import Evidence, Finding
 from .redaction import redact_url, redact_value
 
-BaaSProber = Callable[[str, str, Dict[str, str]], Dict[str, Any]]
+BaaSProber = Callable[..., Dict[str, Any]]
 
 TABLE_PROBE_CAP = 50
 BUCKET_PROBE_CAP = 10
@@ -99,10 +99,13 @@ class BaaSValidation:
 # Default HTTP prober — overridden by tests.
 # ---------------------------------------------------------------------------
 
-def _default_prober(method: str, url: str, headers: Dict[str, str]) -> Dict[str, Any]:  # pragma: no cover
+def _default_prober(method: str, url: str, headers: Dict[str, str], body: Optional[str] = None) -> Dict[str, Any]:  # pragma: no cover
     import requests as _requests
 
-    resp = _requests.request(method, url, headers=headers, timeout=10)
+    kwargs: Dict[str, Any] = {"headers": headers, "timeout": 10}
+    if body is not None and method.upper() in ("POST", "PUT", "PATCH"):
+        kwargs["data"] = body
+    resp = _requests.request(method, url, **kwargs)
     body: Any = None
     try:
         body = resp.json()
@@ -556,13 +559,22 @@ def _probe_write_access(
     prober: BaaSProber,
     validation: BaaSValidation,
 ) -> None:
-    """Test if open tables accept writes. Uses invalid schema body to avoid creating data."""
+    """Test if open tables accept writes.
+
+    Sends a POST with an intentionally invalid JSON body that cannot match
+    any real table schema.  PostgREST returns 400 (schema error) when
+    inserts are enabled but the body is invalid, vs 403 when RLS blocks
+    the write entirely.  A 400 therefore proves writes are structurally
+    open without ever creating a row.
+    """
     write_headers = {**headers, "Content-Type": "application/json", "Prefer": "return=minimal"}
+    # Body with a key that cannot match any real column — guarantees 400, never 201.
+    probe_body = '{"__keyleak_write_probe__": true}'
     open_table_names = [t.target for t in validation.open_tables]
 
     for table in open_table_names[:WRITE_PROBE_CAP]:
         try:
-            resp = prober("POST", f"{config.project_url}/rest/v1/{table}", write_headers)
+            resp = prober("POST", f"{config.project_url}/rest/v1/{table}", write_headers, probe_body)
         except Exception:
             continue
 
@@ -608,7 +620,7 @@ def _decode_jwt_claims(token: str) -> Optional[Dict[str, Any]]:
     try:
         payload = parts[1]
         # Add padding
-        payload += "=" * (4 - len(payload) % 4)
+        payload += "=" * ((4 - len(payload) % 4) % 4)
         decoded = base64.urlsafe_b64decode(payload)
         return _json.loads(decoded)
     except Exception:

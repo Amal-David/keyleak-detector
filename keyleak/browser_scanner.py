@@ -317,7 +317,7 @@ def run_browser_scan(
     auth_state_path: Optional[str] = None,
     scan_budget_seconds: int = SCAN_BUDGET_DEFAULT_SECONDS,
     headless: bool = True,
-    baas_validate: bool = True,
+    baas_validate: bool = False,
     baas_prober: Optional[Any] = None,
 ) -> ScanReport:
     """Drive Playwright Chromium, inject the analyzer, return a ScanReport.
