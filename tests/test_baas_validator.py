@@ -257,25 +257,19 @@ class RPCTests(unittest.TestCase):
             storage_buckets=[],
         )
 
-    def test_callable_rpc_confirmed(self):
+    def test_rpc_surfaced_as_lead(self):
+        """RPCs are listed as leads without executing them (no POST probe)."""
         prober = _mock_prober({
             "/rest/v1/": {"status_code": 200, "body": None, "headers": {}},
-            "/rest/v1/rpc/increment_plays": {"status_code": 200, "body": None, "headers": {}},
             "/storage/v1/bucket": {"status_code": 403, "body": None, "headers": {}},
+            "/auth/v1/settings": {"status_code": 401, "body": None, "headers": {}},
         })
         result = validate_baas_config(self._config(), prober=prober)
         assert len(result.callable_rpcs) == 1
-        assert any(f.type == "baas_open_rpc" for f in result.findings)
-
-    def test_denied_rpc_no_finding(self):
-        prober = _mock_prober({
-            "/rest/v1/": {"status_code": 200, "body": None, "headers": {}},
-            "/rest/v1/rpc/increment_plays": {"status_code": 401, "body": None, "headers": {}},
-            "/storage/v1/bucket": {"status_code": 403, "body": None, "headers": {}},
-        })
-        result = validate_baas_config(self._config(), prober=prober)
-        assert len(result.callable_rpcs) == 0
-        assert not any(f.type == "baas_open_rpc" for f in result.findings)
+        rpc_findings = [f for f in result.findings if f.type == "baas_open_rpc"]
+        assert len(rpc_findings) == 1
+        assert rpc_findings[0].validation_status == "lead"
+        assert rpc_findings[0].confidence < 0.8
 
 
 class CORSTests(unittest.TestCase):

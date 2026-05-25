@@ -181,7 +181,7 @@ def main(argv: Optional[List[str]] = None) -> int:
             print(f"browser-scan requires Playwright: {exc}", file=sys.stderr)
             return 1
         try:
-            extra_tables = [t.strip() for t in (args.baas_tables or "").split(",") if t.strip()] or None
+            extra_tables = _split_optional_csv(args.baas_tables)
             report = run_browser_scan(
                 args.url,
                 auth_state_path=args.auth_state or None,

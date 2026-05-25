@@ -4,7 +4,8 @@
  */
 
 import { COMPILED_PATTERNS } from './patterns.js';
-import { isFalsePositive } from './false-positives.js';
+import { isFalsePositive, isVendorScript } from './false-positives.js';
+import { normalizeFinding, redactSnippet } from './reporting.js';
 
 /**
  * Analyze text content for potential secrets.
@@ -12,12 +13,15 @@ import { isFalsePositive } from './false-positives.js';
  * @param {string} source - Where the content came from (e.g. 'Response Body', 'Request Header')
  * @returns {Array<Object>} Array of findings
  */
-export function analyzeContent(content, source = '') {
+export function analyzeContent(content, source = '', meta = {}) {
   const findings = [];
   if (!content || typeof content !== 'string' || content.length < 10) return findings;
 
   // Skip obviously non-secret content types
   if (content.length > 5 * 1024 * 1024) return findings; // >5MB, skip
+
+  // Skip known third-party vendor scripts (Google Analytics, PostHog, etc.)
+  if (isVendorScript(source) || isVendorScript(meta.url || '')) return findings;
 
   const seen = new Set(); // deduplicate by value
 
@@ -28,7 +32,8 @@ export function analyzeContent(content, source = '') {
 
     while ((match = regex.exec(content)) !== null) {
       // Extract the captured group or full match
-      const value = (match[1] || match[0]).trim();
+      const captureIndex = entry.capture_group || 0;
+      const value = (match[captureIndex] || match[1] || match[0]).trim();
 
       // Skip duplicates within this content block
       const dedupeKey = `${name}:${value}`;
@@ -36,6 +41,7 @@ export function analyzeContent(content, source = '') {
       seen.add(dedupeKey);
 
       // Skip false positives
+      if (entry.min_match_length && value.length < entry.min_match_length) continue;
       if (isFalsePositive(value)) continue;
 
       // Get a snippet of surrounding context (up to 100 chars each side)
@@ -45,15 +51,22 @@ export function analyzeContent(content, source = '') {
       if (start > 0) context = '...' + context;
       if (end < content.length) context = context + '...';
 
-      findings.push({
-        type: name,
-        value: value.slice(0, 200), // truncate very long matches
+      findings.push(normalizeFinding({
+        type: entry.finding_type || name,
+        raw_value: value.slice(0, 1000),
         severity: entry.severity,
+        detector_id: entry.detector_id || name,
+        category: entry.category || entry.pack || 'leak',
         description: entry.description,
+        risk_reason: entry.description,
+        remediation: entry.remediation,
+        references: entry.references || [],
+        validation_status: entry.validation_status || 'lead',
         source,
-        context,
+        context: redactSnippet(context, value),
         timestamp: Date.now(),
-      });
+        ...meta,
+      }));
 
       // Cap at 50 findings per content block to prevent flooding
       if (findings.length >= 50) return findings;
@@ -69,13 +82,13 @@ export function analyzeContent(content, source = '') {
  * @param {string} source
  * @returns {Array<Object>}
  */
-export function analyzeHeaders(headers, source = 'Headers') {
+export function analyzeHeaders(headers, source = 'Headers', meta = {}) {
   const findings = [];
   if (!headers) return findings;
 
   for (const header of headers) {
     const headerStr = `${header.name}: ${header.value}`;
-    findings.push(...analyzeContent(headerStr, `${source} (${header.name})`));
+    findings.push(...analyzeContent(headerStr, `${source} (${header.name})`, meta));
   }
 
   return findings;
@@ -86,7 +99,7 @@ export function analyzeHeaders(headers, source = 'Headers') {
  * @param {string} url
  * @returns {Array<Object>}
  */
-export function analyzeUrl(url) {
+export function analyzeUrl(url, meta = {}) {
   if (!url) return [];
-  return analyzeContent(url, 'URL');
+  return analyzeContent(url, 'URL', { ...meta, url });
 }

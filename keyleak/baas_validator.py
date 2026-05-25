@@ -514,39 +514,35 @@ def _probe_rpcs(
     prober: BaaSProber,
     validation: BaaSValidation,
 ) -> None:
-    rpc_headers = {**headers, "Content-Type": "application/json"}
-    for fn in config.rpc_functions[:RPC_PROBE_CAP]:
-        try:
-            resp = prober("POST", f"{config.project_url}/rest/v1/rpc/{fn}", rpc_headers)
-        except Exception:
-            continue
+    """Surface RPC functions as leads without executing them.
 
-        status = resp.get("status_code", 0)
-        if status in (200, 204):
-            result = BaaSProbeResult(
-                probe_type="rpc_call", target=fn, status="confirmed", http_status=status,
-            )
-            validation.callable_rpcs.append(result)
-            validation.findings.append(Finding(
-                type="baas_open_rpc",
-                severity="medium",
-                confidence=0.85,
-                detector_id="baas.open_rpc",
+    POSTing to an RPC endpoint executes the function, which may have
+    side effects.  Instead we emit each client-referenced RPC as a
+    ``lead`` so operators can review permissions manually.
+    """
+    for fn in config.rpc_functions[:RPC_PROBE_CAP]:
+        validation.callable_rpcs.append(BaaSProbeResult(
+            probe_type="rpc_call", target=fn, status="lead",
+        ))
+        validation.findings.append(Finding(
+            type="baas_open_rpc",
+            severity="medium",
+            confidence=0.6,
+            detector_id="baas.open_rpc",
+            source=config.project_url,
+            evidence=Evidence(
                 source=config.project_url,
-                evidence=Evidence(
-                    source=config.project_url,
-                    snippet=f"RPC function '{fn}' callable without authentication (HTTP {status}).",
-                    redacted_value=f"rpc:{fn}",
-                    response_status=status,
-                    request_url=f"{redact_url(config.project_url)}/rest/v1/rpc/{fn}",
-                ),
-                risk_reason=f"Supabase RPC function '{fn}' is callable with just the anon key. "
-                            "If it mutates data or returns sensitive information, this is exploitable.",
-                remediation=f"Add a security definer or check auth.uid() inside the '{fn}' function. "
-                            "Consider revoking EXECUTE from the anon role.",
-                validation_status="confirmed",
-                category="baas",
-            ))
+                snippet=f"RPC function '{fn}' referenced in client code and callable via the REST API.",
+                redacted_value=f"rpc:{fn}",
+                request_url=f"{redact_url(config.project_url)}/rest/v1/rpc/{fn}",
+            ),
+            risk_reason=f"Supabase RPC function '{fn}' is exposed to the anon role via the client bundle. "
+                        "If it mutates data or returns sensitive information, it may be exploitable.",
+            remediation=f"Verify that '{fn}' checks auth.uid() internally. "
+                        "Consider revoking EXECUTE from the anon role for sensitive functions.",
+            validation_status="lead",
+            category="baas",
+        ))
 
 
 # ---------------------------------------------------------------------------

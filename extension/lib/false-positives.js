@@ -105,3 +105,44 @@ export function isFalsePositive(value) {
 
   return false;
 }
+
+const VENDOR_SCRIPT_DOMAINS = [
+  'google-analytics.com',
+  'googletagmanager.com',
+  'googleapis.com',
+  'gstatic.com',
+  'google.com/maps',
+  'maps.google.com',
+  'posthog.com',
+  'cdn.segment.com',
+  'cdn.mxpnl.com',
+  'js.intercomcdn.com',
+  'widget.intercom.io',
+  'js.stripe.com',
+  'cdn.amplitude.com',
+  'cdn.heapanalytics.com',
+  'static.hotjar.com',
+  'plausible.io',
+  'cdn.lr-intake.com',
+  'cdn.rudderlabs.com',
+  'cdn.cookielaw.org',
+  'js.hs-scripts.com',
+  'js.hs-analytics.net',
+  'connect.facebook.net',
+  'snap.licdn.com',
+  'static.ads-twitter.com',
+  'bat.bing.com',
+];
+
+/**
+ * Check if a finding source is a known third-party vendor script.
+ * Keys found in vendor CDN scripts are the vendor's own internal keys
+ * (e.g., Google's AIza key in analytics.js), not user-leaked secrets.
+ * @param {string} source - The source URL or description
+ * @returns {boolean} true if from a vendor script
+ */
+export function isVendorScript(source) {
+  if (!source || typeof source !== 'string') return false;
+  const lower = source.toLowerCase();
+  return VENDOR_SCRIPT_DOMAINS.some(domain => lower.includes(domain));
+}
