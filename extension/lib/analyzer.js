@@ -4,7 +4,7 @@
  */
 
 import { COMPILED_PATTERNS } from './patterns.js';
-import { isFalsePositive, isVendorScript } from './false-positives.js';
+import { isFalsePositive, isVendorScript, isPresignedUrlCredential } from './false-positives.js';
 import { normalizeFinding, redactSnippet } from './reporting.js';
 
 /**
@@ -43,6 +43,7 @@ export function analyzeContent(content, source = '', meta = {}) {
       // Skip false positives
       if (entry.min_match_length && value.length < entry.min_match_length) continue;
       if (isFalsePositive(value)) continue;
+      if (isPresignedUrlCredential(value, source)) continue;
 
       // Get a snippet of surrounding context (up to 100 chars each side)
       const start = Math.max(0, match.index - 60);

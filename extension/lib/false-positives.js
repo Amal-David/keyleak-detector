@@ -146,3 +146,22 @@ export function isVendorScript(source) {
   const lower = source.toLowerCase();
   return VENDOR_SCRIPT_DOMAINS.some(domain => lower.includes(domain));
 }
+
+/**
+ * Check if an AWS access key finding is from a pre-signed URL context.
+ * Pre-signed S3/CloudFront URLs embed temporary credentials (ASIA prefix)
+ * in URL query parameters — these are designed to be shared publicly,
+ * are time-limited, and scoped to a single object.
+ * @param {string} value - The matched key value
+ * @param {string} source - Where it was found
+ * @returns {boolean} true if likely a pre-signed URL credential
+ */
+export function isPresignedUrlCredential(value, source) {
+  if (!value || !source) return false;
+  const v = String(value);
+  const s = String(source).toLowerCase();
+  if (!/^A[SK]IA[A-Z0-9]{16}$/.test(v)) return false;
+  if (s.includes('meta tag') || s.includes('x-amz-credential') || s.includes('presigned')) return true;
+  if (/s3[.-]|cloudfront|amazonaws\.com/.test(s)) return true;
+  return false;
+}
