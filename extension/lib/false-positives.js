@@ -132,6 +132,23 @@ const VENDOR_SCRIPT_DOMAINS = [
   'snap.licdn.com',
   'static.ads-twitter.com',
   'bat.bing.com',
+  'cdn.datadog-static.com',
+  'browser-intake-datadoghq.com',
+  'cdn.pendo.io',
+  'js.sentry-cdn.com',
+  'cdn.logrocket.io',
+  'cdn.mouseflow.com',
+  'static.cloudflareinsights.com',
+  'challenges.cloudflare.com',
+  'cdn.optimizely.com',
+  'cdn.launchdarkly.com',
+  'js.driftt.com',
+  'widget.freshdesk.com',
+  'js.chargebee.com',
+  'js.recurly.com',
+  'js.braintreegateway.com',
+  'checkout.razorpay.com',
+  'cdn.paddle.com',
 ];
 
 /**
@@ -147,23 +164,108 @@ export function isVendorScript(source) {
   return VENDOR_SCRIPT_DOMAINS.some(domain => lower.includes(domain));
 }
 
+// Cloud storage signed/pre-signed URL patterns.
+// These embed credentials or tokens in the URL for time-limited, scoped
+// access to a single object.  They are designed to be shared publicly
+// (in meta tags, image src, API responses) and are NOT leaked secrets.
+const CLOUD_STORAGE_SIGNED_URL_MARKERS = [
+  // AWS S3 / CloudFront pre-signed URLs
+  'x-amz-credential',
+  'x-amz-signature',
+  'x-amz-date',
+  'x-amz-expires',
+  'x-amz-security-token',
+  'x-amz-algorithm',
+  'amazonaws.com',
+  '.s3.',
+  's3-',
+  'cloudfront.net',
+
+  // Google Cloud Storage signed URLs
+  'x-goog-credential',
+  'x-goog-signature',
+  'x-goog-date',
+  'x-goog-expires',
+  'x-goog-algorithm',
+  'storage.googleapis.com',
+  'storage.cloud.google.com',
+
+  // Azure Blob Storage SAS tokens
+  'blob.core.windows.net',
+  'blob.storage.azure.net',
+
+  // Cloudflare R2 (uses S3-compatible signed URLs)
+  'r2.dev',
+  'r2.cloudflarestorage.com',
+
+  // DigitalOcean Spaces (S3-compatible)
+  'digitaloceanspaces.com',
+
+  // Backblaze B2
+  'backblazeb2.com',
+  'f000.backblazeb2.com',
+
+  // Wasabi
+  'wasabisys.com',
+
+  // Supabase Storage
+  'supabase.co/storage',
+
+  // Firebase Storage
+  'firebasestorage.googleapis.com',
+
+  // Vercel Blob
+  'vercel-storage.com',
+  'blob.vercel-storage.com',
+
+  // Uploadthing / other upload services
+  'uploadthing.com',
+  'utfs.io',
+];
+
+// Patterns in the source label that indicate cloud storage / CDN context
+const CLOUD_STORAGE_SOURCE_PATTERNS = [
+  'meta tag',
+  'presigned',
+  'signed url',
+  'og:image',
+  'twitter:image',
+];
+
 /**
- * Check if an AWS access key finding is from a pre-signed URL context.
- * Pre-signed S3/CloudFront URLs embed temporary credentials (ASIA prefix)
- * in URL query parameters — these are designed to be shared publicly,
- * are time-limited, and scoped to a single object.
- * @param {string} value - The matched key value
- * @param {string} source - Where it was found
- * @returns {boolean} true if likely a pre-signed URL credential
+ * Check if a finding is from a cloud storage signed/pre-signed URL.
+ * Covers AWS S3, GCS, Azure Blob, Cloudflare R2, DigitalOcean Spaces,
+ * Backblaze B2, Wasabi, Supabase Storage, Firebase Storage, and Vercel Blob.
+ * @param {string} value - The matched secret value
+ * @param {string} source - Where it was found (source label)
+ * @param {string} content - The full text being scanned
+ * @returns {boolean} true if from a cloud storage signed URL context
  */
-export function isPresignedUrlCredential(value, source, content) {
-  if (!value) return false;
-  const v = String(value);
-  if (!/^A[SK]IA[A-Z0-9]{16}$/.test(v)) return false;
+export function isCloudStorageSignedUrl(value, source, content) {
   const s = String(source || '').toLowerCase();
   const c = String(content || '').toLowerCase();
-  if (s.includes('meta tag') || s.includes('presigned')) return true;
-  if (/x-amz-credential|x-amz-signature|x-amz-date|x-amz-expires/i.test(c)) return true;
-  if (/s3[.-]|cloudfront|amazonaws\.com/i.test(s) || /s3[.-]|cloudfront|amazonaws\.com/i.test(c)) return true;
+
+  // Check source label
+  for (const pattern of CLOUD_STORAGE_SOURCE_PATTERNS) {
+    if (s.includes(pattern)) return true;
+  }
+
+  // Check content and source for any cloud storage marker
+  for (const marker of CLOUD_STORAGE_SIGNED_URL_MARKERS) {
+    if (c.includes(marker) || s.includes(marker)) return true;
+  }
+
   return false;
+}
+
+// Azure SAS token patterns — sv=, sig=, se=, sp= in query strings
+const AZURE_SAS_RE = /[?&](?:sv|sig|se|sp|spr|srt)=/i;
+
+/**
+ * Check if a finding is from an Azure SAS token URL.
+ * @param {string} content - The full text being scanned
+ * @returns {boolean}
+ */
+export function isAzureSasToken(content) {
+  return AZURE_SAS_RE.test(String(content || ''));
 }

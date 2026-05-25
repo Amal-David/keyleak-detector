@@ -4,7 +4,7 @@
  */
 
 import { COMPILED_PATTERNS } from './patterns.js';
-import { isFalsePositive, isVendorScript, isPresignedUrlCredential } from './false-positives.js';
+import { isFalsePositive, isVendorScript, isCloudStorageSignedUrl, isAzureSasToken } from './false-positives.js';
 import { normalizeFinding, redactSnippet } from './reporting.js';
 
 /**
@@ -22,6 +22,9 @@ export function analyzeContent(content, source = '', meta = {}) {
 
   // Skip known third-party vendor scripts (Google Analytics, PostHog, etc.)
   if (isVendorScript(source) || isVendorScript(meta.url || '')) return findings;
+
+  // Skip cloud storage signed/pre-signed URLs (AWS S3, GCS, Azure, R2, etc.)
+  if (isCloudStorageSignedUrl('', source, content) || isAzureSasToken(content)) return findings;
 
   const seen = new Set(); // deduplicate by value
 
@@ -43,7 +46,6 @@ export function analyzeContent(content, source = '', meta = {}) {
       // Skip false positives
       if (entry.min_match_length && value.length < entry.min_match_length) continue;
       if (isFalsePositive(value)) continue;
-      if (isPresignedUrlCredential(value, source, content)) continue;
 
       // Get a snippet of surrounding context (up to 100 chars each side)
       const start = Math.max(0, match.index - 60);
