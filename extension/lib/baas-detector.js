@@ -21,7 +21,7 @@ const SENSITIVE_PREFIXES = [
   'private', 'internal',
 ];
 
-const MAX_PROBES_PER_TAB = 30;
+export const MAX_PROBES_PER_TAB = 30;
 const PROBE_DELAY_MS = 1000;
 
 export function classifyTable(name) {
@@ -103,13 +103,16 @@ export async function testRLS(baasInfo) {
     return testSupabaseTable(baseUrl, endpoint, apiKey);
   }
   if (provider === 'supabase' && type === 'rpc') {
-    return testSupabaseRPC(baseUrl, endpoint, apiKey);
+    return testSupabaseRPCReadOnly(baseUrl, endpoint, apiKey);
   }
   if (provider === 'supabase' && type === 'storage') {
     return testSupabaseStorage(baseUrl, apiKey);
   }
   if (provider === 'firebase' && type === 'database') {
     return testFirebaseDB(baseUrl);
+  }
+  if (provider === 'firebase' && type === 'storage') {
+    return testFirebaseStorage(endpoint);
   }
 
   return { open: false, status: 0, detail: 'unsupported probe type' };
@@ -138,18 +141,38 @@ async function testSupabaseTable(baseUrl, table, apiKey) {
   }
 }
 
-async function testSupabaseRPC(baseUrl, fn, apiKey) {
+async function testSupabaseRPCReadOnly(baseUrl, fn, apiKey) {
   try {
-    const headers = { 'Content-Type': 'application/json' };
+    const headers = {};
     if (apiKey) headers['apikey'] = apiKey;
     const resp = await fetch(
       `${baseUrl}/rest/v1/rpc/${fn}`,
-      { method: 'POST', headers, body: '{}', credentials: 'omit' }
+      { method: 'OPTIONS', headers, credentials: 'omit' }
     );
+    // OPTIONS 200 with CORS allow POST means the RPC endpoint exists and is reachable.
+    // A 404 means the function doesn't exist for the anon role.
+    const allow = resp.headers.get('allow') || resp.headers.get('access-control-allow-methods') || '';
     return {
-      open: resp.status >= 200 && resp.status < 300,
+      open: resp.status === 200 && allow.toUpperCase().includes('POST'),
       status: resp.status,
     };
+  } catch (err) {
+    return { open: false, status: 0, detail: err.message };
+  }
+}
+
+async function testFirebaseStorage(bucket) {
+  try {
+    const resp = await fetch(
+      `https://firebasestorage.googleapis.com/v0/b/${bucket}/o?maxResults=1`,
+      { credentials: 'omit' }
+    );
+    if (resp.status === 200) {
+      const body = await resp.json();
+      const items = (body && body.items) || [];
+      return { open: items.length > 0, status: 200, buckets: [{ name: bucket, public: true }] };
+    }
+    return { open: false, status: resp.status };
   } catch (err) {
     return { open: false, status: 0, detail: err.message };
   }
@@ -267,19 +290,23 @@ export class BaaSTabState {
     this.processing = false;
   }
 
-  shouldProbe(endpoint) {
+  _dedupeKey(baasInfo) {
+    return `${baasInfo.provider}|${baasInfo.type || 'unknown'}|${baasInfo.endpoint}`;
+  }
+
+  shouldProbe(baasInfo) {
     if (this.probeCount >= MAX_PROBES_PER_TAB) return false;
-    if (this.tested.has(endpoint)) return false;
+    if (this.tested.has(this._dedupeKey(baasInfo))) return false;
     return true;
   }
 
-  markTested(endpoint) {
-    this.tested.add(endpoint);
+  markTested(baasInfo) {
+    this.tested.add(this._dedupeKey(baasInfo));
     this.probeCount++;
   }
 
   async enqueueProbe(baasInfo, addFindingsFn) {
-    if (!this.shouldProbe(baasInfo.endpoint)) return;
+    if (!this.shouldProbe(baasInfo)) return;
 
     if (!this.provider) {
       this.provider = baasInfo.provider;
@@ -287,7 +314,7 @@ export class BaaSTabState {
       this.apiKey = baasInfo.apiKey;
     }
 
-    this.markTested(baasInfo.endpoint);
+    this.markTested(baasInfo);
 
     this.probeQueue.push({ baasInfo, addFindingsFn });
     if (!this.processing) {

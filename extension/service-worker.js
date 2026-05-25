@@ -328,6 +328,7 @@ async function exportReport(tabId, format = 'json') {
 
 async function clearTab(tabId) {
   tabCache.delete(tabId);
+  baasTabStates.delete(tabId);
   await storageRemove(storageKey(tabId));
   chrome.action.setBadgeText({ text: '', tabId });
   return { ok: true };
@@ -358,7 +359,7 @@ async function handleAnalyzeIntercepted(tabId, data = {}) {
   // BaaS real-time detection: check if this request targets a BaaS provider
   const requestHeaders = headers || [];
   const baasInfo = detectBaaSRequest(url, requestHeaders);
-  if (baasInfo && baasInfo.apiKey) {
+  if (baasInfo && (baasInfo.apiKey || baasInfo.provider === 'firebase')) {
     if (!baasTabStates.has(tabId)) baasTabStates.set(tabId, new BaaSTabState());
     const baasState = baasTabStates.get(tabId);
     baasState.enqueueProbe(baasInfo, (baasFindings) => {
@@ -495,7 +496,7 @@ chrome.webRequest.onBeforeSendHeaders.addListener(
 
         // BaaS detection from outgoing request headers
         const baasInfo = detectBaaSRequest(details.url, headers);
-        if (baasInfo && baasInfo.apiKey) {
+        if (baasInfo && (baasInfo.apiKey || baasInfo.provider === 'firebase')) {
           if (!baasTabStates.has(tabId)) baasTabStates.set(tabId, new BaaSTabState());
           const baasState = baasTabStates.get(tabId);
           baasState.enqueueProbe(baasInfo, (baasFindings) => {

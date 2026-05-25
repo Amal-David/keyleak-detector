@@ -3,7 +3,7 @@
  * Run: node extension/tests/baas-detector.test.js
  */
 
-import { detectBaaSRequest, classifyTable, buildBaaSFinding, BaaSTabState } from '../lib/baas-detector.js';
+import { detectBaaSRequest, classifyTable, buildBaaSFinding, BaaSTabState, MAX_PROBES_PER_TAB } from '../lib/baas-detector.js';
 
 let passed = 0;
 let failed = 0;
@@ -67,6 +67,17 @@ test('detects Firebase Realtime Database request', () => {
   assert(result !== null, 'should detect');
   assert(result.provider === 'firebase', 'provider should be firebase');
   assert(result.type === 'database', 'type should be database');
+});
+
+test('detects Firebase Storage request', () => {
+  const result = detectBaaSRequest(
+    'https://firebasestorage.googleapis.com/v0/b/my-app.appspot.com/o/photo.jpg',
+    []
+  );
+  assert(result !== null, 'should detect');
+  assert(result.provider === 'firebase', 'provider should be firebase');
+  assert(result.type === 'storage', 'type should be storage');
+  assert(result.endpoint === 'my-app.appspot.com', 'endpoint should be bucket name');
 });
 
 test('returns null for non-BaaS URL', () => {
@@ -134,22 +145,51 @@ test('builds finding for open Firebase DB', () => {
   assert(finding.evidence.snippet.includes('Firebase'), 'should mention Firebase');
 });
 
+test('builds finding for open RPC function', () => {
+  const finding = buildBaaSFinding(
+    { provider: 'supabase', type: 'rpc', baseUrl: 'https://x.supabase.co', endpoint: 'get_stats', apiKey: 'k' },
+    { open: true, status: 200 }
+  );
+  assert(finding.type === 'baas_open_rpc', 'type should be baas_open_rpc');
+  assert(finding.severity === 'medium', 'RPC should be medium');
+  assert(finding.evidence.snippet.includes('get_stats'), 'snippet should mention function name');
+});
+
+test('builds finding for open storage bucket', () => {
+  const finding = buildBaaSFinding(
+    { provider: 'supabase', type: 'storage', baseUrl: 'https://x.supabase.co', endpoint: 'storage', apiKey: 'k' },
+    { open: true, status: 200, buckets: [{ name: 'avatars', public: true }] }
+  );
+  assert(finding.type === 'baas_open_storage', 'type should be baas_open_storage');
+  assert(finding.severity === 'high', 'storage should be high');
+  assert(finding.evidence.snippet.includes('avatars'), 'snippet should include bucket name');
+});
+
 // --- BaaSTabState ---
 
 test('BaaSTabState deduplicates endpoints', () => {
   const state = new BaaSTabState();
-  assert(state.shouldProbe('users') === true, 'first probe should be allowed');
-  state.markTested('users');
-  assert(state.shouldProbe('users') === false, 'duplicate probe should be blocked');
-  assert(state.shouldProbe('posts') === true, 'different endpoint should be allowed');
+  const info = { provider: 'supabase', type: 'table', endpoint: 'users' };
+  assert(state.shouldProbe(info) === true, 'first probe should be allowed');
+  state.markTested(info);
+  assert(state.shouldProbe(info) === false, 'duplicate probe should be blocked');
+  assert(state.shouldProbe({ provider: 'supabase', type: 'table', endpoint: 'posts' }) === true, 'different endpoint should be allowed');
+});
+
+test('BaaSTabState uses composite dedupe key', () => {
+  const state = new BaaSTabState();
+  const tableInfo = { provider: 'supabase', type: 'table', endpoint: 'users' };
+  const rpcInfo = { provider: 'supabase', type: 'rpc', endpoint: 'users' };
+  state.markTested(tableInfo);
+  assert(state.shouldProbe(rpcInfo) === true, 'same endpoint but different type should be allowed');
 });
 
 test('BaaSTabState respects probe cap', () => {
   const state = new BaaSTabState();
-  for (let i = 0; i < 30; i++) {
-    state.markTested(`table_${i}`);
+  for (let i = 0; i < MAX_PROBES_PER_TAB; i++) {
+    state.markTested({ provider: 'supabase', type: 'table', endpoint: `table_${i}` });
   }
-  assert(state.shouldProbe('table_30') === false, 'should block after cap reached');
+  assert(state.shouldProbe({ provider: 'supabase', type: 'table', endpoint: `table_${MAX_PROBES_PER_TAB}` }) === false, 'should block after cap reached');
 });
 
 // --- Summary ---
