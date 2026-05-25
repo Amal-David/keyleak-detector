@@ -319,6 +319,7 @@ def run_browser_scan(
     headless: bool = True,
     baas_validate: bool = False,
     baas_prober: Optional[Any] = None,
+    baas_tables: Optional[List[str]] = None,
 ) -> ScanReport:
     """Drive Playwright Chromium, inject the analyzer, return a ScanReport.
 
@@ -348,16 +349,26 @@ def run_browser_scan(
         page.goto(url, wait_until="networkidle")
         raw = page.evaluate("() => window.__keyleak_run ? window.__keyleak_run() : []")
 
+        # Always extract BaaS config (tables, RPCs, buckets) for pattern-based
+        # detection.  Active validation probes are gated by baas_validate.
         baas_extraction = None
-        if baas_validate:
-            try:
-                baas_extraction = page.evaluate(
-                    "() => window.__keyleak_baas_extract ? window.__keyleak_baas_extract() : null"
-                )
-            except Exception:
-                pass
+        try:
+            baas_extraction = page.evaluate(
+                "() => window.__keyleak_baas_extract ? window.__keyleak_baas_extract() : null"
+            )
+        except Exception:
+            pass
 
         browser.close()
+
+    # Merge extra --baas-tables into extraction
+    if baas_tables and baas_extraction:
+        existing = set(baas_extraction.get("tables") or [])
+        for t in baas_tables:
+            if t not in existing:
+                baas_extraction.setdefault("tables", []).append(t)
+    elif baas_tables and not baas_extraction:
+        baas_extraction = {"tables": list(baas_tables), "rpcs": [], "buckets": []}
 
     findings = [_to_finding(entry, url) for entry in raw or []]
     baas_findings = _run_baas_validation(raw, baas_extraction, baas_validate, baas_prober)

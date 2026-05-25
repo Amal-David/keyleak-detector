@@ -142,23 +142,12 @@ async function testSupabaseTable(baseUrl, table, apiKey) {
 }
 
 async function testSupabaseRPCReadOnly(baseUrl, fn, apiKey) {
-  try {
-    const headers = {};
-    if (apiKey) headers['apikey'] = apiKey;
-    const resp = await fetch(
-      `${baseUrl}/rest/v1/rpc/${fn}`,
-      { method: 'OPTIONS', headers, credentials: 'omit' }
-    );
-    // OPTIONS 200 with CORS allow POST means the RPC endpoint exists and is reachable.
-    // A 404 means the function doesn't exist for the anon role.
-    const allow = resp.headers.get('allow') || resp.headers.get('access-control-allow-methods') || '';
-    return {
-      open: resp.status === 200 && allow.toUpperCase().includes('POST'),
-      status: resp.status,
-    };
-  } catch (err) {
-    return { open: false, status: 0, detail: err.message };
-  }
+  // OPTIONS doesn't validate EXECUTE permission on PostgREST — it returns
+  // Allow headers based on function volatility, not per-role grants.
+  // A real POST would mutate state, so we can't safely probe RPCs from the
+  // extension.  Instead, return a "lead" (not confirmed) so it surfaces
+  // in the UI for manual review without making a mutating request.
+  return { open: false, status: 0, detail: 'RPC probing skipped in extension (requires POST)' };
 }
 
 async function testFirebaseStorage(bucket) {

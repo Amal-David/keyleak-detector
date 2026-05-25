@@ -561,14 +561,18 @@ def _probe_write_access(
 ) -> None:
     """Test if open tables accept writes.
 
-    Sends a POST with an intentionally invalid JSON body that cannot match
-    any real table schema.  PostgREST returns 400 (schema error) when
-    inserts are enabled but the body is invalid, vs 403 when RLS blocks
-    the write entirely.  A 400 therefore proves writes are structurally
-    open without ever creating a row.
+    Uses ``Prefer: tx=rollback`` so PostgREST rolls back the transaction
+    even if the insert would succeed.  If that header is not honoured
+    (requires ``db-tx-end`` on the server), falls back to sending an
+    intentionally invalid JSON body whose column name cannot exist in any
+    real schema — PostgREST returns 400 (schema error, no row created)
+    when inserts are enabled, vs 403 when RLS blocks writes.
     """
-    write_headers = {**headers, "Content-Type": "application/json", "Prefer": "return=minimal"}
-    # Body with a key that cannot match any real column — guarantees 400, never 201.
+    write_headers = {
+        **headers,
+        "Content-Type": "application/json",
+        "Prefer": "tx=rollback, return=minimal",
+    }
     probe_body = '{"__keyleak_write_probe__": true}'
     open_table_names = [t.target for t in validation.open_tables]
 

@@ -181,12 +181,14 @@ def main(argv: Optional[List[str]] = None) -> int:
             print(f"browser-scan requires Playwright: {exc}", file=sys.stderr)
             return 1
         try:
+            extra_tables = [t.strip() for t in (args.baas_tables or "").split(",") if t.strip()] or None
             report = run_browser_scan(
                 args.url,
                 auth_state_path=args.auth_state or None,
                 scan_budget_seconds=int(args.scan_budget),
                 headless=not args.headed,
                 baas_validate=args.baas_validate,
+                baas_tables=extra_tables,
             )
         except Exception as exc:
             print(f"browser-scan failed: {exc}", file=sys.stderr)
