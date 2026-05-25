@@ -43,7 +43,7 @@ export function analyzeContent(content, source = '', meta = {}) {
       // Skip false positives
       if (entry.min_match_length && value.length < entry.min_match_length) continue;
       if (isFalsePositive(value)) continue;
-      if (isPresignedUrlCredential(value, source)) continue;
+      if (isPresignedUrlCredential(value, source, content)) continue;
 
       // Get a snippet of surrounding context (up to 100 chars each side)
       const start = Math.max(0, match.index - 60);

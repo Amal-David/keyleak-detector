@@ -156,12 +156,14 @@ export function isVendorScript(source) {
  * @param {string} source - Where it was found
  * @returns {boolean} true if likely a pre-signed URL credential
  */
-export function isPresignedUrlCredential(value, source) {
-  if (!value || !source) return false;
+export function isPresignedUrlCredential(value, source, content) {
+  if (!value) return false;
   const v = String(value);
-  const s = String(source).toLowerCase();
   if (!/^A[SK]IA[A-Z0-9]{16}$/.test(v)) return false;
-  if (s.includes('meta tag') || s.includes('x-amz-credential') || s.includes('presigned')) return true;
-  if (/s3[.-]|cloudfront|amazonaws\.com/.test(s)) return true;
+  const s = String(source || '').toLowerCase();
+  const c = String(content || '').toLowerCase();
+  if (s.includes('meta tag') || s.includes('presigned')) return true;
+  if (/x-amz-credential|x-amz-signature|x-amz-date|x-amz-expires/i.test(c)) return true;
+  if (/s3[.-]|cloudfront|amazonaws\.com/i.test(s) || /s3[.-]|cloudfront|amazonaws\.com/i.test(c)) return true;
   return false;
 }
