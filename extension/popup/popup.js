@@ -299,6 +299,12 @@ content.addEventListener('click', (event) => {
         resultEl.innerHTML = `<span class="test-valid">VALID — ${escapeHtml(response.detail)}</span>`;
       } else if (response.status === 'invalid') {
         resultEl.innerHTML = `<span class="test-invalid">INVALID — ${escapeHtml(response.detail)}</span>`;
+      } else if (response.status === 'decoded' && response.flags) {
+        const flagRows = response.flags.map(f => {
+          const cls = f.level === 'critical' ? 'flag-critical' : f.level === 'high' ? 'flag-high' : f.level === 'medium' ? 'flag-medium' : 'flag-info';
+          return `<div class="jwt-flag ${cls}"><span class="flag-level">${escapeHtml(f.level.toUpperCase())}</span> <span class="flag-claim">${escapeHtml(f.claim)}</span> ${escapeHtml(f.message)}</div>`;
+        }).join('');
+        resultEl.innerHTML = `<div class="jwt-decode"><div class="jwt-header">JWT DECODED</div>${flagRows}</div>`;
       } else {
         resultEl.innerHTML = `<span class="test-error">${escapeHtml(response.detail || 'Unknown result')}</span>`;
       }
