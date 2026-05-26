@@ -286,6 +286,33 @@ export function isOwnAuthHeader(source) {
  * Browser features (translate, sync, extensions) store short-lived
  * JWTs in localStorage that are not user secrets.
  */
+const GOOGLE_OWNED_DOMAINS = [
+  'google.com', 'google.co.', 'google.de', 'google.fr', 'google.co.uk',
+  'googleapis.com', 'gstatic.com', 'googlevideo.com',
+  'youtube.com', 'youtu.be', 'ytimg.com',
+  'gmail.com', 'googlemail.com',
+  'google-analytics.com', 'googletagmanager.com',
+  'firebase.google.com', 'firebaseio.com',
+  'googlesyndication.com', 'googleadservices.com',
+  'doubleclick.net', 'google.cloud',
+  'cloud.google.com', 'console.cloud.google.com',
+  'accounts.google.com', 'meet.google.com',
+  'docs.google.com', 'drive.google.com',
+  'maps.google.com', 'play.google.com',
+  'chromium.org', 'android.com',
+];
+
+/**
+ * Check if AIza keys should be suppressed because the user is on
+ * a Google-owned domain. Google's own keys on their own sites are
+ * expected — not leaked third-party credentials.
+ */
+export function isGoogleOwnedPage(pageUrl) {
+  if (!pageUrl) return false;
+  const lower = String(pageUrl).toLowerCase();
+  return GOOGLE_OWNED_DOMAINS.some(d => lower.includes(d));
+}
+
 export function isBrowserServiceToken(source) {
   if (!source) return false;
   const s = String(source).toLowerCase();

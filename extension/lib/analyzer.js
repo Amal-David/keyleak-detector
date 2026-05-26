@@ -4,7 +4,7 @@
  */
 
 import { COMPILED_PATTERNS } from './patterns.js';
-import { isFalsePositive, isVendorScript, isCloudStorageSignedUrl, isAzureSasToken, isBrowserInternal, isInfraHeader, isOwnAuthHeader, isBrowserServiceToken } from './false-positives.js';
+import { isFalsePositive, isVendorScript, isCloudStorageSignedUrl, isAzureSasToken, isBrowserInternal, isInfraHeader, isOwnAuthHeader, isBrowserServiceToken, isGoogleOwnedPage } from './false-positives.js';
 import { normalizeFinding, redactSnippet } from './reporting.js';
 
 /**
@@ -83,8 +83,9 @@ export function analyzeContent(content, source = '', meta = {}) {
         ...meta,
       });
 
-      // AIza key classification: Maps/Firebase client key vs Gemini API key
+      // AIza key classification: skip on Google domains, downgrade for Maps/Firebase
       if ((name === 'gemini_api_key' || entry.finding_type === 'gemini_api_key') && value.startsWith('AIza')) {
+        if (isGoogleOwnedPage(meta.url || '') || isGoogleOwnedPage(source)) continue;
         const contentLower = content.toLowerCase();
         const sourceLower = source.toLowerCase();
         const MAPS_MARKERS = [
