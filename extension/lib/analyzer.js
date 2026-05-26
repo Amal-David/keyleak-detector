@@ -4,7 +4,7 @@
  */
 
 import { COMPILED_PATTERNS } from './patterns.js';
-import { isFalsePositive, isVendorScript, isCloudStorageSignedUrl, isAzureSasToken, isBrowserInternal, isInfraHeader, isOwnAuthHeader } from './false-positives.js';
+import { isFalsePositive, isVendorScript, isCloudStorageSignedUrl, isAzureSasToken, isBrowserInternal, isInfraHeader, isOwnAuthHeader, isBrowserServiceToken } from './false-positives.js';
 import { normalizeFinding, redactSnippet } from './reporting.js';
 
 /**
@@ -25,6 +25,9 @@ export function analyzeContent(content, source = '', meta = {}) {
 
   // Skip user's own auth headers (Authorization: Bearer, Cookie)
   if (isOwnAuthHeader(source)) return findings;
+
+  // Skip browser-internal service tokens (Translate, reCAPTCHA, Firebase Auth, etc.)
+  if (isBrowserServiceToken(source)) return findings;
 
   // Skip infrastructure response headers (x-amz-cf-id, cf-ray, x-request-id, etc.)
   if (isInfraHeader(source)) return findings;

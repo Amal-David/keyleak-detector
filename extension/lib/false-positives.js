@@ -281,6 +281,25 @@ export function isOwnAuthHeader(source) {
   return s.includes('request header') && (s.includes('authorization') || s.includes('cookie'));
 }
 
+/**
+ * Check if a finding is from a browser-internal service token.
+ * Browser features (translate, sync, extensions) store short-lived
+ * JWTs in localStorage that are not user secrets.
+ */
+export function isBrowserServiceToken(source) {
+  if (!source) return false;
+  const s = String(source).toLowerCase();
+  return s.includes('translate') ||
+         s.includes('microsofttranslator') ||
+         s.includes('cognitiveservices') ||
+         s.includes('_grecaptcha') ||
+         s.includes('firebaseinstallations') ||
+         s.includes('firebase:authuser') ||
+         s.includes('__clerk') ||
+         s.includes('auth0') ||
+         s.includes('supabase.auth.token');
+}
+
 export function isInfraHeader(source) {
   if (!source || typeof source !== 'string') return false;
   const lower = source.toLowerCase();
