@@ -270,6 +270,17 @@ const INFRA_HEADER_PATTERNS = [
  * @param {string} source - The source label (e.g., "Response Header (x-amz-cf-id)")
  * @returns {boolean}
  */
+/**
+ * Check if a finding is from the user's own Authorization request header.
+ * Bearer/JWT tokens in outgoing Authorization headers are the user's own
+ * session tokens — they're supposed to be there, not leaked secrets.
+ */
+export function isOwnAuthHeader(source) {
+  if (!source) return false;
+  const s = String(source).toLowerCase();
+  return s.includes('request header') && (s.includes('authorization') || s.includes('cookie'));
+}
+
 export function isInfraHeader(source) {
   if (!source || typeof source !== 'string') return false;
   const lower = source.toLowerCase();

@@ -1,6 +1,7 @@
 import { DETECTOR_INFO, getDetectorInfo } from '../lib/detector-info.js';
 import { renderLearnPanel, LEARN_PANEL_CSS } from '../lib/learn-panel.js';
 import { mountReferenceView, REFERENCE_VIEW_CSS } from '../lib/reference-view.js';
+import { TESTABLE_TYPES } from '../lib/key-tester.js';
 
 const content = document.getElementById('content');
 const findingCount = document.getElementById('findingCount');
@@ -206,9 +207,11 @@ function renderFindings(findings) {
         <div class="finding-detail">${escapeHtml(f.risk_reason || '')}</div>
         <div class="fix"><strong>fix:</strong> ${escapeHtml(f.remediation || 'Review and remove exposed sensitive data.')}</div>
         <div class="finding-actions">
+          ${TESTABLE_TYPES.has(f.type) && f.raw_value ? `<button class="test-btn primary" data-id="${escapeHtml(f.id)}" data-type="${escapeHtml(f.type)}" data-raw="${escapeHtml(f.raw_value)}">TEST</button>` : ''}
           <button class="learn-btn" data-id="${escapeHtml(f.id)}" data-detector="${escapeHtml(f.detector_id || '')}">LEARN</button>
           <button class="suppress-btn" data-id="${escapeHtml(f.id)}">SUPPRESS ID</button>
         </div>
+        <div class="test-result" data-test-for="${escapeHtml(f.id)}"></div>
         <div class="learn-mount" data-mount-for="${escapeHtml(f.id)}"></div>
       </div>
     `;
@@ -272,6 +275,34 @@ content.addEventListener('click', (event) => {
     if (url && url.startsWith('http')) {
       chrome.tabs.create({ url });
     }
+    return;
+  }
+
+  const testBtn = event.target.closest('.test-btn');
+  if (testBtn) {
+    const findingId = testBtn.dataset.id;
+    const type = testBtn.dataset.type;
+    const rawValue = testBtn.dataset.raw;
+    const resultEl = content.querySelector(`.test-result[data-test-for="${CSS.escape(findingId)}"]`);
+    if (!resultEl) return;
+    testBtn.disabled = true;
+    testBtn.textContent = 'TESTING...';
+    resultEl.innerHTML = '<span class="test-pending">Testing key...</span>';
+    chrome.runtime.sendMessage({ action: 'test_key', type, raw_value: rawValue }, (response) => {
+      testBtn.disabled = false;
+      testBtn.textContent = 'TEST';
+      if (!response) {
+        resultEl.innerHTML = '<span class="test-error">Test failed — no response.</span>';
+        return;
+      }
+      if (response.status === 'valid') {
+        resultEl.innerHTML = `<span class="test-valid">VALID — ${escapeHtml(response.detail)}</span>`;
+      } else if (response.status === 'invalid') {
+        resultEl.innerHTML = `<span class="test-invalid">INVALID — ${escapeHtml(response.detail)}</span>`;
+      } else {
+        resultEl.innerHTML = `<span class="test-error">${escapeHtml(response.detail || 'Unknown result')}</span>`;
+      }
+    });
     return;
   }
 

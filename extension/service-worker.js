@@ -12,6 +12,7 @@ import {
   severityRank,
 } from './lib/reporting.js';
 import { detectBaaSRequest, BaaSTabState } from './lib/baas-detector.js';
+import { testKey } from './lib/key-tester.js';
 
 const STORAGE_PREFIX = 'keyleak_tab_';
 const SETTINGS_KEY = 'keyleak_settings';
@@ -415,6 +416,17 @@ async function handleMessage(message, sender) {
   if (message.action === 'suppress_finding') {
     if (!Number.isInteger(targetTabId)) return { ok: false, error: 'No tab selected.' };
     return suppressFinding(targetTabId, message.findingId);
+  }
+
+  if (message.action === 'test_key') {
+    const { type, raw_value } = message;
+    if (!type || !raw_value) return { ok: false, error: 'Missing type or raw_value.' };
+    try {
+      const result = await testKey(type, raw_value);
+      return { ok: true, ...result };
+    } catch (err) {
+      return { ok: false, status: 'error', detail: err.message || 'Test failed.' };
+    }
   }
 
   if (message.action === 'run_full_scan') {
