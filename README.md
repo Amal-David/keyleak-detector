@@ -88,6 +88,17 @@ The `--html` flag generates a self-contained dark-theme vulnerability report:
 - **20 new `baas` pack detectors**
 - **Comprehensive false positive suppression** (200+ first-party domains, 87 vendor CDNs, cloud storage URLs, infra headers)
 
+## False Positives
+
+The Chrome extension suppresses findings from 200+ first-party domains (Google, AWS, Azure, GitHub, Stripe, etc.), 87 vendor CDN scripts, cloud storage signed URLs, and infrastructure headers. Despite this, you may encounter false positives on sites we haven't seen yet.
+
+**If you find a false positive, please report it.** Open an issue with:
+- The finding type (e.g., "GEMINI API KEY", "SQL INJECTION")
+- The source (e.g., "External Script: cdn.example.com/lib.js")
+- Why it's a false positive (e.g., "This is the vendor's own key in their CDN script")
+
+We actively review reported FPs and add suppression rules. The more sites you browse with the extension, the better the suppression gets.
+
 ## The Delta Four Result
 
 Every serious scan should lead to four things:
