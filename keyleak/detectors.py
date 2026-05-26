@@ -965,7 +965,7 @@ DETECTORS = [
     # ------------------------------------------------------------------
     Detector(
         "otp_in_response",
-        r"""(?:"otp"|"OTP"|"verification_code"|"verificationCode"|"2fa_code"|"twoFactorCode"|"sms_code"|"smsCode"|"pin_code"|"pinCode"|"one_time_password"|"mfa_code")\s*:\s*["']?(\d{4,8}|[A-Z0-9]{4,8})["']?""",
+        r"""(?:"otp"|"OTP"|"verification_code"|"verificationCode"|"2fa_code"|"twoFactorCode"|"sms_code"|"smsCode"|"pin_code"|"pinCode"|"one_time_password"|"mfa_code")\s*:\s*["']?(\d{4,8}|(?=[A-Za-z0-9]{4,8}\b)(?=[A-Za-z0-9]*\d)[A-Za-z0-9]{4,8})["']?""",
         "critical",
         "OTP or verification code found in API response body. Server sends the code to the client instead of validating server-side.",
         "Move OTP validation server-side. The server should verify the code, never send it to the client. This enables client-side OTP bypass.",

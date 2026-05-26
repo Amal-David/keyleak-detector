@@ -1386,7 +1386,7 @@ const PATTERN_DEFINITIONS = [
     "id": "otp_in_response",
     "min_match_length": 4,
     "pack": "appsec",
-    "pattern": "(?:\"otp\"|\"OTP\"|\"verification_code\"|\"verificationCode\"|\"2fa_code\"|\"twoFactorCode\"|\"sms_code\"|\"smsCode\"|\"pin_code\"|\"pinCode\"|\"one_time_password\"|\"mfa_code\")\\s*:\\s*[\"']?(\\d{4,8}|[A-Z0-9]{4,8})[\"']?",
+    "pattern": "(?:\"otp\"|\"OTP\"|\"verification_code\"|\"verificationCode\"|\"2fa_code\"|\"twoFactorCode\"|\"sms_code\"|\"smsCode\"|\"pin_code\"|\"pinCode\"|\"one_time_password\"|\"mfa_code\")\\s*:\\s*[\"']?(\\d{4,8}|(?=[A-Za-z0-9]{4,8}\\b)(?=[A-Za-z0-9]*\\d)[A-Za-z0-9]{4,8})[\"']?",
     "references": [
       "https://owasp.org/Top10/A07_2021-Identification_and_Authentication_Failures/"
     ],
