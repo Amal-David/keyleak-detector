@@ -286,31 +286,197 @@ export function isOwnAuthHeader(source) {
  * Browser features (translate, sync, extensions) store short-lived
  * JWTs in localStorage that are not user secrets.
  */
-const GOOGLE_OWNED_DOMAINS = [
+// First-party domains: when browsing these sites, ALL findings are
+// suppressed because any keys/tokens found are the provider's own
+// credentials used internally — not third-party leaks.
+const FIRST_PARTY_DOMAINS = [
+  // Google
   'google.com', 'google.co.', 'google.de', 'google.fr', 'google.co.uk',
-  'googleapis.com', 'gstatic.com', 'googlevideo.com',
-  'youtube.com', 'youtu.be', 'ytimg.com',
-  'gmail.com', 'googlemail.com',
-  'google-analytics.com', 'googletagmanager.com',
-  'firebase.google.com', 'firebaseio.com',
-  'googlesyndication.com', 'googleadservices.com',
-  'doubleclick.net', 'google.cloud',
-  'cloud.google.com', 'console.cloud.google.com',
-  'accounts.google.com', 'meet.google.com',
-  'docs.google.com', 'drive.google.com',
-  'maps.google.com', 'play.google.com',
-  'chromium.org', 'android.com',
+  'google.ca', 'google.com.au', 'google.co.jp', 'google.co.in',
+  'googleapis.com', 'gstatic.com', 'googlevideo.com', 'googleusercontent.com',
+  'youtube.com', 'youtu.be', 'ytimg.com', 'yt.be',
+  'gmail.com', 'googlemail.com', 'inbox.google.com',
+  'google-analytics.com', 'googletagmanager.com', 'googlesyndication.com',
+  'googleadservices.com', 'doubleclick.net', 'google.cloud',
+  'firebase.google.com', 'firebaseio.com', 'firebaseapp.com',
+  'chromium.org', 'android.com', 'withgoogle.com', 'googleblog.com',
+  'googledomains.com', 'registry.google', 'abc.xyz',
+  'waze.com', 'blogger.com', 'blogspot.com',
+
+  // Microsoft / Azure
+  'microsoft.com', 'microsoftonline.com', 'live.com', 'outlook.com',
+  'office.com', 'office365.com', 'sharepoint.com', 'onedrive.com',
+  'azure.com', 'azure.net', 'azurewebsites.net', 'azure-api.net',
+  'windows.net', 'windowsazure.com', 'msftauth.net', 'msauth.net',
+  'bing.com', 'msn.com', 'skype.com', 'teams.microsoft.com',
+  'visualstudio.com', 'dev.azure.com', 'github.com', 'github.io',
+  'npmjs.com', 'npmjs.org', 'linkedin.com', 'linkedin.cn',
+  'xbox.com', 'minecraft.net', 'mojang.com',
+  'copilot.microsoft.com', 'oai.azure.com',
+  'portal.azure.com', 'management.azure.com',
+
+  // Amazon / AWS
+  'amazon.com', 'amazon.co.uk', 'amazon.de', 'amazon.co.jp', 'amazon.in',
+  'amazonaws.com', 'aws.amazon.com', 'console.aws.amazon.com',
+  'cloudfront.net', 'elasticbeanstalk.com',
+  'awsstatic.com', 'awsapps.com',
+  'twitch.tv', 'twitchcdn.net', 'audible.com', 'alexa.com',
+  'primevideo.com', 'aboutamazon.com',
+
+  // Apple
+  'apple.com', 'icloud.com', 'me.com', 'mac.com',
+  'mzstatic.com', 'apple-dns.net', 'cdn-apple.com',
+  'developer.apple.com', 'apps.apple.com', 'testflight.apple.com',
+
+  // Meta / Facebook
+  'facebook.com', 'fb.com', 'fbcdn.net', 'fbsbx.com',
+  'instagram.com', 'cdninstagram.com',
+  'whatsapp.com', 'whatsapp.net',
+  'messenger.com', 'threads.net',
+  'meta.com', 'oculus.com', 'workplace.com',
+
+  // OpenAI
+  'openai.com', 'chatgpt.com', 'oaiusercontent.com',
+  'platform.openai.com', 'api.openai.com',
+
+  // Anthropic
+  'anthropic.com', 'claude.ai', 'console.anthropic.com',
+
+  // Stripe
+  'stripe.com', 'stripe.network', 'stripecdn.com',
+  'dashboard.stripe.com', 'js.stripe.com',
+
+  // Cloudflare
+  'cloudflare.com', 'cloudflareinsights.com', 'cloudflareworkers.com',
+  'cloudflarestream.com', 'cloudflare-dns.com',
+  'dash.cloudflare.com', 'one.dash.cloudflare.com',
+  'workers.dev', 'pages.dev',
+
+  // Vercel / Next.js
+  'vercel.com', 'vercel.app', 'nextjs.org', 'now.sh',
+
+  // Netlify
+  'netlify.com', 'netlify.app', 'netlifyglobal.com',
+
+  // Supabase
+  'supabase.com', 'supabase.co', 'supabase.io',
+
+  // Firebase (standalone)
+  'firebase.com', 'firebaseio.com', 'appspot.com',
+
+  // Datadog / Monitoring
+  'datadoghq.com', 'datadoghq.eu', 'ddog-gov.com',
+
+  // Sentry
+  'sentry.io', 'sentry-cdn.com',
+
+  // Atlassian
+  'atlassian.com', 'atlassian.net', 'bitbucket.org', 'trello.com',
+  'jira.com', 'confluence.com', 'statuspage.io',
+
+  // Salesforce
+  'salesforce.com', 'force.com', 'sfdc.net', 'lightning.force.com',
+  'heroku.com', 'herokuapp.com',
+
+  // Twilio / SendGrid
+  'twilio.com', 'sendgrid.com', 'sendgrid.net',
+
+  // Slack
+  'slack.com', 'slack-edge.com', 'slack-msgs.com',
+
+  // HubSpot
+  'hubspot.com', 'hubapi.com', 'hs-analytics.net', 'hsforms.net',
+
+  // Notion
+  'notion.so', 'notion.site', 'notion-static.com',
+
+  // Figma
+  'figma.com', 'figmacdn.com',
+
+  // GitLab
+  'gitlab.com', 'gitlab.io',
+
+  // DigitalOcean
+  'digitalocean.com', 'digitaloceanspaces.com',
+
+  // MongoDB
+  'mongodb.com', 'mongodb.net',
+
+  // Redis
+  'redis.io', 'redis.com', 'redislabs.com',
+
+  // PlanetScale
+  'planetscale.com',
+
+  // Neon
+  'neon.tech',
+
+  // Auth providers
+  'auth0.com', 'okta.com', 'clerk.com', 'clerk.dev',
+  'stytch.com', 'kinde.com', 'descope.com',
+
+  // Payment providers
+  'paypal.com', 'braintreegateway.com', 'braintree-api.com',
+  'razorpay.com', 'chargebee.com', 'recurly.com', 'paddle.com',
+  'gocardless.com', 'adyen.com', 'mollie.com',
+
+  // CI/CD
+  'circleci.com', 'travis-ci.com', 'travis-ci.org',
+  'semaphoreci.com', 'buildkite.com',
+
+  // Misc major platforms
+  'twitter.com', 'x.com', 't.co',
+  'reddit.com', 'redditstatic.com',
+  'discord.com', 'discord.gg', 'discordapp.com',
+  'spotify.com', 'scdn.co',
+  'zoom.us', 'zoom.com',
+  'dropbox.com', 'dropboxapi.com',
+  'box.com', 'boxcdn.net',
+  'airtable.com',
+  'linear.app',
+  'retool.com',
+  'vercel.com',
+  'render.com',
+  'fly.io',
+  'railway.app',
+  'deno.com', 'deno.land',
+  'bun.sh',
+  'docker.com', 'docker.io',
+  'hashicorp.com', 'terraform.io', 'vagrantup.com',
+  'pagerduty.com',
+  'launchdarkly.com',
+  'segment.com', 'segment.io',
+  'mixpanel.com',
+  'amplitude.com',
+  'heap.io', 'heapanalytics.com',
+  'fullstory.com',
+  'hotjar.com',
+  'intercom.com', 'intercom.io',
+  'zendesk.com', 'zdassets.com',
+  'freshdesk.com', 'freshworks.com',
+  'crisp.chat',
+  'tawk.to',
+  'hubspot.com',
+  'mailchimp.com', 'mailchimp.co',
+  'sendgrid.com',
+  'postmarkapp.com',
+  'mailtrap.io',
+  'resend.com',
+  'plausible.io',
+  'pirsch.io',
+  'fathom.com',
+  'simpleanalytics.com',
 ];
 
 /**
- * Check if AIza keys should be suppressed because the user is on
- * a Google-owned domain. Google's own keys on their own sites are
- * expected — not leaked third-party credentials.
+ * Check if the user is browsing a first-party domain where findings
+ * should be suppressed. A provider's own keys on their own pages are
+ * not leaked credentials.
  */
-export function isGoogleOwnedPage(pageUrl) {
+export function isFirstPartyDomain(pageUrl) {
   if (!pageUrl) return false;
   const lower = String(pageUrl).toLowerCase();
-  return GOOGLE_OWNED_DOMAINS.some(d => lower.includes(d));
+  return FIRST_PARTY_DOMAINS.some(d => lower.includes(d));
 }
 
 export function isBrowserServiceToken(source) {

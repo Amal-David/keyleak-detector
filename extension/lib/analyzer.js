@@ -4,7 +4,7 @@
  */
 
 import { COMPILED_PATTERNS } from './patterns.js';
-import { isFalsePositive, isVendorScript, isCloudStorageSignedUrl, isAzureSasToken, isBrowserInternal, isInfraHeader, isOwnAuthHeader, isBrowserServiceToken, isGoogleOwnedPage } from './false-positives.js';
+import { isFalsePositive, isVendorScript, isCloudStorageSignedUrl, isAzureSasToken, isBrowserInternal, isInfraHeader, isOwnAuthHeader, isBrowserServiceToken, isFirstPartyDomain } from './false-positives.js';
 import { normalizeFinding, redactSnippet } from './reporting.js';
 
 /**
@@ -19,6 +19,9 @@ export function analyzeContent(content, source = '', meta = {}) {
 
   // Skip obviously non-secret content types
   if (content.length > 5 * 1024 * 1024) return findings; // >5MB, skip
+
+  // Skip first-party domains (Google on google.com, AWS on aws.amazon.com, etc.)
+  if (isFirstPartyDomain(meta.url || '')) return findings;
 
   // Skip browser-internal URLs (chrome-extension://, devtools://, etc.)
   if (isBrowserInternal(source) || isBrowserInternal(meta.url || '')) return findings;
@@ -83,9 +86,8 @@ export function analyzeContent(content, source = '', meta = {}) {
         ...meta,
       });
 
-      // AIza key classification: skip on Google domains, downgrade for Maps/Firebase
+      // AIza key classification: downgrade for Maps/Firebase context
       if ((name === 'gemini_api_key' || entry.finding_type === 'gemini_api_key') && value.startsWith('AIza')) {
-        if (isGoogleOwnedPage(meta.url || '') || isGoogleOwnedPage(source)) continue;
         const contentLower = content.toLowerCase();
         const sourceLower = source.toLowerCase();
         const MAPS_MARKERS = [
