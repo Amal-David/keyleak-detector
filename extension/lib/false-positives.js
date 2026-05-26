@@ -149,6 +149,30 @@ const VENDOR_SCRIPT_DOMAINS = [
   'js.braintreegateway.com',
   'checkout.razorpay.com',
   'cdn.paddle.com',
+  // Public CDNs serving open-source libraries
+  'cdn.jsdelivr.net',
+  'unpkg.com',
+  'cdnjs.cloudflare.com',
+  'esm.sh',
+  'esm.run',
+  'cdn.skypack.dev',
+  'ga.jspm.io',
+  'jspm.dev',
+  'deno.land',
+  // Framework-specific CDNs
+  'ajax.googleapis.com/ajax/libs',
+  'code.jquery.com',
+  'cdn.tailwindcss.com',
+  'cdn.shopify.com',
+  // Error tracking / monitoring
+  'js.bugsnag.com',
+  'cdn.rollbar.com',
+  'browser.sentry-cdn.com',
+  // Chat / support widgets
+  'cdn.zendesk.com',
+  'embed.tawk.to',
+  'static.zdassets.com',
+  'widget.crisp.chat',
 ];
 
 /**
