@@ -209,6 +209,7 @@ const VENDOR_SCRIPT_DOMAINS = [
   'embed.tawk.to',
   'static.zdassets.com',
   'widget.crisp.chat',
+  'client.crisp.chat',
   // HubSpot
   'js.hscollectedforms.net',
   'js.hsforms.net',
