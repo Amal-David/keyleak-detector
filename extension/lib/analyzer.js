@@ -83,15 +83,18 @@ export function analyzeContent(content, source = '', meta = {}) {
       // AIza key classification: Maps/Firebase client key vs Gemini API key
       if ((name === 'gemini_api_key' || entry.finding_type === 'gemini_api_key') && value.startsWith('AIza')) {
         const contentLower = content.toLowerCase();
+        const sourceLower = source.toLowerCase();
         const MAPS_MARKERS = [
           'maps.googleapis.com', 'googleapis.com/maps', 'google.maps',
-          'firebaseconfig', 'firebaseapp', 'firebase.google.com',
+          'firebaseconfig', 'firebaseapp', 'firebase.google.com', 'firebase',
           'google-analytics.com', 'googletagmanager.com',
           'gapi.client', 'accounts.google.com',
           'gtag(', 'ga(', 'googleanalyticsobject',
           'youtube.googleapis.com', 'maps.google.com',
+          '@firebase/', 'firebase/performance', 'firebase/auth',
+          'firebase/firestore', 'firebase/storage', 'firebase/messaging',
         ];
-        if (MAPS_MARKERS.some(m => contentLower.includes(m))) {
+        if (MAPS_MARKERS.some(m => contentLower.includes(m) || sourceLower.includes(m))) {
           finding.type = 'google_client_api_key';
           finding.severity = 'medium';
           finding.risk_reason = 'Google Maps/Firebase client API key (referrer-restricted, expected in browser bundles).';

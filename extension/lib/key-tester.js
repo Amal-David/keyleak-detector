@@ -46,9 +46,10 @@ async function testGemini(key) {
   const r = await probe(`https://generativelanguage.googleapis.com/v1beta/models?key=${encodeURIComponent(key)}`);
   if (r.ok) {
     const count = r.body?.models?.length || 0;
-    return { status: 'valid', detail: `Key is active. ${count} models accessible.` };
+    return { status: 'valid', detail: `Key is active for Gemini AI. ${count} models accessible.` };
   }
-  if (r.status === 400 || r.status === 403) return { status: 'invalid', detail: `HTTP ${r.status} — key rejected or restricted.` };
+  if (r.status === 403) return { status: 'invalid', detail: 'HTTP 403 — not a Gemini key (likely a restricted Firebase/Maps key).' };
+  if (r.status === 400) return { status: 'invalid', detail: 'HTTP 400 — key format rejected.' };
   return { status: 'invalid', detail: `HTTP ${r.status}` };
 }
 
