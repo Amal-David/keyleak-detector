@@ -164,9 +164,34 @@ function renderFindings(findings) {
     return;
   }
 
-  content.innerHTML = filtered.map(f => {
+  // Group findings with identical key values
+  const groups = new Map();
+  for (const f of filtered) {
+    const key = `${f.type}:${f.evidence?.redacted_value || f.redacted_value || ''}`;
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(f);
+  }
+
+  content.innerHTML = Array.from(groups.values()).map(group => {
+    const f = group[0]; // Representative finding (highest severity first since findings are sorted)
     const evidence = f.evidence || {};
     const value = revealRaw && f.raw_value ? f.raw_value : evidence.redacted_value || f.redacted_value || '[redacted]';
+
+    let locationsHtml = '';
+    if (group.length > 1) {
+      const locationItems = group.map(g => {
+        const src = g.evidence?.source || g.source || 'unknown';
+        const url = g.url || g.evidence?.request_url || '';
+        const isClickable = url && url.startsWith('http');
+        return `<li>${isClickable ? `<a class="source-link" href="#" data-url="${escapeHtml(url)}" data-source="${escapeHtml(src)}">${escapeHtml(src)}</a>` : escapeHtml(src)}</li>`;
+      }).join('');
+      locationsHtml = `<div class="finding-locations"><strong>Found in ${group.length} locations:</strong><ul>${locationItems}</ul></div>`;
+    }
+
+    const sourceDisplay = group.length === 1
+      ? `<a class="source-link" href="#" data-url="${escapeHtml(f.url || evidence.request_url || '')}" data-source="${escapeHtml(evidence.source || f.source)}">${escapeHtml(evidence.source || f.source)}</a>`
+      : `${group.length} locations`;
+
     return `
       <div class="finding" data-severity="${escapeHtml(f.severity)}">
         <div class="finding-header">
@@ -174,7 +199,8 @@ function renderFindings(findings) {
           <span class="finding-type">${escapeHtml(formatType(f.type))}</span>
         </div>
         <div class="finding-value">${escapeHtml(value)}</div>
-        <div class="finding-detail"><strong>source:</strong> <a class="source-link" href="#" data-url="${escapeHtml(f.url || evidence.request_url || '')}" data-source="${escapeHtml(evidence.source || f.source)}">${escapeHtml(evidence.source || f.source)}</a></div>
+        <div class="finding-detail"><strong>source:</strong> ${sourceDisplay}</div>
+        ${locationsHtml}
         <div class="finding-detail"><strong>pack:</strong> ${escapeHtml(f.category || 'unknown')}</div>
         <div class="finding-detail"><strong>confidence:</strong> ${escapeHtml(String(f.confidence || 'n/a'))} | <strong>status:</strong> ${escapeHtml(f.validation_status || 'detected')}</div>
         <div class="finding-detail">${escapeHtml(f.risk_reason || '')}</div>

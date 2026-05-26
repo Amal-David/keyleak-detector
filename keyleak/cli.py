@@ -195,6 +195,28 @@ def main(argv: Optional[List[str]] = None) -> int:
             return 1
         return _emit_report(report, args)
 
+    if args.command == "site-scan":
+        try:
+            from .site_scanner import scan_site
+        except ImportError as exc:
+            print(f"site-scan requires Playwright: {exc}", file=sys.stderr)
+            return 1
+        try:
+            extra_tables = _split_optional_csv(args.baas_tables)
+            report = scan_site(
+                args.domain,
+                depth=int(args.depth),
+                max_pages=int(args.max_pages),
+                headless=not args.headed,
+                baas_validate=args.baas_validate,
+                baas_tables=extra_tables,
+                scan_budget_seconds=int(args.scan_budget),
+            )
+        except Exception as exc:
+            print(f"site-scan failed: {exc}", file=sys.stderr)
+            return 1
+        return _emit_report(report, args)
+
     if args.command == "disclose":
         from .disclose import cli as disclose_cli
 
@@ -332,6 +354,22 @@ def build_parser() -> argparse.ArgumentParser:
         help="Run env checks (Python, Playwright, mitmproxy, Node, network, allowlist).",
     )
     doctor.add_argument("--json", action="store_true")
+
+    site_scan = subparsers.add_parser(
+        "site-scan",
+        help="Discover subdomains, crawl pages, and scan an entire site for secrets and BaaS vulnerabilities.",
+    )
+    site_scan.add_argument("domain", help="Domain or URL to scan (e.g., example.com)")
+    site_scan.add_argument("--depth", default="1", help="Link crawl depth per host (default: 1).")
+    site_scan.add_argument("--max-pages", default="20", help="Maximum pages to scan (default: 20).")
+    site_scan.add_argument("--scan-budget", default="30", help="Per-page timeout in seconds.")
+    site_scan.add_argument("--headed", action="store_true", help="Show browser windows.")
+    site_scan.add_argument("--baas-validate", action="store_true", help="Enable active BaaS validation probes.")
+    site_scan.add_argument("--baas-tables", default="", help="Extra table names to probe.")
+    site_scan.add_argument("--fail-on", default="high", choices=["low", "medium", "high", "critical"])
+    site_scan.add_argument("--baseline", default="")
+    site_scan.add_argument("--allowlist", default="")
+    _add_format_flags(site_scan)
 
     demo = subparsers.add_parser(
         "demo",

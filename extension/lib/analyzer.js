@@ -60,7 +60,7 @@ export function analyzeContent(content, source = '', meta = {}) {
       if (start > 0) context = '...' + context;
       if (end < content.length) context = context + '...';
 
-      findings.push(normalizeFinding({
+      const finding = normalizeFinding({
         type: entry.finding_type || name,
         raw_value: value.slice(0, 1000),
         severity: entry.severity,
@@ -75,7 +75,28 @@ export function analyzeContent(content, source = '', meta = {}) {
         context: redactSnippet(context, value),
         timestamp: Date.now(),
         ...meta,
-      }));
+      });
+
+      // AIza key classification: Maps/Firebase client key vs Gemini API key
+      if ((name === 'gemini_api_key' || entry.finding_type === 'gemini_api_key') && value.startsWith('AIza')) {
+        const contentLower = content.toLowerCase();
+        const MAPS_MARKERS = [
+          'maps.googleapis.com', 'googleapis.com/maps', 'google.maps',
+          'firebaseconfig', 'firebaseapp', 'firebase.google.com',
+          'google-analytics.com', 'googletagmanager.com',
+          'gapi.client', 'accounts.google.com',
+          'gtag(', 'ga(', 'googleanalyticsobject',
+          'youtube.googleapis.com', 'maps.google.com',
+        ];
+        if (MAPS_MARKERS.some(m => contentLower.includes(m))) {
+          finding.type = 'google_client_api_key';
+          finding.severity = 'medium';
+          finding.risk_reason = 'Google Maps/Firebase client API key (referrer-restricted, expected in browser bundles).';
+          finding.remediation = 'Verify the key has referrer restrictions set in Google Cloud Console. Client-side Google API keys are expected but should be locked to your domain.';
+        }
+      }
+
+      findings.push(finding);
 
       // Cap at 50 findings per content block to prevent flooding
       if (findings.length >= 50) return findings;
