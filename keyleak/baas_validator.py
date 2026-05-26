@@ -106,14 +106,14 @@ def _default_prober(method: str, url: str, headers: Dict[str, str], body: Option
     if body is not None and method.upper() in ("POST", "PUT", "PATCH"):
         kwargs["data"] = body
     resp = _requests.request(method, url, **kwargs)
-    body: Any = None
+    response_body: Any = None
     try:
-        body = resp.json()
+        response_body = resp.json()
     except Exception:
-        body = resp.text[:500] if resp.text else None
+        response_body = resp.text[:500] if resp.text else None
     return {
         "status_code": resp.status_code,
-        "body": body,
+        "body": response_body,
         "headers": {k.lower(): v for k, v in resp.headers.items()},
     }
 

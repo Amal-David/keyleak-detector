@@ -4,7 +4,7 @@
  */
 
 import { COMPILED_PATTERNS } from './patterns.js';
-import { isFalsePositive, isVendorScript, isCloudStorageSignedUrl, isAzureSasToken } from './false-positives.js';
+import { isFalsePositive, isVendorScript, isCloudStorageSignedUrl, isAzureSasToken, isBrowserInternal } from './false-positives.js';
 import { normalizeFinding, redactSnippet } from './reporting.js';
 
 /**
@@ -19,6 +19,9 @@ export function analyzeContent(content, source = '', meta = {}) {
 
   // Skip obviously non-secret content types
   if (content.length > 5 * 1024 * 1024) return findings; // >5MB, skip
+
+  // Skip browser-internal URLs (chrome-extension://, devtools://, etc.)
+  if (isBrowserInternal(source) || isBrowserInternal(meta.url || '')) return findings;
 
   // Skip known third-party vendor scripts (Google Analytics, PostHog, etc.)
   if (isVendorScript(source) || isVendorScript(meta.url || '')) return findings;

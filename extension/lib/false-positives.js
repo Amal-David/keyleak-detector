@@ -103,7 +103,43 @@ export function isFalsePositive(value) {
     if ([0, 10, 127, 169, 172, 192, 224, 240, 255].includes(first)) return true;
   }
 
+  // Base64-encoded short values (common in minified JS, not secrets)
+  // Exclude values with path separators (like /users/123456)
+  if (/^[A-Za-z0-9+/]{10,}={0,2}$/.test(value) && value.length < 20 && !value.includes('/')) return true;
+
+  // Version strings and semver
+  if (/^\d+\.\d+\.\d+/.test(value)) return true;
+
+  // UUIDs (not secrets — identifiers)
+  if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value)) return true;
+
+  // Package names / npm scoped packages
+  if (/^@[a-z0-9-]+\/[a-z0-9-]+$/.test(lower)) return true;
+
+  // Common minified JS operator sequences matched by broad detectors
+  if (/^(?:delete|select|update|insert)\s+[a-z]\.[_$a-z]/i.test(value) && value.length < 40) return true;
+
+  // JWT-shaped strings that are actually just base64 config blobs (too short to be real JWTs)
+  if (/^eyJ/.test(value) && value.length < 50) return true;
+
   return false;
+}
+
+/**
+ * Check if a finding source is a browser-internal or extension-internal URL.
+ * @param {string} source
+ * @returns {boolean}
+ */
+export function isBrowserInternal(source) {
+  if (!source) return false;
+  const s = String(source).toLowerCase();
+  return s.startsWith('chrome-extension://') ||
+         s.startsWith('chrome://') ||
+         s.startsWith('moz-extension://') ||
+         s.startsWith('about:') ||
+         s.startsWith('edge://') ||
+         s.startsWith('brave://') ||
+         s.includes('devtools://');
 }
 
 const VENDOR_SCRIPT_DOMAINS = [

@@ -259,17 +259,23 @@ class RPCTests(unittest.TestCase):
 
     def test_rpc_surfaced_as_lead(self):
         """RPCs are listed as leads without executing them (no POST probe)."""
-        prober = _mock_prober({
+        calls: List = []
+        base = _mock_prober({
             "/rest/v1/": {"status_code": 200, "body": None, "headers": {}},
             "/storage/v1/bucket": {"status_code": 403, "body": None, "headers": {}},
             "/auth/v1/settings": {"status_code": 401, "body": None, "headers": {}},
         })
-        result = validate_baas_config(self._config(), prober=prober)
+        def tracking_prober(method, url, headers, body=None):
+            calls.append((method, url))
+            return base(method, url, headers)
+
+        result = validate_baas_config(self._config(), prober=tracking_prober)
         assert len(result.callable_rpcs) == 1
         rpc_findings = [f for f in result.findings if f.type == "baas_open_rpc"]
         assert len(rpc_findings) == 1
         assert rpc_findings[0].validation_status == "lead"
         assert rpc_findings[0].confidence < 0.8
+        assert not any(m == "POST" and "/rpc/" in u for m, u in calls), "RPC should not be probed via POST"
 
 
 class CORSTests(unittest.TestCase):
