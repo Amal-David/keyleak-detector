@@ -1,8 +1,8 @@
 [tool.poetry]
 name = "keyleak-detector"
-version = "0.1.0"
-description = "Web app that scans websites for potential API keys, secrets, and sensitive information leaks."
-authors = ["Amal David <amal@example.com>"]
+version = "0.5.0"
+description = "Runtime leak detector for modern web apps — finds exposed API keys, BaaS misconfigurations (Supabase/Firebase RLS), and secrets in JS bundles, with a Chrome extension for real-time detection."
+authors = ["Amal David <amal@utopianlabs.co>"]
 license = "MIT"
 readme = "README.md"
 
@@ -17,6 +17,7 @@ mitmproxy = "9.0.1"
 playwright = "1.55.0"
 PyJWT = "2.10.1"
 tldextract = "5.1.2"
+PyYAML = "^6.0"
 
 [tool.poetry.group.dev.dependencies]
 # Add dev dependencies here if needed

@@ -3,43 +3,90 @@
 [![GitHub](https://img.shields.io/badge/GitHub-Amal--David%2Fkeyleak--detector-blue?logo=github)](https://github.com/Amal-David/keyleak-detector)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/Python-3.9%2B-blue)](https://www.python.org/)
+[![Chrome Extension](https://img.shields.io/badge/Chrome-Extension-4285F4?logo=googlechrome)](extension/)
+[![Version](https://img.shields.io/badge/version-0.5.0-orange)](https://github.com/Amal-David/keyleak-detector/releases)
 
-KeyLeak Detector is a local-first runtime leak detector for modern web apps.
+Runtime leak detector for modern web apps. Finds exposed API keys, **validates BaaS misconfigurations** (Supabase RLS, Firebase Security Rules), and catches secrets in JavaScript bundles -- with a Chrome extension for real-time detection.
 
-It catches secrets and risky exposures that only show up after your app runs: JavaScript bundles, API responses, request/response headers, DOM data attributes, authenticated pages, exposed files, subdomains, source maps, MCP/agent configs, and AI provider keys.
+## What Makes This Different
 
-The default trust model is simple: run it locally, scan systems you own, and keep test credentials on your machine.
+Static scanners find hardcoded secrets in source code. KeyLeak finds the ones that only appear at runtime -- and then **proves they're exploitable**.
 
-## Why This Exists
+- **BaaS vulnerability scanner**: Detects Supabase/Firebase/Appwrite config in minified JS bundles, extracts table names, and actively probes whether Row-Level Security is enforced. A Supabase anon key is harmless if RLS works. KeyLeak tests whether it does.
+- **Chrome extension**: Detects leaked keys in real-time as you browse. TEST button validates whether a found key is still active (supports 14 providers). JWT decoder surfaces suspicious claims (service_role, admin flags, broad scopes).
+- **Site scanner**: Discovers subdomains, crawls pages, scans everything. One command for a full site audit.
+- **200+ first-party domain suppression**: No false positives when browsing Google, AWS, Azure, GitHub, Stripe, etc.
 
-Static scanners are essential, but they miss leaks that appear at runtime:
+## Quick Start
 
-- A frontend bundle contains an AI provider key after build-time injection.
-- An API response includes a token only after login.
-- A preview deploy exposes `.env`, `.git`, backups, source maps, or debug bundles.
-- A generated app ships object IDs and weak authorization paths.
-- Agent/MCP config files collect powerful tool tokens in local project folders.
+### Chrome Extension (recommended for daily use)
 
-KeyLeak is meant to answer one launch question quickly:
-
-```text
-Can I ship this preview without leaking something obvious and expensive?
+```bash
+# Load the extension in Chrome
+# 1. Open chrome://extensions
+# 2. Enable "Developer mode"
+# 3. Click "Load unpacked" → select the extension/ folder
 ```
 
-## What Changed
+Browse any site. The extension icon shows a badge count for findings. Click to see details, TEST keys, and view remediation.
 
-The current `main` branch includes the relaunch work that moved KeyLeak beyond a single website scanner:
+### CLI Scanner
 
-- A local-first product story for runtime leaks in AI-built and fast-shipped web apps.
-- A normalized finding/report model with verdict, proof, fix guidance, confidence, and re-test commands.
-- A CLI with `keyleak scan` for running web apps and `keyleak local` for local files/configs.
-- JSON, Markdown, and SARIF output for local use, CI gates, and security review workflows.
-- Baseline and allowlist support so teams can suppress known findings and fail only on new risk.
-- A deliberately vulnerable fixture in `fixtures/vulnerable-demo` for safe demos and tests.
-- A Chrome extension in `extension/` for passive local browser monitoring.
-- New local detectors for AI provider keys, MCP/agent configs, GraphQL hints, hidden prompt-injection text, source maps, CI files, Docker files, logs, and classic secrets.
-- Contributor docs, detector authoring docs, issue templates, PR template, and security model docs.
-- UI layout cleanup for the web scanner results, filters, findings, and attack vector sections.
+```bash
+# Install
+poetry install && poetry run playwright install chromium
+
+# Scan a single page
+keyleak browser-scan https://your-app.vercel.app --html > report.html
+
+# Scan with BaaS validation (tests Supabase RLS, Firebase rules)
+keyleak browser-scan https://your-app.vercel.app --baas-validate --html > report.html
+
+# Scan an entire site (subdomain discovery + page crawling)
+keyleak site-scan example.com --depth 2 --baas-validate --html > report.html
+
+# Scan local files
+keyleak local . --fail-on high
+```
+
+### HTML Report
+
+The `--html` flag generates a self-contained dark-theme vulnerability report:
+
+![KeyLeak BaaS Report](report.html)
+
+## What It Detects
+
+| Category | What | How |
+|---|---|---|
+| **BaaS misconfig** | Open Supabase tables, missing RLS, public storage buckets, callable RPCs | Active validation -- probes the REST API with only the anon key |
+| **BaaS providers** | Supabase, Firebase, Appwrite, PocketBase | Config extraction from minified JS bundles |
+| **API keys** | OpenAI, Anthropic, Gemini, Stripe, GitHub, AWS, and 20+ more | Regex detection + live TEST validation |
+| **JWT analysis** | service_role exposure, admin flags, broad scopes, long expiry | Decode + claims analysis (no verification needed) |
+| **Client-side auth** | `isAdmin === true` checks in browser JS | Pattern detection in bundles |
+| **Write access** | Tables accepting INSERT/UPDATE without auth | `Prefer: tx=rollback` probing (never creates data) |
+| **Auth config** | Missing email confirmation, exposed auth settings | Supabase auth endpoint probing |
+| **Supply chain** | npm lifecycle hooks, Git-ref optionalDeps, Pwn Request patterns | AST + fingerprint detection |
+| **Local files** | `.env`, MCP configs, CI workflows, Docker files, source maps | `keyleak local` scanner |
+
+## Chrome Extension Features
+
+- **Real-time BaaS detection**: Intercepts Supabase/Firebase API requests and probes RLS live
+- **TEST button**: Validates keys against 14 providers (Gemini, OpenAI, Anthropic, GitHub, Stripe, Groq, etc.)
+- **JWT decoder**: Click TEST on any JWT to see decoded claims with severity flags
+- **Finding grouping**: Same key in multiple scripts = one card with clickable source URLs
+- **AIza classification**: Distinguishes Google Maps keys (expected) from Gemini AI keys (leaked)
+- **87 vendor CDN suppression**: No false positives from Google Analytics, PostHog, Segment, etc.
+- **200+ first-party domains**: Google, Microsoft, AWS, Apple, Meta, Anthropic, Stripe -- their own keys on their own sites are never flagged
+
+## v0.5.0 -- What's New
+
+- **BaaS vulnerability scanner** with active validation (Supabase, Firebase, Appwrite, PocketBase)
+- **Chrome extension** with real-time detection, TEST button, and JWT analysis
+- **Site scanner CLI** (`keyleak site-scan`) with subdomain discovery
+- **HTML report** output (`--html`)
+- **20 new `baas` pack detectors**
+- **Comprehensive false positive suppression** (200+ first-party domains, 87 vendor CDNs, cloud storage URLs, infra headers)
 
 ## The Delta Four Result
 
@@ -66,10 +113,12 @@ Re-test: keyleak scan https://preview.example.com
 | Runtime JS/API response secrets | Strong | Browser + proxy capture scans scripts, headers, URLs, and responses. |
 | AI/LLM provider keys | Strong | OpenAI, Anthropic, Gemini, OpenRouter, Groq, Hugging Face, and more. |
 | Cloud/SaaS/PAT/webhooks | Strong | AWS, GitHub, Stripe, Slack, SendGrid, PyPI, database URLs, private keys. |
-| Auth-only leaks | Partial | Authenticated bearer/cookie scan support exists; two-user diff is planned. |
-| IDOR/BOLA hints | Early | Flags obvious direct object references and auth mismatch signals. |
+| Auth-only leaks | Partial | Authenticated bearer/cookie scan support exists; two-user comparison is available with explicit second-user credentials. |
+| SQLi/XSS/auth bypass leads | Opt-in | `appsec` pack labels these as leads until exploit validation exists. |
+| IDOR/BOLA hints | Improved | Flags direct object references and can validate with two explicit user contexts. |
 | Attack surface | Partial | Security headers, TLS, exposed files, admin paths, subdomain enumeration. |
 | Local config leaks | New | `keyleak local` scans `.env`, MCP, CI, Docker, source maps, and logs. |
+| Correctness/housekeeping | Opt-in | `correctness` and `housekeeping` packs catch N+1, regressions, off-by-one/date/config leads, missing tests, dead code, and stale docs. |
 | Source maps/debug bundles | New | Local scanner detects source map content and provider keys. |
 | GraphQL/LLM/agent hints | Early | Local detectors catch GraphQL introspection and prompt-injection-style text. |
 
@@ -135,6 +184,14 @@ Limit the scan to specific file families:
 poetry run keyleak local . --include env,mcp,sourcemaps
 ```
 
+Detector packs control the kind of failure patterns to look for. CLI/web default to `leak`; the extension default uses `leak,appsec,access-control`.
+
+```bash
+poetry run keyleak local . --packs leak,appsec,access-control --json
+poetry run keyleak local . --launch-profile full --markdown
+poetry run keyleak local . --launch-profile ci --fail-on high
+```
+
 Exit codes are designed for automation: `0` means the selected threshold passed, `1` means the command failed, and `2` means findings met `--fail-on`.
 
 ### 4. Scan A Running Web App From The CLI
@@ -183,6 +240,17 @@ poetry run keyleak scan https://preview.example.com \
   --cookie "session=throwaway-session"
 ```
 
+For access-control checks, provide a second throwaway user explicitly. KeyLeak will compare object-looking URLs as user A and user B and mark same-access evidence as validated:
+
+```bash
+poetry run keyleak scan https://preview.example.com/users/123456 \
+  --profile authenticated \
+  --launch-profile bug-bounty \
+  --packs access-control \
+  --bearer "$USER_A_TOKEN" \
+  --bearer-b "$USER_B_TOKEN"
+```
+
 ### 6. Generate Reports For CI Or Review
 
 Use JSON for baselines, SARIF for code scanning systems, and Markdown for human review.
@@ -206,6 +274,26 @@ Suppress known findings with a previous JSON report or allowlist:
 poetry run keyleak local . --baseline keyleak-report.json
 poetry run keyleak local . --allowlist keyleak-allowlist.txt
 ```
+
+The default launch profile is `launch-gate`, which blocks on high and critical findings while keeping lower-severity hardening notes visible for review:
+
+```bash
+poetry run keyleak local . --launch-profile launch-gate --fail-on high --json > keyleak-report.json
+```
+
+The repository includes a GitHub Actions launch gate at `.github/workflows/keyleak-launch-gate.yml` that runs the local scanner and uploads a JSON report artifact.
+
+### 7. Use With Claude Code / Codex
+
+The repo ships an agent skill at `.claude/skills/keyleak-verify/SKILL.md`. In any Claude Code session inside this repo, prompts like:
+
+```text
+Is this build safe to ship?
+Run a launch-gate check on the preview URL https://preview.example.com.
+Scan the current branch for leaked secrets before I deploy.
+```
+
+trigger the skill. The agent then chooses between `keyleak local` and `keyleak scan`, picks the right `--launch-profile` and `--fail-on` threshold, interprets the verdict JSON, and reports back with `BLOCK SHIP` / `REVIEW` / `SAFE TO SHIP` plus the top blocking findings and a re-test command. The skill respects the local-first trust model: it only scans systems you own, never auto-suppresses findings, and never echoes raw secret values back.
 
 ## Safe Demo
 
@@ -271,14 +359,27 @@ keyleak-detector/extension
 The popup shows:
 
 - a badge count for findings on the current tab
-- severity filters for `HIGH`, `MED`, and `LOW`
-- scan activity stats for requests, response bodies, scripts, data attributes, and meta tags
-- redacted finding values and sources
+- a launch verdict: `SAFE TO SHIP`, `REVIEW`, or `BLOCK SHIP`
+- severity filters for `CRIT`, `HIGH`, `MED`, and `LOW`
+- scan activity stats for headers, fetch/XHR bodies, external scripts, source maps, storage, WebSocket/SSE messages, data attributes, and meta tags
+- redacted proof, detector IDs, confidence, validation status, and fix guidance
+- report copy actions for redacted JSON and Markdown
+- per-finding suppression by stable finding ID for known launch-gate noise
+- a `RUN FULL SCAN` action that calls the local KeyLeak web scanner at `http://127.0.0.1:5002` without forwarding browser cookies or bearer tokens
 - a `CLEAR` button to reset findings for the current tab
 
 ### Use The DevTools Panel
 
-Open Chrome DevTools on a page, then select the `Secrets` panel. It shows a wider table with severity, type, value, source, and context for the inspected tab.
+Open Chrome DevTools on a page, then select the `Secrets` panel. It shows a wider launch-gate table and enables DevTools network body capture while the panel is open, which improves coverage for parser-loaded bundles and source maps.
+
+### Learn And Reference Tabs
+
+Both the popup and the DevTools panel include a `Findings` tab and a `Reference` tab:
+
+- Click `LEARN` on any finding to inline-expand a panel explaining what the detector is, why it matters, the canonical attack scenario, the fix, and external references (OWASP, CWE, vendor docs).
+- Switch to `Reference` to browse every detector grouped by pack (`leak`, `appsec`, `access-control`, `correctness`, `housekeeping`). The search box filters by detector ID, description, remediation, or category. Use this as a glossary even when there are no findings.
+
+Detector educational content is sourced from `keyleak/detectors.py` (`description`, `remediation`, `references`, optional `attack_scenario`) and regenerated into `extension/lib/detector-info.js` by `scripts/generate_extension_patterns.py`. To add or improve an explanation, edit the detector and re-run the script.
 
 ### Extension Permissions
 
@@ -304,6 +405,7 @@ Each normalized finding includes:
 - `severity`
 - `confidence`
 - `detector_id`
+- `category`
 - `source`
 - `evidence`
 - `redacted_value`
@@ -311,6 +413,8 @@ Each normalized finding includes:
 - `remediation`
 - `references`
 - `validation_status`
+
+Reports also include `packs` and `pack_summary`, so web, CLI, CI, and extension exports can group findings by heatmap category.
 
 Baselines and allowlists are intentionally simple. A baseline can be a previous KeyLeak JSON report; those finding IDs/signatures are suppressed so CI fails only on new findings. An allowlist can be JSON (`ids`, `detector_ids`, `types`, `source_contains`) or a line file using entries like `id:finding_...`, `detector:local:openai_api_key`, `type:source_map_reference`, or `source:fixtures/vulnerable-demo`.
 
@@ -336,6 +440,7 @@ Useful PRs are very welcome. The best contribution lanes are:
 - add report exporters
 - improve CLI profiles and CI behavior
 - add MCP/agent/LLM leak detectors
+- add detector-pack fixtures and lower-noise validators for correctness and housekeeping leads
 
 Start with [CONTRIBUTING.md](CONTRIBUTING.md) and [docs/DETECTOR_AUTHORING.md](docs/DETECTOR_AUTHORING.md).
 
@@ -343,10 +448,8 @@ Start with [CONTRIBUTING.md](CONTRIBUTING.md) and [docs/DETECTOR_AUTHORING.md](d
 
 - Shared scanner core for web UI, CLI, and extension.
 - More detector fixtures and report tests.
-- GitHub Action and CI mode.
-- Two-user authenticated comparison for IDOR/BOLA.
+- More validated appsec checks beyond lead detection.
 - GraphQL, OAuth/OIDC, CORS, source-map, and agent-web safety detectors.
-- Generated extension pattern bundle from the shared registry.
 
 ## Responsible Use
 
