@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>KeyLeak BaaS Vulnerability Report</title>
+<style>
+  :root {
+    --bg: #0a0a0f;
+    --surface: #12121a;
+    --surface2: #1a1a26;
+    --border: #2a2a3a;
+    --text: #e0e0e8;
+    --text2: #8888a0;
+    --red: #ff4d6a;
+    --red-bg: rgba(255,77,106,.08);
+    --orange: #ff9f43;
+    --orange-bg: rgba(255,159,67,.08);
+    --yellow: #ffd43b;
+    --yellow-bg: rgba(255,212,59,.08);
+    --green: #51cf66;
+    --blue: #4dabf7;
+    --blue-bg: rgba(77,171,247,.06);
+    --mono: 'SF Mono', 'Cascadia Code', 'Fira Code', monospace;
+    --sans: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', sans-serif;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: var(--bg); color: var(--text); font-family: var(--sans); line-height: 1.5; padding: 40px 20px; }
+  .wrap { max-width: 860px; margin: 0 auto; }
+
+  /* Header */
+  .header { margin-bottom: 40px; }
+  .header h1 { font-size: 15px; font-weight: 500; color: var(--text2); letter-spacing: .5px; text-transform: uppercase; margin-bottom: 8px; }
+  .target { font-size: 22px; font-weight: 600; color: var(--text); font-family: var(--mono); margin-bottom: 16px; }
+  .meta { display: flex; gap: 24px; font-size: 13px; color: var(--text2); flex-wrap: wrap; }
+  .meta span { display: flex; align-items: center; gap: 6px; }
+
+  /* Verdict banner */
+  .verdict { display: flex; align-items: center; gap: 16px; padding: 16px 20px; border-radius: 10px; margin-bottom: 32px; border: 1px solid; }
+  .verdict.block { background: var(--red-bg); border-color: rgba(255,77,106,.2); }
+  .verdict-badge { font-size: 11px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; padding: 4px 10px; border-radius: 4px; white-space: nowrap; }
+  .verdict.block .verdict-badge { background: var(--red); color: #0a0a0f; }
+  .verdict-text { font-size: 14px; color: var(--text); }
+
+  /* Stats row */
+  .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 32px; }
+  .stat { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 16px; text-align: center; }
+  .stat-num { font-size: 28px; font-weight: 700; font-family: var(--mono); }
+  .stat-num.crit { color: var(--red); }
+  .stat-num.high { color: var(--orange); }
+  .stat-num.med { color: var(--yellow); }
+  .stat-num.low { color: var(--blue); }
+  .stat-label { font-size: 11px; color: var(--text2); text-transform: uppercase; letter-spacing: .5px; margin-top: 4px; }
+
+  /* Section */
+  .section { margin-bottom: 32px; }
+  .section-title { font-size: 13px; font-weight: 600; color: var(--text2); text-transform: uppercase; letter-spacing: .5px; margin-bottom: 12px; padding-bottom: 8px; border-bottom: 1px solid var(--border); }
+
+  /* Finding card */
+  .finding { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 16px 20px; margin-bottom: 10px; border-left: 3px solid transparent; }
+  .finding.critical { border-left-color: var(--red); }
+  .finding.high { border-left-color: var(--orange); }
+  .finding.medium { border-left-color: var(--yellow); }
+  .finding.low { border-left-color: var(--blue); }
+  .finding-head { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+  .sev { font-size: 10px; font-weight: 700; letter-spacing: .5px; text-transform: uppercase; padding: 2px 8px; border-radius: 3px; }
+  .sev.critical { background: var(--red); color: #0a0a0f; }
+  .sev.high { background: var(--orange); color: #0a0a0f; }
+  .sev.medium { background: var(--yellow); color: #0a0a0f; }
+  .sev.low { background: var(--blue); color: #0a0a0f; }
+  .badge-confirmed { font-size: 10px; color: var(--green); border: 1px solid rgba(81,207,102,.3); padding: 1px 6px; border-radius: 3px; }
+  .finding-type { font-size: 14px; font-weight: 600; color: var(--text); }
+  .finding-detail { font-size: 13px; color: var(--text2); margin-bottom: 6px; }
+  .finding-evidence { font-family: var(--mono); font-size: 12px; background: var(--surface2); padding: 8px 12px; border-radius: 6px; color: var(--text); margin: 8px 0; overflow-x: auto; white-space: nowrap; }
+  .finding-fix { font-size: 12px; color: var(--text2); margin-top: 8px; }
+  .finding-fix code { font-family: var(--mono); font-size: 11px; background: var(--surface2); padding: 2px 6px; border-radius: 3px; color: var(--yellow); }
+
+  /* Table probe summary */
+  .probe-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 12px; }
+  .probe { display: flex; align-items: center; gap: 8px; font-size: 12px; font-family: var(--mono); padding: 6px 10px; border-radius: 6px; background: var(--surface2); }
+  .probe .dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
+  .probe .dot.open { background: var(--red); }
+  .probe .dot.locked { background: var(--green); }
+  .probe .tname { color: var(--text); }
+  .probe .tstatus { color: var(--text2); margin-left: auto; font-size: 11px; }
+
+  /* Footer */
+  .footer { margin-top: 40px; padding-top: 20px; border-top: 1px solid var(--border); font-size: 12px; color: var(--text2); display: flex; justify-content: space-between; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="header">
+    <h1>KeyLeak BaaS Vulnerability Report</h1>
+    <div class="target">example-app.vercel.app</div>
+    <div class="meta">
+      <span>Scan: browser + active validation</span>
+      <span>Provider: Supabase</span>
+      <span>Packs: leak, baas</span>
+      <span>2026-05-25 13:05 UTC</span>
+    </div>
+  </div>
+
+  <div class="verdict block">
+    <span class="verdict-badge">Block Ship</span>
+    <span class="verdict-text">6 confirmed findings across 12 client-exposed tables. Payment and user data readable without authentication.</span>
+  </div>
+
+  <div class="stats">
+    <div class="stat"><div class="stat-num crit">1</div><div class="stat-label">Critical</div></div>
+    <div class="stat"><div class="stat-num high">3</div><div class="stat-label">High</div></div>
+    <div class="stat"><div class="stat-num med">1</div><div class="stat-label">Medium</div></div>
+    <div class="stat"><div class="stat-num low">1</div><div class="stat-label">Low</div></div>
+  </div>
+
+  <!-- Confirmed findings -->
+  <div class="section">
+    <div class="section-title">Confirmed Findings</div>
+
+    <div class="finding critical">
+      <div class="finding-head">
+        <span class="sev critical">Critical</span>
+        <span class="finding-type">Open Table: payment_details</span>
+        <span class="badge-confirmed">confirmed</span>
+      </div>
+      <div class="finding-detail">Financial payment data readable without authentication. Anyone with the anon key can query earnings, payout methods, and account details.</div>
+      <div class="finding-evidence">GET /rest/v1/payment_details?select=*&amp;limit=1 &rarr; 200 OK &mdash; columns: id, user_id, payout_method, account_details, created_at</div>
+      <div class="finding-fix">Fix: <code>ALTER TABLE payment_details ENABLE ROW LEVEL SECURITY;</code> then create policies restricting access to the owning user.</div>
+    </div>
+
+    <div class="finding high">
+      <div class="finding-head">
+        <span class="sev high">High</span>
+        <span class="finding-type">Open Table: profiles</span>
+        <span class="badge-confirmed">confirmed</span>
+      </div>
+      <div class="finding-detail">User profile data including usernames, emails, and account settings returned to unauthenticated callers.</div>
+      <div class="finding-evidence">GET /rest/v1/profiles?select=*&amp;limit=1 &rarr; 200 OK &mdash; columns: id, username, display_name, avatar_url, email, settings</div>
+      <div class="finding-fix">Fix: <code>ALTER TABLE profiles ENABLE ROW LEVEL SECURITY;</code> &mdash; allow public reads only on non-sensitive columns.</div>
+    </div>
+
+    <div class="finding high">
+      <div class="finding-head">
+        <span class="sev high">High</span>
+        <span class="finding-type">Open Table: orders</span>
+        <span class="badge-confirmed">confirmed</span>
+      </div>
+      <div class="finding-detail">Full order history readable. select(*) returns all columns including internal metadata and pricing.</div>
+      <div class="finding-evidence">GET /rest/v1/orders?select=*&amp;limit=1 &rarr; 200 OK &mdash; columns: id, user_id, total_cents, status, created_at</div>
+      <div class="finding-fix">Fix: Enable RLS. Restrict <code>select()</code> to the owning user &mdash; never expose other users' order data.</div>
+    </div>
+
+    <div class="finding high">
+      <div class="finding-head">
+        <span class="sev high">High</span>
+        <span class="finding-type">Public Storage Bucket: uploads</span>
+        <span class="badge-confirmed">confirmed</span>
+      </div>
+      <div class="finding-detail">The "uploads" storage bucket is marked public. Anyone can list and download all uploaded files.</div>
+      <div class="finding-evidence">GET /storage/v1/bucket &rarr; 200 OK &mdash; {name: "uploads", public: true}</div>
+      <div class="finding-fix">Fix: Set bucket to private in the Supabase dashboard. Add storage policies for authorized upload/download only.</div>
+    </div>
+
+    <div class="finding medium">
+      <div class="finding-head">
+        <span class="sev medium">Medium</span>
+        <span class="finding-type">Unauthenticated RPC: increment_views</span>
+        <span class="badge-confirmed">confirmed</span>
+      </div>
+      <div class="finding-detail">The increment_views function is callable with just the anon key. An attacker can inflate view counts for any record.</div>
+      <div class="finding-evidence">POST /rest/v1/rpc/increment_views &rarr; 200 OK</div>
+      <div class="finding-fix">Fix: Add <code>auth.uid()</code> check inside the function or revoke EXECUTE from the anon role. Add rate limiting.</div>
+    </div>
+
+    <div class="finding low">
+      <div class="finding-head">
+        <span class="sev low">Low</span>
+        <span class="finding-type">Wide-Open CORS</span>
+        <span class="badge-confirmed">confirmed</span>
+      </div>
+      <div class="finding-detail">REST API returns Access-Control-Allow-Origin: *. Any origin can make authenticated requests.</div>
+      <div class="finding-evidence">access-control-allow-origin: *</div>
+      <div class="finding-fix">Fix: Restrict CORS to your application's origin in the Supabase dashboard.</div>
+    </div>
+  </div>
+
+  <!-- Table RLS probe summary -->
+  <div class="section">
+    <div class="section-title">RLS Probe Summary &mdash; 12 Tables Tested</div>
+    <div class="probe-grid">
+      <div class="probe"><span class="dot open"></span><span class="tname">payment_details</span><span class="tstatus">OPEN</span></div>
+      <div class="probe"><span class="dot open"></span><span class="tname">payment_requests</span><span class="tstatus">OPEN</span></div>
+      <div class="probe"><span class="dot open"></span><span class="tname">profiles</span><span class="tstatus">OPEN</span></div>
+      <div class="probe"><span class="dot open"></span><span class="tname">orders</span><span class="tstatus">OPEN</span></div>
+      <div class="probe"><span class="dot open"></span><span class="tname">products</span><span class="tstatus">OPEN</span></div>
+      <div class="probe"><span class="dot open"></span><span class="tname">reviews</span><span class="tstatus">OPEN</span></div>
+      <div class="probe"><span class="dot locked"></span><span class="tname">support_tickets</span><span class="tstatus">RLS</span></div>
+      <div class="probe"><span class="dot locked"></span><span class="tname">notifications</span><span class="tstatus">RLS</span></div>
+      <div class="probe"><span class="dot locked"></span><span class="tname">user_blocks</span><span class="tstatus">RLS</span></div>
+      <div class="probe"><span class="dot locked"></span><span class="tname">sessions</span><span class="tstatus">RLS</span></div>
+      <div class="probe"><span class="dot locked"></span><span class="tname">audit_logs</span><span class="tstatus">RLS</span></div>
+      <div class="probe"><span class="dot locked"></span><span class="tname">api_keys</span><span class="tstatus">RLS</span></div>
+    </div>
+  </div>
+
+  <!-- Client-side auth -->
+  <div class="section">
+    <div class="section-title">Additional Leads</div>
+
+    <div class="finding high" style="border-left-color: var(--orange);">
+      <div class="finding-head">
+        <span class="sev high">High</span>
+        <span class="finding-type">Client-Side Admin Check</span>
+      </div>
+      <div class="finding-detail">Admin authorization is a browser-side boolean. Admin operations (manage users, process refunds) are gated only by a JS check that can be bypassed in the console.</div>
+      <div class="finding-evidence">if (user.is_admin === true) { showAdminPanel(); }</div>
+      <div class="finding-fix">Fix: Move admin checks to RLS policies or Postgres functions. Never trust <code>isAdmin</code> from the client.</div>
+    </div>
+
+    <div class="finding low" style="border-left-color: var(--blue);">
+      <div class="finding-head">
+        <span class="sev low">Low</span>
+        <span class="finding-type">select("*") Overfetch &mdash; 9 tables</span>
+      </div>
+      <div class="finding-detail">9 of 12 client-side queries use select("*"), fetching every column including internal fields. Even with RLS, this leaks column names and potentially sensitive data.</div>
+      <div class="finding-fix">Fix: Replace <code>.select("*")</code> with explicit column lists for every client query.</div>
+    </div>
+  </div>
+
+  <div class="footer">
+    <span>Generated by KeyLeak Detector v0.1.0 &mdash; BaaS active validation</span>
+    <span>keyleak browser-scan https://example-app.vercel.app</span>
+  </div>
+
+</div>
+</body>
+</html>

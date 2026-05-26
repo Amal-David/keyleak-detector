@@ -5,8 +5,8 @@
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body {
-      width: 400px;
-      max-height: 500px;
+      width: 430px;
+      max-height: 620px;
       font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
       font-size: 12px;
       background: #0f172a;
@@ -19,17 +19,14 @@
       display: flex;
       align-items: center;
       justify-content: space-between;
+      gap: 8px;
       background: #0f172a;
       position: sticky;
       top: 0;
       z-index: 10;
     }
-    .header h1 {
-      font-size: 13px;
-      font-weight: 700;
-      color: #34d399;
-    }
-    .header .count {
+    h1 { font-size: 13px; font-weight: 700; color: #34d399; }
+    .count {
       font-size: 11px;
       padding: 2px 8px;
       border-radius: 4px;
@@ -38,65 +35,73 @@
     .count-zero { background: #064e3b; color: #34d399; }
     .count-warn { background: #78350f; color: #fbbf24; }
     .count-danger { background: #7f1d1d; color: #f87171; }
-    .clear-btn {
+    button {
       background: none;
       border: 1px solid #334155;
-      color: #64748b;
-      padding: 2px 8px;
+      color: #94a3b8;
+      padding: 4px 8px;
       border-radius: 4px;
       cursor: pointer;
       font-family: inherit;
       font-size: 10px;
     }
-    .clear-btn:hover { border-color: #64748b; color: #94a3b8; }
-    .status {
-      padding: 16px;
-      text-align: center;
-      color: #64748b;
+    button:hover { border-color: #64748b; color: #e2e8f0; }
+    button.primary { background: #059669; border-color: #34d399; color: #031412; font-weight: 700; }
+    button.danger { color: #fca5a5; border-color: #7f1d1d; }
+    .verdict {
+      padding: 12px 16px;
+      border-bottom: 1px solid #1e293b;
+      display: grid;
+      gap: 8px;
     }
-    .status .icon { font-size: 24px; margin-bottom: 8px; }
-    .finding {
+    .verdict-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
+    .verdict-badge {
+      display: inline-block;
+      padding: 3px 8px;
+      border-radius: 999px;
+      border: 1px solid #334155;
+      font-size: 10px;
+      font-weight: 700;
+    }
+    .verdict-safe { background: #064e3b; color: #6ee7b7; border-color: #059669; }
+    .verdict-review { background: #78350f; color: #fcd34d; border-color: #d97706; }
+    .verdict-block { background: #7f1d1d; color: #fca5a5; border-color: #dc2626; }
+    .reason { color: #cbd5e1; line-height: 1.4; }
+    .target { color: #64748b; word-break: break-all; font-size: 10px; }
+    .actions {
       padding: 10px 16px;
       border-bottom: 1px solid #1e293b;
-      cursor: default;
-    }
-    .finding:hover { background: #1e293b; }
-    .finding-header {
       display: flex;
-      align-items: center;
-      gap: 8px;
-      margin-bottom: 4px;
+      flex-wrap: wrap;
+      gap: 6px;
     }
-    .severity-badge {
-      font-size: 9px;
+    .status-line {
+      padding: 8px 16px;
+      border-bottom: 1px solid #1e293b;
+      color: #64748b;
+      font-size: 10px;
+      line-height: 1.4;
+      display: none;
+    }
+    .coverage, .scan-stats {
+      padding: 10px 16px;
+      border-bottom: 1px solid #1e293b;
+      font-size: 10px;
+      line-height: 1.5;
+    }
+    .section-label {
+      color: #475569;
       font-weight: 700;
-      padding: 1px 6px;
-      border-radius: 3px;
       text-transform: uppercase;
       letter-spacing: 0.5px;
+      margin-bottom: 5px;
     }
-    .sev-high { background: #7f1d1d; color: #fca5a5; }
-    .sev-medium { background: #78350f; color: #fcd34d; }
-    .sev-low { background: #1e3a5f; color: #93c5fd; }
-    .finding-type {
-      font-size: 11px;
-      font-weight: 600;
-      color: #e2e8f0;
-    }
-    .finding-value {
-      font-size: 10px;
-      color: #34d399;
-      background: #0c1222;
-      padding: 4px 8px;
-      border-radius: 4px;
-      margin: 4px 0;
-      word-break: break-all;
-      max-height: 40px;
-      overflow: hidden;
-    }
-    .finding-source {
-      font-size: 10px;
-      color: #475569;
+    .pill-row { display: flex; flex-wrap: wrap; gap: 4px; }
+    .pill {
+      border: 1px solid #334155;
+      border-radius: 999px;
+      padding: 2px 7px;
+      color: #94a3b8;
     }
     .filters {
       padding: 8px 16px;
@@ -105,70 +110,181 @@
       border-bottom: 1px solid #1e293b;
       background: #0f172a;
       position: sticky;
-      top: 40px;
-      z-index: 9;
+      top: 74px;
+      z-index: 8;
     }
-    .filter-btn {
-      font-family: inherit;
-      font-size: 9px;
-      padding: 2px 8px;
-      border-radius: 3px;
-      border: 1px solid #334155;
-      background: none;
-      cursor: pointer;
-      font-weight: 600;
-    }
+    .filter-btn { font-weight: 700; }
     .filter-btn.active { opacity: 1; }
     .filter-btn.inactive { opacity: 0.35; }
-    .filter-high { color: #fca5a5; border-color: #7f1d1d; }
+    .filter-critical, .filter-high { color: #fca5a5; border-color: #7f1d1d; }
     .filter-medium { color: #fcd34d; border-color: #78350f; }
     .filter-low { color: #93c5fd; border-color: #1e3a5f; }
-    .scan-stats {
-      padding: 10px 16px;
-      border-bottom: 1px solid #1e293b;
-      font-size: 10px;
+    .status {
+      padding: 18px;
+      text-align: center;
+      color: #64748b;
+      line-height: 1.5;
     }
-    .stats-header {
-      color: #475569;
-      font-weight: 600;
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
+    .finding {
+      padding: 12px 16px;
+      border-bottom: 1px solid #1e293b;
+    }
+    .finding:hover { background: #1e293b; }
+    .finding-header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
       margin-bottom: 6px;
     }
-    .stat-line {
-      display: flex;
-      justify-content: space-between;
-      padding: 1px 0;
+    .severity-badge {
+      font-size: 9px;
+      font-weight: 700;
+      padding: 1px 6px;
+      border-radius: 3px;
+      text-transform: uppercase;
     }
-    .stat-count { color: #34d399; font-weight: 600; min-width: 28px; }
-    .stat-label { color: #475569; }
-    .all-clean {
+    .sev-critical, .sev-high { background: #7f1d1d; color: #fca5a5; }
+    .sev-medium { background: #78350f; color: #fcd34d; }
+    .sev-low { background: #1e3a5f; color: #93c5fd; }
+    .finding-type { font-size: 11px; font-weight: 700; color: #e2e8f0; }
+    .finding-value {
+      font-size: 10px;
       color: #34d399;
-      font-weight: 600;
+      background: #0c1222;
+      padding: 5px 8px;
+      border-radius: 4px;
+      margin: 5px 0;
+      word-break: break-all;
+      max-height: 48px;
+      overflow: hidden;
+    }
+    .finding-detail { font-size: 10px; color: #64748b; line-height: 1.5; margin-top: 4px; }
+    .source-link { color: #4dabf7; text-decoration: none; cursor: pointer; }
+    .source-link:hover { text-decoration: underline; }
+    .finding-locations { margin-top: 6px; font-size: 10px; color: #64748b; }
+    .finding-locations ul { margin: 4px 0 0 16px; padding: 0; list-style: disc; }
+    .finding-locations li { margin: 2px 0; line-height: 1.4; }
+    .finding-locations .source-link { color: #4dabf7; text-decoration: none; font-size: 10px; }
+    .finding-locations .source-link:hover { text-decoration: underline; }
+    .test-result { margin-top: 6px; font-size: 10px; line-height: 1.4; }
+    .test-valid { color: #34d399; font-weight: 700; }
+    .test-invalid { color: #94a3b8; }
+    .test-error { color: #fca5a5; }
+    .test-pending { color: #fcd34d; }
+    .test-btn { color: #34d399 !important; border-color: #059669 !important; font-weight: 700; }
+    .jwt-decode { margin-top: 4px; padding: 6px 8px; background: #0c1222; border-radius: 4px; border: 1px solid #1e293b; }
+    .jwt-header { font-size: 9px; font-weight: 700; color: #4dabf7; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px; }
+    .jwt-flag { font-size: 10px; line-height: 1.5; padding: 1px 0; }
+    .flag-level { font-size: 8px; font-weight: 700; padding: 1px 4px; border-radius: 2px; margin-right: 4px; }
+    .flag-claim { color: #94a3b8; margin-right: 4px; }
+    .flag-critical { color: #fca5a5; }
+    .flag-critical .flag-level { background: #7f1d1d; color: #fca5a5; }
+    .flag-high { color: #fcd34d; }
+    .flag-high .flag-level { background: #78350f; color: #fcd34d; }
+    .flag-medium { color: #93c5fd; }
+    .flag-medium .flag-level { background: #1e3a5f; color: #93c5fd; }
+    .flag-info { color: #64748b; }
+    .flag-info .flag-level { background: #1e293b; color: #64748b; }
+    .fix {
       margin-top: 6px;
-      padding-top: 6px;
-      border-top: 1px solid #1e293b;
+      padding: 7px;
+      border: 1px solid #334155;
+      border-radius: 4px;
+      background: #0c1222;
+      color: #cbd5e1;
+      line-height: 1.45;
+    }
+    .finding-actions {
+      margin-top: 7px;
+      display: flex;
+      justify-content: flex-end;
+      gap: 6px;
+    }
+    .tabstrip {
+      display: flex;
+      padding: 0 16px;
+      gap: 4px;
+      border-bottom: 1px solid #1e293b;
+      background: #0f172a;
+      position: sticky;
+      top: 42px;
+      z-index: 9;
+    }
+    .tab-btn {
+      border: none;
+      border-bottom: 2px solid transparent;
+      background: none;
+      color: #64748b;
+      padding: 8px 4px;
+      font-family: inherit;
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      cursor: pointer;
+    }
+    .tab-btn:hover { color: #cbd5e1; }
+    .tab-btn.active {
+      color: #34d399;
+      border-bottom-color: #34d399;
+    }
+    .ref-empty-status {
+      padding: 18px;
+      text-align: center;
+      color: #64748b;
+      line-height: 1.5;
+      font-size: 11px;
     }
   </style>
 </head>
 <body>
   <div class="header">
-    <h1>keyleak-detector</h1>
+    <h1>keyleak launch gate</h1>
     <span id="findingCount" class="count count-zero">0</span>
-    <button id="clearBtn" class="clear-btn">CLEAR</button>
+    <button id="clearBtn" class="danger">CLEAR</button>
   </div>
-  <div id="filters" class="filters" style="display: none;">
-    <button class="filter-btn filter-high active" data-severity="high">HIGH</button>
-    <button class="filter-btn filter-medium active" data-severity="medium">MED</button>
-    <button class="filter-btn filter-low active" data-severity="low">LOW</button>
-  </div>
-  <div id="scanStats" class="scan-stats" style="display: none;"></div>
-  <div id="content">
-    <div class="status">
-      <div class="icon">&#x2714;</div>
-      <div>Monitoring active. Browse normally.</div>
+
+  <div id="verdictPanel" class="verdict">
+    <div class="verdict-row">
+      <span id="verdictBadge" class="verdict-badge verdict-safe">SAFE TO SHIP</span>
+      <button id="revealBtn" title="Temporarily reveal raw values in this popup">REVEAL</button>
     </div>
+    <div id="verdictReason" class="reason">Monitoring covered browser surfaces.</div>
+    <div id="targetUrl" class="target"></div>
   </div>
-  <script src="popup.js"></script>
+
+  <div class="tabstrip" id="tabstrip">
+    <button class="tab-btn active" data-view="findings">Findings</button>
+    <button class="tab-btn" data-view="reference">Reference</button>
+  </div>
+
+  <section id="findingsView">
+    <div class="actions">
+      <button id="fullScanBtn" class="primary">RUN FULL SCAN</button>
+      <button id="copyJsonBtn">COPY JSON</button>
+      <button id="copyMarkdownBtn">COPY MD</button>
+    </div>
+    <div id="actionStatus" class="status-line"></div>
+
+    <div id="coverage" class="coverage"></div>
+    <div id="scanStats" class="scan-stats" style="display: none;"></div>
+
+    <div id="filters" class="filters" style="display: none;">
+      <button class="filter-btn filter-critical active" data-severity="critical">CRIT</button>
+      <button class="filter-btn filter-high active" data-severity="high">HIGH</button>
+      <button class="filter-btn filter-medium active" data-severity="medium">MED</button>
+      <button class="filter-btn filter-low active" data-severity="low">LOW</button>
+    </div>
+
+    <div id="content">
+      <div class="status">Monitoring active. Browse an app you own, then use the verdict here as a launch-gate signal.</div>
+    </div>
+  </section>
+
+  <section id="referenceView" style="display: none;">
+    <div class="ref-empty-status">Loading detector reference...</div>
+  </section>
+
+  <script type="module" src="popup.js"></script>
 </body>
 </html>

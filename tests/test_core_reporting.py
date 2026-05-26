@@ -4,13 +4,15 @@ import unittest
 from argparse import Namespace
 from pathlib import Path
 
+from keyleak.access_control import compare_access_control_urls
 from keyleak.cli import _scan_request_payload
+from keyleak.extension_bundle import extension_pattern_payload, extension_patterns_js
 from keyleak.local_scanner import scan_file, scan_path
-from keyleak.detectors import DETECTORS
+from keyleak.detectors import DETECTORS, DETECTOR_PACKS, HEATMAP_ROWS, detectors_for_packs, normalize_packs
 from keyleak.local_scanner import _is_placeholder
 from keyleak.models import Finding, Evidence, ScanReport, finding_from_legacy
 from keyleak.redaction import redact_value
-from keyleak.reporting import build_report, fail_threshold_met, format_sarif
+from keyleak.reporting import build_report, fail_threshold_met, format_html, format_sarif
 from keyleak.suppressions import apply_suppressions, load_suppressions
 
 
@@ -34,6 +36,7 @@ class ReportingTests(unittest.TestCase):
         self.assertEqual(report.verdict["status"], "BLOCK_SHIP")
         self.assertTrue(fail_threshold_met(report, "high"))
         self.assertIn("sarif", format_sarif(report).lower())
+        self.assertEqual(report.to_dict()["profile"], "launch-gate")
 
     def test_attack_vector_findings_contribute_to_report_summary(self):
         report = build_report(
@@ -117,6 +120,123 @@ class ReportingTests(unittest.TestCase):
         self.assertNotEqual(first.id, second.id)
 
 
+class HtmlReportTests(unittest.TestCase):
+    def test_html_report_contains_structure(self):
+        findings = [
+            Finding(
+                type="openai_api_key",
+                severity="critical",
+                confidence=0.95,
+                detector_id="leak:openai_api_key",
+                source="fixture.js",
+                evidence=Evidence(source="fixture.js", redacted_value="sk-pro...[redacted]...wxyz"),
+                risk_reason="OpenAI API key exposed in client bundle.",
+                remediation="Rotate the key immediately.",
+                validation_status="confirmed",
+                category="leak",
+            ),
+            Finding(
+                type="database_url",
+                severity="high",
+                confidence=0.9,
+                detector_id="leak:database_url",
+                source=".env",
+                evidence=Evidence(source=".env", redacted_value="postgres://...[redacted]...5432/db"),
+                risk_reason="Database connection string exposed.",
+                remediation="Move to environment variable and rotate credentials.",
+                validation_status="lead",
+                category="leak",
+            ),
+            Finding(
+                type="wide_open_cors",
+                severity="medium",
+                confidence=0.7,
+                detector_id="baas:wide_open_cors",
+                source="response header",
+                evidence=Evidence(source="response header", redacted_value="access-control-allow-origin: *"),
+                risk_reason="CORS allows any origin.",
+                remediation="Restrict CORS to production domain.",
+                category="baas",
+            ),
+            Finding(
+                type="select_star_overfetch",
+                severity="low",
+                confidence=0.55,
+                detector_id="baas:select_star_overfetch",
+                source="app.js",
+                evidence=Evidence(source="app.js", redacted_value='.select("*")'),
+                risk_reason="Fetching all columns leaks schema.",
+                remediation="Use explicit column lists.",
+                category="baas",
+            ),
+        ]
+        report = build_report(
+            "https://preview.example.com",
+            findings,
+            scan_mode="browser",
+            packs=["leak", "baas"],
+        )
+        output = format_html(report)
+
+        self.assertIn("<!DOCTYPE html>", output)
+        self.assertIn("preview.example.com", output)
+        self.assertIn("Block Ship", output)
+        self.assertIn("CRITICAL", output)
+        self.assertIn("openai_api_key", output)
+        self.assertIn("database_url", output)
+        self.assertIn("wide_open_cors", output)
+        self.assertIn("select_star_overfetch", output)
+        self.assertIn("confirmed", output)
+        self.assertIn("leak, baas", output)
+        self.assertIn("browser", output)
+
+    def test_html_report_escapes_dynamic_content(self):
+        finding = Finding(
+            type="xss_test",
+            severity="high",
+            confidence=0.9,
+            detector_id="test:xss_test",
+            source="fixture",
+            evidence=Evidence(source="fixture", redacted_value='<script>alert("xss")</script>'),
+            risk_reason='Risk with <b>bold</b> & "quotes".',
+            remediation="Sanitize <input> tags.",
+        )
+        report = build_report("<script>evil</script>", [finding], scan_mode="browser")
+        output = format_html(report)
+
+        # Raw angle brackets from dynamic content must be escaped
+        self.assertNotIn("<script>alert", output)
+        self.assertNotIn("<script>evil", output)
+        self.assertIn("&lt;script&gt;alert", output)
+        self.assertIn("&lt;script&gt;evil", output)
+
+    def test_html_safe_verdict(self):
+        report = build_report("https://safe.example.com", [], scan_mode="local")
+        output = format_html(report)
+
+        self.assertIn("<!DOCTYPE html>", output)
+        self.assertIn("Safe to Ship", output)
+        self.assertIn("safe.example.com", output)
+        self.assertIn("No findings detected.", output)
+
+    def test_html_review_verdict(self):
+        finding = Finding(
+            type="minor_issue",
+            severity="medium",
+            confidence=0.7,
+            detector_id="test:minor_issue",
+            source="fixture",
+            evidence=Evidence(source="fixture", redacted_value="medium-value"),
+            risk_reason="Needs review.",
+            remediation="Review and fix.",
+        )
+        report = build_report("https://review.example.com", [finding], scan_mode="browser")
+        output = format_html(report)
+
+        self.assertIn("Review", output)
+        self.assertIn("verdict review", output)
+
+
 class LocalScannerTests(unittest.TestCase):
     def test_vulnerable_fixture_produces_actionable_report(self):
         report = scan_path("fixtures/vulnerable-demo")
@@ -132,7 +252,11 @@ class LocalScannerTests(unittest.TestCase):
         self.assertIn("source_map_reference", finding_types)
         openai_sources = [finding.source for finding in report.findings if finding.type == "openai_api_key"]
         self.assertFalse(any(source.endswith("app.js.map") for source in openai_sources))
-        self.assertTrue(all("[redacted]" in finding.evidence.redacted_value for finding in report.findings))
+        # Wave 1.4 introduced HMAC-tagged redaction (`[redacted:abc12345]`)
+        # alongside the legacy prefix/suffix form (`...[redacted]...`). Both
+        # contain the literal `[redacted` substring; that's the canonical
+        # redaction marker.
+        self.assertTrue(all("[redacted" in finding.evidence.redacted_value for finding in report.findings))
 
     def test_baseline_suppresses_known_findings(self):
         report = scan_path("fixtures/vulnerable-demo")
@@ -170,6 +294,24 @@ class LocalScannerTests(unittest.TestCase):
 
 
 class DetectorTests(unittest.TestCase):
+    def test_heatmap_rows_have_pack_coverage(self):
+        detector_types = {detector.result_type for detector in DETECTORS}
+        detector_packs = {detector.pack for detector in DETECTORS}
+
+        for heatmap_type, pack in HEATMAP_ROWS.items():
+            self.assertIn(pack, DETECTOR_PACKS)
+            self.assertIn(pack, detector_packs)
+            self.assertIn(heatmap_type, detector_types)
+
+    def test_detector_metadata_is_pack_aware(self):
+        for detector in DETECTORS:
+            self.assertIn(detector.pack, DETECTOR_PACKS)
+            self.assertTrue(detector.canonical_id.startswith(f"{detector.pack}."))
+            self.assertTrue(detector.result_type)
+            self.assertTrue(detector.description)
+            self.assertTrue(detector.remediation)
+            self.assertIn(detector.validation_status, {"lead", "validated", "suppressed", "not_applicable"})
+
     def test_private_key_detector_matches_pkcs8(self):
         detector = _detector("private_key")
         content = "-----BEGIN PRIVATE KEY-----\nabc123\n-----END PRIVATE KEY-----"
@@ -196,6 +338,101 @@ class DetectorTests(unittest.TestCase):
         self.assertIsNone(detector.compile().search(unrelated_lines))
         self.assertIsNotNone(detector.compile().search(same_line))
 
+    def test_extension_bundle_includes_launch_gate_detectors(self):
+        payload = extension_pattern_payload()
+        detector_ids = {detector["id"] for detector in payload}
+        detector_packs = {detector["pack"] for detector in payload}
+
+        self.assertNotIn("mcp_config_secret", detector_ids)
+        self.assertNotIn("sql_injection_lead", detector_ids)
+        self.assertIn("graphql_introspection_hint", detector_ids)
+        self.assertIn("hidden_prompt_injection", detector_ids)
+        self.assertIn("source_map_reference", detector_ids)
+        self.assertIn("openrouter_api_key", detector_ids)
+        self.assertIn("xss_sink_lead", detector_ids)
+        self.assertIn("idor_direct_object_lead", detector_ids)
+        self.assertEqual({"leak", "appsec", "access-control", "baas"}, detector_packs)
+        self.assertTrue(all("remediation" in detector for detector in payload))
+        self.assertTrue(all("detector_id" in detector for detector in payload))
+
+    def test_extension_bundle_is_generated_from_core_registry(self):
+        bundle = extension_patterns_js()
+
+        self.assertIn("Source of truth: keyleak.detectors.DETECTORS", bundle)
+        self.assertIn("PATTERN_DEFINITIONS", bundle)
+        self.assertNotIn("mcp_config_secret", bundle)
+        self.assertNotIn("sql_injection_lead", bundle)
+        self.assertIn("openai_api_key", bundle)
+
+    def test_extension_bundle_excludes_repo_only_packs_by_default(self):
+        payload = extension_pattern_payload()
+        detector_ids = {detector["id"] for detector in payload}
+
+        self.assertNotIn("n_plus_one_query_lead", detector_ids)
+        self.assertNotIn("missing_test_lead", detector_ids)
+
+    def test_profile_pack_defaults(self):
+        self.assertEqual(normalize_packs(None, profile="launch-gate"), ("leak",))
+        self.assertEqual(normalize_packs(None, profile="full"), tuple(DETECTOR_PACKS.keys()))
+        self.assertEqual(
+            normalize_packs(None, profile="launch-gate", surface="extension"),
+            ("leak", "appsec", "access-control", "baas"),
+        )
+
+    def test_full_pack_local_scan_finds_heatmap_leads(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "app.js").write_text(
+                """
+const query = `SELECT * FROM users WHERE id=${userId}`;
+element.innerHTML = location.hash;
+const requireAuth = false;
+app.get('/users/123456', handler);
+// TODO add tenant ownership check
+for (const user of users) { db.query("SELECT * FROM orders WHERE user_id=" + user.id); }
+for (let i = 0; i <= items.length; i++) {}
+const parsed = new Date(input);
+test.skip("missing coverage", () => {});
+debugger;
+// stale documentation: old auth model
+""",
+                encoding="utf-8",
+            )
+            (root / ".env").write_text("NODE_ENV=development\nVERIFY_SSL=false\n", encoding="utf-8")
+
+            report = scan_path(str(root), profile="full")
+
+        finding_types = {finding.type for finding in report.findings}
+        self.assertIn("sql_injection", finding_types)
+        self.assertIn("xss", finding_types)
+        self.assertIn("auth_bypass", finding_types)
+        self.assertIn("idor", finding_types)
+        self.assertIn("missing_tenant_check", finding_types)
+        self.assertIn("n_plus_one_query", finding_types)
+        self.assertIn("off_by_one", finding_types)
+        self.assertIn("timezone_date_bug", finding_types)
+        self.assertIn("env_config_bug", finding_types)
+        self.assertIn("test_missing", finding_types)
+        self.assertIn("dead_code", finding_types)
+        self.assertIn("stale_doc", finding_types)
+        self.assertIn("correctness", report.to_dict()["packs"])
+        self.assertEqual(
+            {finding.validation_status for finding in report.findings if finding.category != "leak"},
+            {"lead"},
+        )
+
+    def test_extension_service_worker_handles_extension_page_tab_ids(self):
+        source = Path("extension/service-worker.js").read_text(encoding="utf-8")
+
+        self.assertIn("Number.isInteger(message.tabId)", source)
+        self.assertNotIn("if (!tabId) return;", source)
+
+    def test_web_ui_uses_redacted_finding_values(self):
+        source = Path("static/js/main.js").read_text(encoding="utf-8")
+
+        self.assertIn("const redactedValue", source)
+        self.assertNotIn("finding.value || finding.match", source)
+
 
 class CliTests(unittest.TestCase):
     def test_authenticated_profile_without_credentials_uses_no_auth_mode(self):
@@ -210,6 +447,8 @@ class CliTests(unittest.TestCase):
 
         self.assertEqual(payload["scan_mode"], "extensive")
         self.assertEqual(payload["auth_config"]["mode"], "none")
+        self.assertEqual(payload["launch_profile"], "launch-gate")
+        self.assertEqual(tuple(payload["packs"]), ("leak",))
 
     def test_scan_payload_auth_mode_matches_supplied_credentials(self):
         payload = _scan_request_payload(
@@ -218,6 +457,8 @@ class CliTests(unittest.TestCase):
                 profile="browser",
                 bearer=" token ",
                 cookie=" session=abc ",
+                launch_profile="bug-bounty",
+                packs="appsec,access-control",
             )
         )
 
@@ -225,6 +466,71 @@ class CliTests(unittest.TestCase):
         self.assertEqual(payload["auth_config"]["mode"], "both")
         self.assertEqual(payload["auth_config"]["bearer_token"], "token")
         self.assertEqual(payload["auth_config"]["cookie"], "session=abc")
+        self.assertEqual(tuple(payload["packs"]), ("appsec", "access-control"))
+
+    def test_scan_payload_includes_second_user_auth_when_supplied(self):
+        payload = _scan_request_payload(
+            Namespace(
+                url="https://preview.example.com/users/123456",
+                profile="authenticated",
+                bearer=" user-a-token ",
+                cookie="",
+                bearer_b=" user-b-token ",
+                cookie_b="",
+                launch_profile="bug-bounty",
+                packs="access-control",
+            )
+        )
+
+        self.assertEqual(payload["comparison_auth_config"]["mode"], "bearer")
+        self.assertEqual(payload["comparison_auth_config"]["bearer_token"], "user-b-token")
+
+
+class AccessControlComparisonTests(unittest.TestCase):
+    def test_two_user_comparison_validates_same_object_access(self):
+        class Response:
+            status_code = 200
+            text = '{"id":123456,"email":"redacted@example.com"}'
+
+        calls = []
+
+        def fake_fetch(url, **kwargs):
+            calls.append((url, kwargs["headers"].get("Authorization", "")))
+            return Response()
+
+        findings = compare_access_control_urls(
+            ["https://preview.example.com/users/123456"],
+            {"bearer_token": "user-a-token"},
+            {"bearer_token": "user-b-token"},
+            fetch=fake_fetch,
+        )
+
+        self.assertEqual(len(findings), 1)
+        self.assertEqual(findings[0].type, "idor")
+        self.assertEqual(findings[0].category, "access-control")
+        self.assertEqual(findings[0].validation_status, "validated")
+        self.assertEqual(calls[0][1], "Bearer user-a-token")
+        self.assertEqual(calls[1][1], "Bearer user-b-token")
+
+    def test_two_user_comparison_ignores_rejected_second_user(self):
+        class Response:
+            def __init__(self, status_code):
+                self.status_code = status_code
+                self.text = "{}"
+
+        statuses = [200, 403]
+
+        def fake_fetch(_url, **_kwargs):
+            return Response(statuses.pop(0))
+
+        findings = compare_access_control_urls(
+            ["https://preview.example.com/users/123456"],
+            {"bearer_token": "user-a-token"},
+            {"bearer_token": "user-b-token"},
+            fetch=fake_fetch,
+        )
+
+        self.assertEqual(findings, [])
 
 
 def _detector(detector_id):
