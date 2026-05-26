@@ -343,12 +343,12 @@ class DetectorTests(unittest.TestCase):
         detector_ids = {detector["id"] for detector in payload}
         detector_packs = {detector["pack"] for detector in payload}
 
-        self.assertIn("mcp_config_secret", detector_ids)
+        self.assertNotIn("mcp_config_secret", detector_ids)
+        self.assertNotIn("sql_injection_lead", detector_ids)
         self.assertIn("graphql_introspection_hint", detector_ids)
         self.assertIn("hidden_prompt_injection", detector_ids)
         self.assertIn("source_map_reference", detector_ids)
         self.assertIn("openrouter_api_key", detector_ids)
-        self.assertIn("sql_injection_lead", detector_ids)
         self.assertIn("xss_sink_lead", detector_ids)
         self.assertIn("idor_direct_object_lead", detector_ids)
         self.assertEqual({"leak", "appsec", "access-control", "baas"}, detector_packs)
@@ -360,8 +360,9 @@ class DetectorTests(unittest.TestCase):
 
         self.assertIn("Source of truth: keyleak.detectors.DETECTORS", bundle)
         self.assertIn("PATTERN_DEFINITIONS", bundle)
-        self.assertIn("mcp_config_secret", bundle)
-        self.assertIn("appsec.sql_injection_lead", bundle)
+        self.assertNotIn("mcp_config_secret", bundle)
+        self.assertNotIn("sql_injection_lead", bundle)
+        self.assertIn("openai_api_key", bundle)
 
     def test_extension_bundle_excludes_repo_only_packs_by_default(self):
         payload = extension_pattern_payload()

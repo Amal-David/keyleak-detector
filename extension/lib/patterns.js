@@ -651,28 +651,6 @@ const PATTERN_DEFINITIONS = [
     "validation_status": "validated"
   },
   {
-    "capture_group": 1,
-    "categories": [
-      "mcp",
-      "env",
-      "docker",
-      "logs"
-    ],
-    "category": "leak",
-    "description": "MCP or agent tool credential exposed.",
-    "detector_id": "leak.mcp_config_secret",
-    "finding_type": "mcp_config_secret",
-    "flags": "gim",
-    "id": "mcp_config_secret",
-    "min_match_length": 8,
-    "pack": "leak",
-    "pattern": "(?:mcp|modelcontextprotocol|tool|server).{0,80}(?:api[_-]?key|token|secret|password)[\\\"'\\s:=]+[\\\"']?([A-Za-z0-9_\\-./+=]{20,})",
-    "references": [],
-    "remediation": "Move agent/tool credentials to local secret storage and review connected tool permissions.",
-    "severity": "high",
-    "validation_status": "validated"
-  },
-  {
     "capture_group": 0,
     "categories": [
       "sourcemaps",
@@ -940,29 +918,6 @@ const PATTERN_DEFINITIONS = [
     "pattern": "(?:console\\.log|logger\\.(?:debug|info|warn|error)|print\\s*\\()[\\s\\S]{0,120}(?:api[_-]?key|secret|token|password|authorization|cookie)",
     "references": [],
     "remediation": "Remove secrets from logs, redact sensitive fields at the logger boundary, and rotate any value that may already have been written.",
-    "severity": "medium",
-    "validation_status": "lead"
-  },
-  {
-    "capture_group": 0,
-    "categories": [
-      "code",
-      "sourcemaps",
-      "logs"
-    ],
-    "category": "appsec",
-    "description": "SQL injection lead found in query construction or database error output.",
-    "detector_id": "appsec.sql_injection_lead",
-    "finding_type": "sql_injection",
-    "flags": "gim",
-    "id": "sql_injection_lead",
-    "min_match_length": 12,
-    "pack": "appsec",
-    "pattern": "(?:\\b(?:SELECT|UPDATE|DELETE|INSERT)\\b[\\s\\S]{0,160}(?:\\+\\s*(?:req|request|params|query|body|input|user)|\\$\\{[^}]+\\})|(?:sql|query)\\s*[:=]\\s*[`'\\\"][\\s\\S]{0,120}\\$\\{[^}]+\\}|(?:SQL syntax|mysql_fetch|PostgreSQL query failed|SQLiteException|ODBC SQL Server Driver))",
-    "references": [
-      "https://owasp.org/www-community/attacks/SQL_Injection"
-    ],
-    "remediation": "Parameterize the query, validate the input at the boundary, and re-test the endpoint with the launch gate after the fix.",
     "severity": "medium",
     "validation_status": "lead"
   },

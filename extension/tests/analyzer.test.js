@@ -6,12 +6,13 @@ import { buildReport, formatMarkdownReport, formatSarifReport, redactValue } fro
 
 const detectorIds = new Set(PATTERN_DEFINITIONS.map(definition => definition.id));
 
-assert(detectorIds.has('mcp_config_secret'));
+// mcp_config_secret is extension=false (too noisy on minified JS)
+assert(!detectorIds.has('mcp_config_secret'));
 assert(detectorIds.has('graphql_introspection_hint'));
 assert(detectorIds.has('hidden_prompt_injection'));
 assert(detectorIds.has('source_map_reference'));
 assert(detectorIds.has('openrouter_api_key'));
-assert(detectorIds.has('sql_injection_lead'));
+assert(!detectorIds.has('sql_injection_lead'));
 assert(detectorIds.has('xss_sink_lead'));
 assert(detectorIds.has('idor_direct_object_lead'));
 assert(!detectorIds.has('n_plus_one_query_lead'));
@@ -36,10 +37,9 @@ assert.notEqual(openAiFinding.evidence.redacted_value, openAiKey);
 assert.match(openAiFinding.evidence.redacted_value, /\.\.\./);
 assert.equal(openAiFinding.raw_value, openAiKey);
 
+// sql_injection_lead is extension=false (too noisy on minified JS)
 const sqlFinding = findings.find(finding => finding.type === 'sql_injection');
-assert(sqlFinding);
-assert.equal(sqlFinding.category, 'appsec');
-assert.equal(sqlFinding.validation_status, 'lead');
+assert(!sqlFinding, 'sql_injection should not be in extension bundle');
 
 const xssFinding = findings.find(finding => finding.type === 'xss');
 assert(xssFinding);

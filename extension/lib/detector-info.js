@@ -664,24 +664,6 @@ export const DETECTOR_INFO = {
     "severity": "medium",
     "validation_status": "validated"
   },
-  "mcp_config_secret": {
-    "attack_scenario": null,
-    "categories": [
-      "mcp",
-      "env",
-      "docker",
-      "logs"
-    ],
-    "description": "MCP or agent tool credential exposed.",
-    "detector_id": "leak.mcp_config_secret",
-    "finding_type": "mcp_config_secret",
-    "id": "mcp_config_secret",
-    "pack": "leak",
-    "references": [],
-    "remediation": "Move agent/tool credentials to local secret storage and review connected tool permissions.",
-    "severity": "high",
-    "validation_status": "validated"
-  },
   "missing_tenant_check_lead": {
     "attack_scenario": null,
     "categories": [
@@ -1035,25 +1017,6 @@ export const DETECTOR_INFO = {
     "remediation": "Review generated source maps for embedded secrets and avoid publishing private source in production.",
     "severity": "low",
     "validation_status": "validated"
-  },
-  "sql_injection_lead": {
-    "attack_scenario": null,
-    "categories": [
-      "code",
-      "sourcemaps",
-      "logs"
-    ],
-    "description": "SQL injection lead found in query construction or database error output.",
-    "detector_id": "appsec.sql_injection_lead",
-    "finding_type": "sql_injection",
-    "id": "sql_injection_lead",
-    "pack": "appsec",
-    "references": [
-      "https://owasp.org/www-community/attacks/SQL_Injection"
-    ],
-    "remediation": "Parameterize the query, validate the input at the boundary, and re-test the endpoint with the launch gate after the fix.",
-    "severity": "medium",
-    "validation_status": "lead"
   },
   "stripe_restricted_key": {
     "attack_scenario": null,

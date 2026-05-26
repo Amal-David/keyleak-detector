@@ -387,6 +387,7 @@ DETECTORS = [
         ["mcp", "env", "docker", "logs"],
         8,
         1,
+        extension=False,
     ),
     Detector(
         "hidden_prompt_injection",
@@ -565,6 +566,7 @@ DETECTORS = [
         "sql_injection",
         "lead",
         ("https://owasp.org/www-community/attacks/SQL_Injection",),
+        False,
     ),
     Detector(
         "xss_sink_lead",
