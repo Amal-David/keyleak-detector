@@ -4,7 +4,7 @@
  */
 
 import { COMPILED_PATTERNS } from './patterns.js';
-import { isFalsePositive, isVendorScript, isCloudStorageSignedUrl, isAzureSasToken, isBrowserInternal } from './false-positives.js';
+import { isFalsePositive, isVendorScript, isCloudStorageSignedUrl, isAzureSasToken, isBrowserInternal, isInfraHeader } from './false-positives.js';
 import { normalizeFinding, redactSnippet } from './reporting.js';
 
 /**
@@ -22,6 +22,9 @@ export function analyzeContent(content, source = '', meta = {}) {
 
   // Skip browser-internal URLs (chrome-extension://, devtools://, etc.)
   if (isBrowserInternal(source) || isBrowserInternal(meta.url || '')) return findings;
+
+  // Skip infrastructure response headers (x-amz-cf-id, cf-ray, x-request-id, etc.)
+  if (isInfraHeader(source)) return findings;
 
   // Skip known third-party vendor scripts (Google Analytics, PostHog, etc.)
   if (isVendorScript(source) || isVendorScript(meta.url || '')) return findings;

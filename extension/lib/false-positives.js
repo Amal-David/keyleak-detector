@@ -209,6 +209,34 @@ const VENDOR_SCRIPT_DOMAINS = [
   'embed.tawk.to',
   'static.zdassets.com',
   'widget.crisp.chat',
+  // HubSpot
+  'js.hscollectedforms.net',
+  'js.hsforms.net',
+  'js.hubspot.com',
+  'js.hs-banner.com',
+  'js.usemessages.com',
+  // Widget / embed CDNs
+  'elfsightcdn.com',
+  'static.elfsight.com',
+  'cdn.embedly.com',
+  'platform.twitter.com',
+  'platform.instagram.com',
+  'connect.facebook.net',
+  'apis.google.com',
+  'www.youtube.com/iframe_api',
+  'player.vimeo.com',
+  'fast.wistia.com',
+  // CMS / site builder
+  'cdn.shopify.com/s',
+  'assets.squarespace.com',
+  'static.parastorage.com',
+  'static.wixstatic.com',
+  'cdn.webflow.com',
+  // Consent / cookie managers
+  'cdn.cookiebot.com',
+  'consent.cookiebot.com',
+  'cdn.iubenda.com',
+  'cdn.onetrust.com',
 ];
 
 /**
@@ -218,6 +246,36 @@ const VENDOR_SCRIPT_DOMAINS = [
  * @param {string} source - The source URL or description
  * @returns {boolean} true if from a vendor script
  */
+// Infrastructure response headers whose values look like secrets but aren't.
+// CloudFront x-amz-cf-id often starts with HF_ (matches HuggingFace regex),
+// cf-ray contains hex tokens, x-request-id contains UUIDs, etc.
+const INFRA_HEADER_PATTERNS = [
+  'x-amz-cf-id', 'x-amz-cf-pop', 'x-amz-request-id', 'x-amz-id-2',
+  'x-cache', 'x-served-by', 'x-timer', 'x-request-id', 'x-trace-id',
+  'x-cloud-trace-context', 'x-b3-traceid', 'x-b3-spanid',
+  'cf-ray', 'cf-cache-status', 'cf-request-id',
+  'x-vercel-id', 'x-vercel-cache',
+  'x-fly-request-id', 'x-render-origin-server',
+  'x-powered-by', 'server', 'via', 'x-cdn',
+  'nel', 'report-to', 'reporting-endpoints',
+  'x-nf-request-id',
+  'etag', 'x-correlation-id',
+];
+
+/**
+ * Check if a finding source is an infrastructure response header.
+ * Values from these headers (trace IDs, cache keys, CDN identifiers)
+ * often match secret patterns but are not credentials.
+ * @param {string} source - The source label (e.g., "Response Header (x-amz-cf-id)")
+ * @returns {boolean}
+ */
+export function isInfraHeader(source) {
+  if (!source || typeof source !== 'string') return false;
+  const lower = source.toLowerCase();
+  if (!lower.includes('header')) return false;
+  return INFRA_HEADER_PATTERNS.some(h => lower.includes(h));
+}
+
 export function isVendorScript(source) {
   if (!source || typeof source !== 'string') return false;
   const lower = source.toLowerCase();
