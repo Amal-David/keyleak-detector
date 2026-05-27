@@ -53,7 +53,7 @@ keyleak local . --fail-on high
 
 The `--html` flag generates a self-contained dark-theme vulnerability report:
 
-![KeyLeak BaaS Report](report.html)
+![KeyLeak BaaS Report](docs/images/sample-report.png)
 
 ## What It Detects
 
