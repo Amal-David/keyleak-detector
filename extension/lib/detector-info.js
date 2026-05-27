@@ -791,6 +791,25 @@ export const DETECTOR_INFO = {
     "severity": "critical",
     "validation_status": "validated"
   },
+  "otp_in_response": {
+    "attack_scenario": "The server sends the OTP value in the API response. An attacker reads it from the network tab and enters it \u2014 bypassing two-factor authentication entirely. This was exploited in the CBSE exam portal breach (2026).",
+    "categories": [
+      "sourcemaps",
+      "code",
+      "logs"
+    ],
+    "description": "OTP or verification code found in API response body. Server sends the code to the client instead of validating server-side.",
+    "detector_id": "appsec.otp_in_response",
+    "finding_type": "otp_in_response",
+    "id": "otp_in_response",
+    "pack": "appsec",
+    "references": [
+      "https://owasp.org/Top10/A07_2021-Identification_and_Authentication_Failures/"
+    ],
+    "remediation": "Move OTP validation server-side. The server should verify the code, never send it to the client. This enables client-side OTP bypass.",
+    "severity": "critical",
+    "validation_status": "validated"
+  },
   "perplexity_api_key": {
     "attack_scenario": null,
     "categories": [

@@ -960,6 +960,42 @@ DETECTORS = [
         finding_type="baas_realtime_subscribe",
         validation_status="lead",
     ),
+    # ------------------------------------------------------------------
+    # Runtime-only detectors — patterns only visible in live HTTP traffic
+    # ------------------------------------------------------------------
+    Detector(
+        "otp_in_response",
+        r"""(?:"otp"|"OTP"|"verification_code"|"verificationCode"|"2fa_code"|"twoFactorCode"|"sms_code"|"smsCode"|"pin_code"|"pinCode"|"one_time_password"|"mfa_code")\s*:\s*["']?(\d{4,8}|(?=[A-Za-z0-9]{4,8}\b)(?=[A-Za-z0-9]*\d)[A-Za-z0-9]{4,8})["']?""",
+        "critical",
+        "OTP or verification code found in API response body. Server sends the code to the client instead of validating server-side.",
+        "Move OTP validation server-side. The server should verify the code, never send it to the client. This enables client-side OTP bypass.",
+        ["sourcemaps", "code", "logs"],
+        4,
+        1,
+        "appsec",
+        "otp_in_response",
+        "validated",
+        ("https://owasp.org/Top10/A07_2021-Identification_and_Authentication_Failures/",),
+        True,
+        attack_scenario="The server sends the OTP value in the API response. An attacker reads it from the network tab and enters it — bypassing two-factor authentication entirely. This was exploited in the CBSE exam portal breach (2026).",
+    ),
+    Detector(
+        "hardcoded_credential_in_bundle",
+        r"(?:(?:master[_-]?)?(?:password|passwd|pwd)|secret[_-]?key|admin[_-]?(?:password|secret|token)|default[_-]?(?:password|secret))\s*[:=]\s*[\"']([A-Za-z0-9!@#$%^&*_\-+=.]{8,64})[\"']",
+        "high",
+        "Hardcoded password or secret found in code.",
+        "Remove the hardcoded credential, use environment variables or a secret manager, and rotate the exposed value.",
+        ["code", "sourcemaps", "logs"],
+        8,
+        1,
+        "appsec",
+        "hardcoded_credential",
+        "lead",
+        (),
+        False,
+        attack_scenario="A hardcoded password in a JS bundle is accessible to any user who downloads the file. If it's a master password or admin secret, it grants full access bypass.",
+        min_entropy=3.5,
+    ),
 ]
 
 
