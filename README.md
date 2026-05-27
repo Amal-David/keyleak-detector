@@ -27,6 +27,14 @@ pip install keyleak-detector
 keyleak browser-scan https://your-app.vercel.app --html > report.html
 ```
 
+Or with **uv** (faster):
+
+```bash
+uv pip install keyleak-detector
+# or run directly without installing:
+uvx keyleak-detector browser-scan https://your-app.vercel.app --html > report.html
+```
+
 ### GitHub Action (CI/CD)
 
 Add to any repo to scan preview deployments automatically:
@@ -68,7 +76,12 @@ Browse any site. The extension icon shows a badge count for findings. Click to s
 ```bash
 git clone https://github.com/Amal-David/keyleak-detector.git
 cd keyleak-detector
+
+# With poetry
 poetry install && poetry run playwright install chromium
+
+# Or with uv
+uv sync && uv run playwright install chromium
 ```
 
 ## Usage
