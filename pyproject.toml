@@ -5,6 +5,19 @@ description = "Runtime leak detector for modern web apps — finds exposed API k
 authors = ["Amal David <amal@utopianlabs.co>"]
 license = "MIT"
 readme = "README.md"
+packages = [{include = "keyleak"}]
+keywords = ["security", "api-keys", "secrets", "supabase", "firebase", "baas", "vulnerability-scanner"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Topic :: Security",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+]
+
+[tool.poetry.urls]
+"Homepage" = "https://github.com/Amal-David/keyleak-detector"
+"Bug Tracker" = "https://github.com/Amal-David/keyleak-detector/issues"
 
 [tool.poetry.dependencies]
 python = ">=3.9,<4.0"

@@ -1,0 +1,130 @@
+name: 'KeyLeak Detector'
+description: >
+  Scan for exposed API keys, BaaS misconfigurations (Supabase RLS, Firebase rules),
+  and secrets in your codebase and preview deployments. Supports local file scanning,
+  browser-based scanning of live URLs, and BaaS active validation.
+author: 'Amal David'
+branding:
+  icon: 'shield'
+  color: 'green'
+inputs:
+  mode:
+    description: 'Scan mode: local (files only), browser (live URL), or both.'
+    required: false
+    default: 'local'
+  url:
+    description: 'URL to scan in browser mode (e.g., preview deployment URL).'
+    required: false
+    default: ''
+  baas-validate:
+    description: 'Enable active BaaS validation probes (Supabase RLS, Firebase rules).'
+    required: false
+    default: 'false'
+  fail-on:
+    description: 'Severity threshold to fail the check (low|medium|high|critical).'
+    required: false
+    default: 'high'
+  launch-profile:
+    description: 'Launch profile (launch-gate|local-dev|bug-bounty|ci|full).'
+    required: false
+    default: 'ci'
+  allowlist:
+    description: 'Path to allowlist (.yaml or .txt).'
+    required: false
+    default: 'keyleak-allowlist.yaml'
+  output-format:
+    description: 'Output format: json, sarif, markdown, or html.'
+    required: false
+    default: 'json'
+  python-version:
+    description: 'Python version for the runner.'
+    required: false
+    default: '3.11'
+outputs:
+  verdict:
+    description: 'Scan verdict: SAFE_TO_SHIP, REVIEW, or BLOCK_SHIP'
+    value: ${{ steps.scan.outputs.verdict }}
+  findings-count:
+    description: 'Total number of findings'
+    value: ${{ steps.scan.outputs.findings_count }}
+  report-path:
+    description: 'Path to the generated report file'
+    value: ${{ steps.scan.outputs.report_path }}
+runs:
+  using: composite
+  steps:
+    - name: Set up Python
+      uses: actions/setup-python@0b93645e9fea7318ecaed2b359559ac225c90a2b  # v5.3.0
+      with:
+        python-version: ${{ inputs.python-version }}
+
+    - name: Install KeyLeak
+      shell: bash
+      run: |
+        python -m pip install --upgrade pip
+        python -m pip install -e "${{ github.action_path }}"
+        if [ "${{ inputs.mode }}" = "browser" ] || [ "${{ inputs.mode }}" = "both" ]; then
+          python -m pip install playwright
+          python -m playwright install chromium --with-deps
+        fi
+
+    - name: Run KeyLeak scan
+      id: scan
+      shell: bash
+      env:
+        GITHUB_TOKEN: ''
+      run: |
+        FORMAT_FLAG="--json"
+        [ "${{ inputs.output-format }}" = "sarif" ] && FORMAT_FLAG="--sarif"
+        [ "${{ inputs.output-format }}" = "markdown" ] && FORMAT_FLAG="--markdown"
+        [ "${{ inputs.output-format }}" = "html" ] && FORMAT_FLAG="--html"
+
+        VERDICT="SAFE_TO_SHIP"
+        FINDINGS=0
+        REPORT="keyleak-report.${{ inputs.output-format }}"
+
+        # Local scan
+        if [ "${{ inputs.mode }}" = "local" ] || [ "${{ inputs.mode }}" = "both" ]; then
+          ALLOWLIST_FLAG=""
+          [ -f "${{ inputs.allowlist }}" ] && ALLOWLIST_FLAG="--allowlist ${{ inputs.allowlist }}"
+
+          keyleak self-audit . --fail-on ${{ inputs.fail-on }} || true
+
+          keyleak local . \
+            --launch-profile ${{ inputs.launch-profile }} \
+            $ALLOWLIST_FLAG \
+            $FORMAT_FLAG \
+            --fail-on ${{ inputs.fail-on }} > "$REPORT" || VERDICT="BLOCK_SHIP"
+        fi
+
+        # Browser scan
+        if [ "${{ inputs.mode }}" = "browser" ] || [ "${{ inputs.mode }}" = "both" ]; then
+          URL="${{ inputs.url }}"
+          if [ -n "$URL" ]; then
+            BAAS_FLAG=""
+            [ "${{ inputs.baas-validate }}" = "true" ] && BAAS_FLAG="--baas-validate"
+
+            keyleak browser-scan "$URL" \
+              $BAAS_FLAG \
+              $FORMAT_FLAG \
+              --fail-on ${{ inputs.fail-on }} > "keyleak-browser-report.${{ inputs.output-format }}" || VERDICT="BLOCK_SHIP"
+
+            REPORT="keyleak-browser-report.${{ inputs.output-format }}"
+          fi
+        fi
+
+        echo "verdict=$VERDICT" >> "$GITHUB_OUTPUT"
+        echo "report_path=$REPORT" >> "$GITHUB_OUTPUT"
+
+        if [ -f "$REPORT" ] && [ "${{ inputs.output-format }}" = "json" ]; then
+          FINDINGS=$(python -c "import json; r=json.load(open('$REPORT')); print(r.get('summary',{}).get('total_findings',0))" 2>/dev/null || echo 0)
+        fi
+        echo "findings_count=$FINDINGS" >> "$GITHUB_OUTPUT"
+
+    - name: Upload report artifact
+      if: always()
+      uses: actions/upload-artifact@65c4c4a1ddee5b72f698fdd19549f0f0fb45cf08  # v4.6.0
+      with:
+        name: keyleak-report
+        path: keyleak-*-report.*
+        if-no-files-found: ignore
