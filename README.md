@@ -1,10 +1,11 @@
 # KeyLeak Detector
 
-[![GitHub](https://img.shields.io/badge/GitHub-Amal--David%2Fkeyleak--detector-blue?logo=github)](https://github.com/Amal-David/keyleak-detector)
+[![PyPI](https://img.shields.io/pypi/v/keyleak-detector?color=34d399&logo=python&logoColor=white)](https://pypi.org/project/keyleak-detector/)
+[![GitHub](https://img.shields.io/github/stars/Amal-David/keyleak-detector?style=flat&logo=github)](https://github.com/Amal-David/keyleak-detector)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
-[![Python](https://img.shields.io/badge/Python-3.9%2B-blue)](https://www.python.org/)
-[![Chrome Extension](https://img.shields.io/badge/Chrome-Extension-4285F4?logo=googlechrome)](extension/)
-[![Version](https://img.shields.io/badge/version-0.5.0-orange)](https://github.com/Amal-David/keyleak-detector/releases)
+[![GitHub Action](https://img.shields.io/badge/GitHub_Action-available-2088FF?logo=githubactions&logoColor=white)](docs/github-action.md)
+[![Chrome Extension](https://img.shields.io/badge/Chrome-Extension-4285F4?logo=googlechrome&logoColor=white)](extension/)
+[![Python](https://img.shields.io/badge/Python-3.9%2B-3776AB?logo=python&logoColor=white)](https://www.python.org/)
 
 Runtime leak detector for modern web apps. Finds exposed API keys, **validates BaaS misconfigurations** (Supabase RLS, Firebase Security Rules), and catches secrets in JavaScript bundles -- with a Chrome extension for real-time detection.
 
@@ -17,25 +18,62 @@ Static scanners find hardcoded secrets in source code. KeyLeak finds the ones th
 - **Site scanner**: Discovers subdomains, crawls pages, scans everything. One command for a full site audit.
 - **200+ first-party domain suppression**: No false positives when browsing Google, AWS, Azure, GitHub, Stripe, etc.
 
-## Quick Start
+## Install
 
-### Chrome Extension (recommended for daily use)
+### PyPI (recommended)
 
 ```bash
-# Load the extension in Chrome
-# 1. Open chrome://extensions
-# 2. Enable "Developer mode"
-# 3. Click "Load unpacked" → select the extension/ folder
+pip install keyleak-detector
+keyleak browser-scan https://your-app.vercel.app --html > report.html
 ```
 
-Browse any site. The extension icon shows a badge count for findings. Click to see details, TEST keys, and view remediation.
+### GitHub Action (CI/CD)
 
-### CLI Scanner
+Add to any repo to scan preview deployments automatically:
+
+```yaml
+# .github/workflows/keyleak.yml
+name: KeyLeak Security Scan
+on: [deployment_status]
+
+jobs:
+  keyleak:
+    if: github.event.deployment_status.state == 'success'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: Amal-David/keyleak-detector@v0.5.0
+        id: scan
+        with:
+          mode: browser
+          url: ${{ github.event.deployment_status.target_url }}
+          baas-validate: true
+          fail-on: high
+```
+
+Works with **Vercel**, **Netlify**, **Render**, **Railway** — anywhere a preview URL is generated. See [full GitHub Action docs](docs/github-action.md) for all options, SARIF upload, and local-only scanning.
+
+### Chrome Extension
+
+```
+1. Open chrome://extensions
+2. Enable "Developer mode"
+3. Click "Load unpacked" → select the extension/ folder
+```
+
+Browse any site. The extension icon shows a badge count for findings. Click to see details, TEST keys live, and view remediation.
+
+### From Source
 
 ```bash
-# Install
+git clone https://github.com/Amal-David/keyleak-detector.git
+cd keyleak-detector
 poetry install && poetry run playwright install chromium
+```
 
+## Usage
+
+```bash
 # Scan a single page
 keyleak browser-scan https://your-app.vercel.app --html > report.html
 
@@ -45,8 +83,10 @@ keyleak browser-scan https://your-app.vercel.app --baas-validate --html > report
 # Scan an entire site (subdomain discovery + page crawling)
 keyleak site-scan example.com --depth 2 --baas-validate --html > report.html
 
-# Scan local files
+# Scan local files for secrets
 keyleak local . --fail-on high
+
+# Output formats: --json, --sarif, --markdown, --html
 ```
 
 ### HTML Report
