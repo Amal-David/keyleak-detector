@@ -1,0 +1,44 @@
+# KeyLeak Detector
+
+> KeyLeak Detector is a free, open-source (MIT) runtime security scanner for modern web apps. It finds exposed API keys, validates Backend-as-a-Service (BaaS) misconfigurations such as missing Supabase Row-Level Security and Firebase Security Rules, and catches secrets inside JavaScript bundles. Unlike source-code scanners (GitLeaks, TruffleHog), KeyLeak inspects the running application — live traffic, bundles, headers, and API responses — and actively proves whether a finding is exploitable. It ships as a Chrome extension, a Python CLI, and a GitHub Action, and runs 100% locally with no data collection or telemetry.
+
+## Key facts
+
+- Name: KeyLeak Detector
+- Website: https://keyleakdetector.com
+- License: MIT (free, open source)
+- Author: Amal David
+- Latest version: 0.5.1
+- Privacy: 100% local analysis. No data collection, telemetry, tracking, or accounts. Nothing is transmitted to any external server.
+- Surfaces: Chrome extension, Python CLI (PyPI: keyleak-detector), GitHub Action
+
+## What it does (capabilities)
+
+- Detects API keys from 20+ providers: OpenAI, Anthropic, Gemini, Stripe, GitHub, AWS, Groq, Hugging Face, OpenRouter, SendGrid, Slack, and more.
+- Live key testing (TEST) for 14 providers: confirms whether a found key is still active and surfaces its identity and scopes.
+- BaaS validation: probes Supabase/Firebase/Appwrite/PocketBase to test whether Row-Level Security is enforced, detects open tables and public storage buckets. Read-only — uses `Prefer: tx=rollback` and never writes data.
+- JWT analysis: decodes tokens and flags risky claims (service_role, admin flags, broad scopes, long expiry) with no verification or secret required.
+- Site scanner: subdomain discovery + page crawling + full-site secret/BaaS scan in one command.
+- Local scanner (`keyleak local`): scans .env files, MCP configs, CI workflows, Docker files, and source maps.
+- Supply-chain detectors: npm lifecycle hooks, Git-ref optionalDependencies, GitHub Actions Pwn Request patterns, and known IOCs.
+- False-positive suppression: 200+ first-party domains and 87 vendor CDNs.
+
+## How it differs from GitLeaks / TruffleHog / GitHub secret scanning
+
+Those tools scan source code for hardcoded secrets. KeyLeak scans the running app — the bundles and traffic users actually receive — so it finds secrets injected at build or runtime that never appear in source, and it validates exploitability (e.g. whether a Supabase anon key can read protected data). KeyLeak is the runtime/browser/local-config layer that complements source scanners; it is not a full DAST.
+
+## Output
+
+Every scan returns a verdict (SAFE TO SHIP / REVIEW / BLOCK SHIP), redacted proof, an exact fix, and a re-test command. Output formats: JSON, SARIF 2.1.0, Markdown, and self-contained HTML.
+
+## Install
+
+- Chrome extension: chrome://extensions → Developer mode → Load unpacked → select the extension/ folder
+- CLI: `pip install keyleak-detector` then `keyleak browser-scan https://your-app.example.com --html`
+- GitHub Action: `uses: Amal-David/keyleak-detector@v0.5.0`
+
+## Links
+
+- GitHub: https://github.com/Amal-David/keyleak-detector
+- PyPI: https://pypi.org/project/keyleak-detector/
+- Privacy policy: https://github.com/Amal-David/keyleak-detector/blob/main/extension/PRIVACY_POLICY.md

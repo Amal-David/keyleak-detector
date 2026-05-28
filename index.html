@@ -1,0 +1,352 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>KeyLeak Detector — Find Leaked API Keys & BaaS Misconfigs at Runtime</title>
+<meta name="description" content="KeyLeak Detector is a runtime secret scanner for web apps. It finds exposed API keys, validates Supabase/Firebase RLS misconfigurations, and catches secrets in JavaScript bundles — with a Chrome extension, CLI, and GitHub Action. Open source, 100% local.">
+<link rel="canonical" href="https://keyleakdetector.com/">
+<meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1">
+<meta name="theme-color" content="#0f172a">
+<meta name="author" content="Amal David">
+<meta name="keywords" content="API key scanner, secret detection, Supabase RLS, Firebase security rules, BaaS misconfiguration, runtime secret scanner, Chrome extension secret detector, JWT decoder, exposed API keys, leaked credentials">
+
+<!-- Open Graph -->
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="KeyLeak Detector">
+<meta property="og:title" content="KeyLeak Detector — Find Leaked API Keys at Runtime">
+<meta property="og:description" content="Runtime secret scanner that finds exposed API keys, validates Supabase/Firebase RLS, and tests whether a leaked key is still live. Chrome extension, CLI & GitHub Action. Open source.">
+<meta property="og:url" content="https://keyleakdetector.com/">
+<meta property="og:image" content="https://keyleakdetector.com/og-image.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+
+<!-- Twitter -->
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="KeyLeak Detector — Find Leaked API Keys at Runtime">
+<meta name="twitter:description" content="Runtime secret scanner: exposed API keys, Supabase/Firebase RLS validation, live key testing. Chrome extension, CLI & GitHub Action. Open source.">
+<meta name="twitter:image" content="https://keyleakdetector.com/og-image.png">
+
+<link rel="icon" type="image/png" sizes="128x128" href="/favicon-128.png">
+<link rel="apple-touch-icon" href="/favicon-128.png">
+<link rel="preconnect" href="https://github.com">
+
+<!-- Structured data: SoftwareApplication -->
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "SoftwareApplication",
+  "name": "KeyLeak Detector",
+  "applicationCategory": "SecurityApplication",
+  "applicationSubCategory": "Secret & API Key Scanner",
+  "operatingSystem": "Chrome, Linux, macOS, Windows",
+  "url": "https://keyleakdetector.com/",
+  "downloadUrl": "https://pypi.org/project/keyleak-detector/",
+  "softwareVersion": "0.5.1",
+  "description": "Runtime leak detector for modern web apps. Finds exposed API keys, validates BaaS misconfigurations (Supabase RLS, Firebase Security Rules), and catches secrets in JavaScript bundles — with a Chrome extension for real-time detection.",
+  "license": "https://opensource.org/licenses/MIT",
+  "author": { "@type": "Person", "name": "Amal David" },
+  "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
+  "featureList": [
+    "Runtime API key detection across 20+ providers",
+    "Active Supabase/Firebase Row-Level Security validation",
+    "Live key testing for 14 providers",
+    "JWT claim analysis (service_role, admin flags, broad scopes)",
+    "Secrets in minified JavaScript bundles",
+    "Local file, CI, MCP, and source-map scanning"
+  ],
+  "sameAs": [
+    "https://github.com/Amal-David/keyleak-detector",
+    "https://pypi.org/project/keyleak-detector/"
+  ]
+}
+</script>
+<!-- Structured data: FAQ (answer-engine optimized) -->
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  "mainEntity": [
+    {
+      "@type": "Question",
+      "name": "What is KeyLeak Detector?",
+      "acceptedAnswer": { "@type": "Answer", "text": "KeyLeak Detector is an open-source runtime security scanner for web apps. It finds API keys and secrets that only appear at runtime — in live traffic, JavaScript bundles, headers, and API responses — and validates Backend-as-a-Service misconfigurations such as missing Supabase Row-Level Security. It ships as a Chrome extension, a Python CLI, and a GitHub Action." }
+    },
+    {
+      "@type": "Question",
+      "name": "How is KeyLeak different from GitLeaks or TruffleHog?",
+      "acceptedAnswer": { "@type": "Answer", "text": "GitLeaks, TruffleHog, and GitHub secret scanning read source code to find hardcoded secrets. KeyLeak inspects the running application — the browser traffic and bundles your users actually receive — so it catches secrets injected at build or runtime that never appear in source. It also actively proves exploitability, for example by probing whether a Supabase anon key can read protected tables." }
+    },
+    {
+      "@type": "Question",
+      "name": "Does KeyLeak send my data anywhere?",
+      "acceptedAnswer": { "@type": "Answer", "text": "No. All analysis runs locally in your browser or on your machine. KeyLeak collects no data, has no telemetry or tracking, requires no account, and never transmits findings to an external server." }
+    },
+    {
+      "@type": "Question",
+      "name": "Which API key providers does KeyLeak detect and test?",
+      "acceptedAnswer": { "@type": "Answer", "text": "KeyLeak detects keys from 20+ providers including OpenAI, Anthropic, Gemini, Stripe, GitHub, AWS, Groq, Hugging Face, OpenRouter, SendGrid, and Slack. Its TEST feature validates whether a found key is still live for 14 of those providers." }
+    },
+    {
+      "@type": "Question",
+      "name": "Is KeyLeak Detector free?",
+      "acceptedAnswer": { "@type": "Answer", "text": "Yes. KeyLeak Detector is free and open source under the MIT license. The Chrome extension, CLI, and GitHub Action are all free to use." }
+    }
+  ]
+}
+</script>
+
+<style>
+:root{--bg:#020617;--panel:#0f172a;--panel2:#0b1220;--line:#1e293b;--em:#34d399;--em2:#10b981;--text:#cbd5e1;--mut:#94a3b8;--dim:#64748b;}
+*{margin:0;padding:0;box-sizing:border-box;}
+html{scroll-behavior:smooth;}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Inter,Roboto,sans-serif;background:var(--bg);color:var(--text);line-height:1.6;-webkit-font-smoothing:antialiased;}
+.wrap{max-width:1140px;margin:0 auto;padding:0 24px;}
+a{color:var(--em);text-decoration:none;}
+code,kbd{font-family:'SF Mono','Fira Code',ui-monospace,Consolas,monospace;}
+.mono{font-family:'SF Mono','Fira Code',ui-monospace,Consolas,monospace;}
+
+/* nav */
+header{position:sticky;top:0;z-index:50;background:rgba(2,6,23,.8);backdrop-filter:blur(12px);border-bottom:1px solid var(--line);}
+nav{display:flex;align-items:center;justify-content:space-between;height:64px;}
+.brand{display:flex;align-items:center;gap:10px;font-weight:800;color:#f8fafc;font-size:17px;}
+.brand svg{width:28px;height:28px;}
+.navlinks{display:flex;align-items:center;gap:26px;}
+.navlinks a{color:var(--mut);font-size:14.5px;font-weight:500;}
+.navlinks a:hover{color:#f8fafc;}
+.btn{display:inline-block;padding:10px 18px;border-radius:9px;font-weight:700;font-size:14.5px;border:1px solid transparent;cursor:pointer;}
+.btn-primary{background:var(--em2);color:#031412;}
+.btn-primary:hover{background:var(--em);}
+.btn-ghost{border-color:var(--line);color:var(--text);}
+.btn-ghost:hover{border-color:#475569;}
+@media(max-width:760px){.navlinks a:not(.btn){display:none;}}
+
+/* hero */
+.hero{position:relative;padding:96px 0 72px;text-align:center;overflow:hidden;}
+.hero::before{content:"";position:absolute;inset:0;background:
+  radial-gradient(900px 500px at 50% -10%,rgba(16,185,129,.18),transparent 60%),
+  radial-gradient(700px 500px at 85% 30%,rgba(13,148,136,.10),transparent 55%);pointer-events:none;}
+.hero .wrap{position:relative;z-index:2;}
+.tag{display:inline-flex;align-items:center;gap:8px;padding:6px 14px;border:1px solid var(--line);border-radius:999px;color:var(--em);font-size:13px;font-weight:600;margin-bottom:24px;}
+.tag .dot{width:8px;height:8px;border-radius:50%;background:var(--em);box-shadow:0 0 12px var(--em);}
+h1{font-size:clamp(34px,6vw,60px);line-height:1.05;letter-spacing:-1.5px;font-weight:800;background:linear-gradient(180deg,#f8fafc,#93a3b8);-webkit-background-clip:text;background-clip:text;color:transparent;max-width:18ch;margin:0 auto;}
+.sub{font-size:clamp(17px,2.2vw,21px);color:var(--mut);max-width:60ch;margin:22px auto 32px;}
+.cta{display:flex;gap:12px;justify-content:center;flex-wrap:wrap;}
+.term{margin:44px auto 0;max-width:640px;background:var(--panel);border:1px solid var(--line);border-radius:12px;text-align:left;box-shadow:0 30px 60px -25px rgba(0,0,0,.7);}
+.term .bar{display:flex;gap:7px;padding:12px 14px;border-bottom:1px solid var(--line);}
+.term .bar i{width:11px;height:11px;border-radius:50%;background:#334155;display:inline-block;}
+.term pre{padding:18px;font-size:13.5px;line-height:1.7;overflow-x:auto;color:var(--mut);}
+.term .p{color:var(--em);}.term .c{color:#fca5a5;font-weight:700;}.term .g{color:var(--em);font-weight:700;}.term .d{color:var(--dim);}
+
+/* trust */
+.trust{border-top:1px solid var(--line);border-bottom:1px solid var(--line);background:var(--panel2);}
+.trust .wrap{display:flex;flex-wrap:wrap;justify-content:space-around;gap:24px;padding:34px 24px;text-align:center;}
+.stat .n{font-size:30px;font-weight:800;color:#f8fafc;}
+.stat .l{font-size:13.5px;color:var(--dim);}
+
+/* sections */
+section{padding:84px 0;}
+.eyebrow{color:var(--em);font-weight:700;font-size:13px;letter-spacing:1.5px;text-transform:uppercase;text-align:center;}
+h2{font-size:clamp(28px,4vw,40px);font-weight:800;letter-spacing:-1px;color:#f8fafc;text-align:center;margin:10px auto 14px;max-width:20ch;}
+.lead{color:var(--mut);text-align:center;max-width:62ch;margin:0 auto 50px;font-size:17px;}
+
+.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:20px;}
+@media(max-width:900px){.grid{grid-template-columns:1fr;}}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:26px;transition:border-color .2s,transform .2s;}
+.card:hover{border-color:#2dd4bf55;transform:translateY(-3px);}
+.card .ic{width:42px;height:42px;border-radius:10px;background:rgba(52,211,153,.12);border:1px solid #34d39955;display:flex;align-items:center;justify-content:center;margin-bottom:16px;color:var(--em);font-size:20px;}
+.card h3{color:#f8fafc;font-size:18px;font-weight:700;margin-bottom:8px;}
+.card p{color:var(--mut);font-size:14.5px;}
+
+/* steps */
+.steps{display:grid;grid-template-columns:repeat(3,1fr);gap:24px;counter-reset:s;}
+@media(max-width:900px){.steps{grid-template-columns:1fr;}}
+.step{position:relative;padding:26px;border:1px solid var(--line);border-radius:14px;background:var(--panel);}
+.step::before{counter-increment:s;content:counter(s);position:absolute;top:-16px;left:24px;width:34px;height:34px;border-radius:9px;background:var(--em2);color:#031412;font-weight:800;display:flex;align-items:center;justify-content:center;}
+.step h3{color:#f8fafc;margin:8px 0;font-size:17px;}
+.step p{color:var(--mut);font-size:14.5px;}
+
+/* table */
+.tbl{width:100%;border-collapse:collapse;border:1px solid var(--line);border-radius:12px;overflow:hidden;font-size:14.5px;}
+.tbl th,.tbl td{padding:14px 18px;text-align:left;border-bottom:1px solid var(--line);}
+.tbl th{background:var(--panel2);color:#f8fafc;font-weight:700;}
+.tbl td{color:var(--mut);}
+.tbl tr:last-child td{border-bottom:none;}
+.tbl td strong{color:#e2e8f0;}
+
+/* install */
+.install{display:grid;grid-template-columns:repeat(3,1fr);gap:20px;}
+@media(max-width:900px){.install{grid-template-columns:1fr;}}
+.icard{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:24px;}
+.icard h3{color:#f8fafc;font-size:17px;margin-bottom:12px;}
+.icard pre{background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:12px 14px;font-size:13px;color:var(--em);overflow-x:auto;}
+
+/* faq */
+.faq{max-width:820px;margin:0 auto;}
+details{border:1px solid var(--line);border-radius:12px;background:var(--panel);margin-bottom:12px;padding:0 22px;}
+details[open]{border-color:#2dd4bf55;}
+summary{cursor:pointer;list-style:none;padding:20px 0;font-weight:700;color:#f8fafc;font-size:16.5px;display:flex;justify-content:space-between;align-items:center;}
+summary::-webkit-details-marker{display:none;}
+summary::after{content:"+";color:var(--em);font-size:22px;font-weight:400;}
+details[open] summary::after{content:"−";}
+details p{color:var(--mut);padding:0 0 22px;font-size:15px;}
+
+/* footer */
+footer{border-top:1px solid var(--line);padding:48px 0;color:var(--dim);font-size:14px;}
+footer .wrap{display:flex;justify-content:space-between;flex-wrap:wrap;gap:18px;align-items:center;}
+footer a{color:var(--mut);}footer a:hover{color:#f8fafc;}
+.flinks{display:flex;gap:22px;flex-wrap:wrap;}
+</style>
+</head>
+<body>
+
+<svg width="0" height="0" style="position:absolute"><defs>
+<symbol id="logo" viewBox="0 0 32 32">
+  <rect width="32" height="32" rx="8" fill="#0f172a"/>
+  <circle cx="14" cy="14" r="7.5" fill="none" stroke="#34d399" stroke-width="2.6"/>
+  <circle cx="14" cy="12.5" r="2.2" fill="#34d399"/>
+  <path d="M12.6 14.2 L15.4 14.2 L16.4 18 L11.6 18 Z" fill="#34d399"/>
+  <line x1="19.2" y1="19.2" x2="24" y2="24" stroke="#34d399" stroke-width="3" stroke-linecap="round"/>
+</symbol></defs></svg>
+
+<header>
+  <div class="wrap">
+    <nav>
+      <a class="brand" href="/"><svg><use href="#logo"/></svg>KeyLeak Detector</a>
+      <div class="navlinks">
+        <a href="#features">Features</a>
+        <a href="#how">How it works</a>
+        <a href="#detects">Detects</a>
+        <a href="#faq">FAQ</a>
+        <a href="https://github.com/Amal-David/keyleak-detector" class="btn btn-ghost">GitHub ★</a>
+      </div>
+    </nav>
+  </div>
+</header>
+
+<main>
+<section class="hero">
+  <div class="wrap">
+    <span class="tag"><span class="dot"></span>Open source · MIT · 100% local</span>
+    <h1>Find leaked API keys before you ship</h1>
+    <p class="sub">KeyLeak Detector is a runtime secret scanner. It catches exposed API keys, secrets in JavaScript bundles, and Supabase/Firebase misconfigurations that static scanners never see — then proves they're exploitable.</p>
+    <div class="cta">
+      <a class="btn btn-primary" href="#install">Add to Chrome →</a>
+      <a class="btn btn-ghost" href="https://github.com/Amal-David/keyleak-detector">View on GitHub</a>
+    </div>
+    <div class="term">
+      <div class="bar"><i></i><i></i><i></i></div>
+      <pre class="mono"><span class="d">$</span> <span class="p">keyleak</span> browser-scan https://app.acme.dev --baas-validate
+
+<span class="c">BLOCK SHIP</span>: 1 critical, 1 high, 2 medium
+  <span class="c">●</span> GEMINI API KEY — live (rotate now) · app.bundle.js
+  <span class="c">●</span> SUPABASE — table `profiles` readable with anon key (no RLS)
+<span class="d">Re-test:</span> keyleak browser-scan https://app.acme.dev --baas-validate</pre>
+    </div>
+  </div>
+</section>
+
+<div class="trust">
+  <div class="wrap">
+    <div class="stat"><div class="n">20+</div><div class="l">API key providers detected</div></div>
+    <div class="stat"><div class="n">14</div><div class="l">providers with live key testing</div></div>
+    <div class="stat"><div class="n">200+</div><div class="l">first-party domains suppressed</div></div>
+    <div class="stat"><div class="n">0</div><div class="l">data sent anywhere</div></div>
+  </div>
+</div>
+
+<section id="features">
+  <div class="wrap">
+    <p class="eyebrow">What makes it different</p>
+    <h2>Static scanners read source. KeyLeak watches runtime.</h2>
+    <p class="lead">The secrets that hurt you are the ones your users actually receive — injected at build time, served in bundles, exposed by misconfigured backends. KeyLeak inspects the running app and validates what it finds.</p>
+    <div class="grid">
+      <div class="card"><div class="ic">⚡</div><h3>Runtime key detection</h3><p>Scans live traffic, inline scripts, minified bundles, headers, and API responses for keys from OpenAI, Anthropic, Gemini, Stripe, GitHub, AWS, and 20+ providers.</p></div>
+      <div class="card"><div class="ic">🛡️</div><h3>BaaS RLS validation</h3><p>A Supabase anon key is harmless if Row-Level Security works. KeyLeak probes the REST API to test whether it does — read-only, using <code>Prefer: tx=rollback</code> so it never writes data.</p></div>
+      <div class="card"><div class="ic">✓</div><h3>Live key testing</h3><p>The TEST button validates whether a found key is still active across 14 providers, and surfaces the authenticated identity and scopes. A dead key is noise; a live one is an incident.</p></div>
+      <div class="card"><div class="ic">🔑</div><h3>JWT claim analysis</h3><p>Decodes tokens in place and flags risky claims — <code>service_role</code>, admin flags, broad scopes, and decade-long expiries — no verification or secret required.</p></div>
+      <div class="card"><div class="ic">🌐</div><h3>Site scanner</h3><p>One command discovers subdomains, crawls pages, and scans everything for secrets and BaaS vulnerabilities across a whole site.</p></div>
+      <div class="card"><div class="ic">🔕</div><h3>Fewer false positives</h3><p>200+ first-party domains and 87 vendor CDNs are suppressed, so browsing Google, AWS, GitHub, or Stripe never lights up red.</p></div>
+    </div>
+  </div>
+</section>
+
+<section id="how" style="background:var(--panel2);border-top:1px solid var(--line);border-bottom:1px solid var(--line);">
+  <div class="wrap">
+    <p class="eyebrow">How it works</p>
+    <h2>From browse to verdict in one step</h2>
+    <p class="lead">Every serious scan ends with four things: a verdict, redacted proof, an exact fix, and a re-test command.</p>
+    <div class="steps">
+      <div class="step"><h3>Scan</h3><p>Load a page in the Chrome extension, point the CLI at a preview URL, or run <code>keyleak local</code> over your files. KeyLeak captures runtime traffic and bundles.</p></div>
+      <div class="step"><h3>Validate</h3><p>Found keys are tested live; BaaS endpoints are probed for missing RLS and public buckets. Findings are proven, not just pattern-matched.</p></div>
+      <div class="step"><h3>Ship or block</h3><p>You get <strong>SAFE TO SHIP</strong>, <strong>REVIEW</strong>, or <strong>BLOCK SHIP</strong> with remediation and a re-test command — perfect as a CI launch gate.</p></div>
+    </div>
+  </div>
+</section>
+
+<section id="detects">
+  <div class="wrap">
+    <p class="eyebrow">Coverage</p>
+    <h2>What KeyLeak detects</h2>
+    <p class="lead">From cloud credentials to backend misconfigurations to local config leaks.</p>
+    <table class="tbl">
+      <tr><th>Category</th><th>What</th><th>How</th></tr>
+      <tr><td><strong>BaaS misconfig</strong></td><td>Open Supabase tables, missing RLS, public storage buckets, callable RPCs</td><td>Active validation — probes the REST API with only the anon key</td></tr>
+      <tr><td><strong>API keys</strong></td><td>OpenAI, Anthropic, Gemini, Stripe, GitHub, AWS + 20 more</td><td>Regex detection + live TEST validation</td></tr>
+      <tr><td><strong>JWT analysis</strong></td><td>service_role exposure, admin flags, broad scopes, long expiry</td><td>Decode + claims analysis</td></tr>
+      <tr><td><strong>Supply chain</strong></td><td>npm lifecycle hooks, Git-ref optionalDeps, Pwn Request patterns</td><td>AST + fingerprint detection</td></tr>
+      <tr><td><strong>Local config</strong></td><td>.env, MCP configs, CI workflows, Docker files, source maps</td><td><code>keyleak local</code> scanner</td></tr>
+    </table>
+  </div>
+</section>
+
+<section id="install" style="background:var(--panel2);border-top:1px solid var(--line);border-bottom:1px solid var(--line);">
+  <div class="wrap">
+    <p class="eyebrow">Install</p>
+    <h2>Three ways to run it</h2>
+    <p class="lead">Use the surface that matches your workflow — they share one detection engine.</p>
+    <div class="install">
+      <div class="icard"><h3>🧩 Chrome Extension</h3><p style="color:var(--mut);font-size:14.5px;margin-bottom:12px">Real-time detection as you browse, with live key testing and JWT decoding.</p><pre class="mono">chrome://extensions
+→ Load unpacked
+→ select extension/</pre></div>
+      <div class="icard"><h3>📦 PyPI / CLI</h3><p style="color:var(--mut);font-size:14.5px;margin-bottom:12px">Scan live apps, whole sites, or local files from the terminal.</p><pre class="mono">pip install keyleak-detector
+keyleak browser-scan URL --html</pre></div>
+      <div class="icard"><h3>⚙️ GitHub Action</h3><p style="color:var(--mut);font-size:14.5px;margin-bottom:12px">Gate preview deployments in CI on Vercel, Netlify, Render & more.</p><pre class="mono">uses: Amal-David/keyleak-detector@v0.5.0
+with:
+  mode: browser</pre></div>
+    </div>
+  </div>
+</section>
+
+<section id="faq">
+  <div class="wrap">
+    <p class="eyebrow">FAQ</p>
+    <h2>Questions, answered</h2>
+    <div class="faq" style="margin-top:40px">
+      <details open><summary>What is KeyLeak Detector?</summary><p>KeyLeak Detector is an open-source runtime security scanner for web apps. It finds API keys and secrets that only appear at runtime — in live traffic, JavaScript bundles, headers, and API responses — and validates Backend-as-a-Service misconfigurations such as missing Supabase Row-Level Security. It ships as a Chrome extension, a Python CLI, and a GitHub Action.</p></details>
+      <details><summary>How is it different from GitLeaks or TruffleHog?</summary><p>GitLeaks, TruffleHog, and GitHub secret scanning read source code to find hardcoded secrets. KeyLeak inspects the running application — the browser traffic and bundles your users actually receive — so it catches secrets injected at build or runtime that never appear in source. It also actively proves exploitability, for example by probing whether a Supabase anon key can read protected tables. It complements source scanners rather than replacing them.</p></details>
+      <details><summary>Does KeyLeak send my data anywhere?</summary><p>No. All analysis runs locally in your browser or on your machine. KeyLeak collects no data, has no telemetry or tracking, requires no account, and never transmits findings to an external server. Findings are stored only in your browser's local storage and cleared when the tab closes.</p></details>
+      <details><summary>Which providers does it detect and test?</summary><p>KeyLeak detects keys from 20+ providers including OpenAI, Anthropic, Gemini, Stripe, GitHub, AWS, Groq, Hugging Face, OpenRouter, SendGrid, and Slack. Its TEST feature validates whether a found key is still live for 14 of those providers, and surfaces the authenticated identity and scopes.</p></details>
+      <details><summary>Is it free?</summary><p>Yes. KeyLeak Detector is free and open source under the MIT license. The Chrome extension, CLI, and GitHub Action are all free to use.</p></details>
+      <details><summary>Can I use it in CI/CD?</summary><p>Yes. The GitHub Action runs on preview deployments from Vercel, Netlify, Render, Railway, and anywhere a preview URL is generated. It supports SARIF upload, configurable fail-on thresholds, and a launch-gate profile that blocks merges on high or critical findings.</p></details>
+    </div>
+  </div>
+</section>
+</main>
+
+<footer>
+  <div class="wrap">
+    <a class="brand" href="/" style="font-size:15px"><svg width="22" height="22"><use href="#logo"/></svg>KeyLeak Detector</a>
+    <div class="flinks">
+      <a href="https://github.com/Amal-David/keyleak-detector">GitHub</a>
+      <a href="https://pypi.org/project/keyleak-detector/">PyPI</a>
+      <a href="#features">Features</a>
+      <a href="#faq">FAQ</a>
+      <a href="https://github.com/Amal-David/keyleak-detector/blob/main/extension/PRIVACY_POLICY.md">Privacy</a>
+    </div>
+    <div>MIT licensed · © 2026 Amal David</div>
+  </div>
+</footer>
+
+</body>
+</html>
