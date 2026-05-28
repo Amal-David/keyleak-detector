@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Privacy Policy — KeyLeak Detector</title>
+<meta name="description" content="KeyLeak Detector privacy policy. The Chrome extension, CLI, and scanner run 100% locally — no data collection, no telemetry, no tracking, no accounts. Nothing is sent to any external server.">
+<link rel="canonical" href="https://keyleakdetector.com/privacy">
+<meta name="robots" content="index, follow">
+<meta name="theme-color" content="#0f172a">
+<meta property="og:title" content="Privacy Policy — KeyLeak Detector">
+<meta property="og:description" content="KeyLeak Detector runs 100% locally. No data collection, telemetry, tracking, or accounts.">
+<meta property="og:url" content="https://keyleakdetector.com/privacy">
+<meta property="og:image" content="https://keyleakdetector.com/og-image.png">
+<link rel="icon" type="image/png" sizes="128x128" href="/favicon-128.png">
+<style>
+:root{--bg:#020617;--panel:#0f172a;--panel2:#0b1220;--line:#1e293b;--em:#34d399;--em2:#10b981;--text:#cbd5e1;--mut:#94a3b8;--dim:#64748b;}
+*{margin:0;padding:0;box-sizing:border-box;}
+html{scroll-behavior:smooth;}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Inter,Roboto,sans-serif;background:var(--bg);color:var(--text);line-height:1.7;-webkit-font-smoothing:antialiased;}
+.wrap{max-width:760px;margin:0 auto;padding:0 24px;}
+a{color:var(--em);text-decoration:none;}a:hover{text-decoration:underline;}
+header{position:sticky;top:0;z-index:50;background:rgba(2,6,23,.8);backdrop-filter:blur(12px);border-bottom:1px solid var(--line);}
+nav{display:flex;align-items:center;justify-content:space-between;height:64px;max-width:1140px;margin:0 auto;padding:0 24px;}
+.brand{display:flex;align-items:center;gap:10px;font-weight:800;color:#f8fafc;font-size:17px;}
+.brand svg{width:28px;height:28px;}
+.navlinks a{color:var(--mut);font-size:14.5px;font-weight:500;margin-left:24px;}
+.navlinks a:hover{color:#f8fafc;text-decoration:none;}
+main{padding:72px 0 96px;}
+.eyebrow{color:var(--em);font-weight:700;font-size:13px;letter-spacing:1.5px;text-transform:uppercase;}
+h1{font-size:clamp(32px,5vw,46px);font-weight:800;letter-spacing:-1px;color:#f8fafc;margin:10px 0 8px;}
+.updated{color:var(--dim);font-size:14px;margin-bottom:14px;}
+.callout{background:rgba(52,211,153,.08);border:1px solid #34d39955;border-radius:12px;padding:18px 22px;margin:24px 0 36px;color:#e2e8f0;font-size:16px;}
+.callout strong{color:var(--em);}
+h2{color:#f8fafc;font-size:22px;font-weight:700;margin:38px 0 12px;letter-spacing:-.3px;}
+p{color:var(--mut);margin-bottom:14px;}
+ul{color:var(--mut);margin:0 0 16px 4px;list-style:none;}
+li{position:relative;padding-left:26px;margin-bottom:10px;}
+li::before{content:"";position:absolute;left:0;top:9px;width:7px;height:7px;border-radius:50%;background:var(--em);}
+code{font-family:'SF Mono','Fira Code',ui-monospace,Consolas,monospace;background:var(--panel2);border:1px solid var(--line);border-radius:5px;padding:1px 6px;font-size:13.5px;color:var(--em);}
+footer{border-top:1px solid var(--line);padding:40px 0;color:var(--dim);font-size:14px;}
+footer .wrap{display:flex;justify-content:space-between;flex-wrap:wrap;gap:14px;align-items:center;}
+footer a{color:var(--mut);}footer a:hover{color:#f8fafc;}
+.flinks a{margin-left:20px;}
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute"><defs>
+<symbol id="logo" viewBox="0 0 32 32">
+  <rect width="32" height="32" rx="8" fill="#0f172a"/>
+  <path d="M16 5 L24 8 L24 13.5 L16 25 L8 13.5 L8 8 Z" fill="#34d399"/>
+  <circle cx="16" cy="12.8" r="2.7" fill="#0f172a"/>
+  <path d="M13.9 13.4 L18.1 13.4 L19.1 18.4 L12.9 18.4 Z" fill="#0f172a"/>
+</symbol></defs></svg>
+
+<header><nav>
+  <a class="brand" href="/"><svg><use href="#logo"/></svg>KeyLeak Detector</a>
+  <div class="navlinks"><a href="/#features">Features</a><a href="/#faq">FAQ</a><a href="https://github.com/Amal-David/keyleak-detector">GitHub</a></div>
+</nav></header>
+
+<main>
+  <div class="wrap">
+    <p class="eyebrow">Legal</p>
+    <h1>Privacy Policy</h1>
+    <p class="updated">Last updated: May 29, 2026</p>
+
+    <div class="callout"><strong>KeyLeak does not collect, transmit, or store any user data.</strong> The extension, CLI, and scanner run entirely on your own device.</div>
+
+    <h2>What KeyLeak does</h2>
+    <p>KeyLeak Detector is a security tool that runs entirely in your browser or on your machine. It analyzes web traffic and code to detect exposed API keys, Backend-as-a-Service (BaaS) misconfigurations, and secrets in JavaScript bundles.</p>
+
+    <h2>Data collection</h2>
+    <p>KeyLeak performs all analysis locally. Specifically:</p>
+    <ul>
+      <li>All analysis happens locally in your browser or on your machine.</li>
+      <li>No data is sent to any external server.</li>
+      <li>No analytics, telemetry, or tracking of any kind.</li>
+      <li>No user accounts or registration required.</li>
+      <li>Findings are stored only in your browser's local storage (per-tab) and cleared when the tab closes.</li>
+    </ul>
+
+    <h2>What the extension accesses</h2>
+    <ul>
+      <li><strong>Web requests:</strong> Intercepts HTTP requests and responses on pages you visit to scan for secrets. This data never leaves your browser.</li>
+      <li><strong>Page content:</strong> Reads the DOM, inline scripts, and browser storage to detect exposed credentials. This data never leaves your browser.</li>
+      <li><strong>The <code>&lt;all_urls&gt;</code> permission:</strong> Required so the scanner can run on any website you choose to visit. The extension only reads data while you are actively browsing a page, and never transmits it.</li>
+    </ul>
+
+    <h2>Optional local server</h2>
+    <p>The "Run Full Scan" feature connects to <code>http://127.0.0.1:5002</code> — a local Python server you run on your own machine. No data leaves your local network.</p>
+
+    <h2>Changes to this policy</h2>
+    <p>If this policy changes, the "Last updated" date above will be revised. Material changes will also be reflected in the extension's store listing.</p>
+
+    <h2>Contact</h2>
+    <p>Questions about this privacy policy: <a href="mailto:amal@utopianlabs.co">amal@utopianlabs.co</a><br>
+    Source &amp; issues: <a href="https://github.com/Amal-David/keyleak-detector">github.com/Amal-David/keyleak-detector</a></p>
+  </div>
+</main>
+
+<footer><div class="wrap">
+  <a class="brand" href="/" style="font-size:15px"><svg width="22" height="22"><use href="#logo"/></svg>KeyLeak Detector</a>
+  <div class="flinks"><a href="/">Home</a><a href="https://github.com/Amal-David/keyleak-detector">GitHub</a><a href="https://pypi.org/project/keyleak-detector/">PyPI</a></div>
+</div></footer>
+</body>
+</html>
