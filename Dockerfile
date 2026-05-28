@@ -1,5 +1,5 @@
-# Use Python 3.11 on Debian Bookworm (stable) for reliable apt repos
-FROM python:3.11-slim-bookworm
+# Use Python 3.12 on Debian Bookworm (stable) for reliable apt repos
+FROM python:3.12-slim-bookworm
 
 # Tool versions
 ARG TARGETARCH

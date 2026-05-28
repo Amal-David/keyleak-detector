@@ -39,7 +39,7 @@ inputs:
   python-version:
     description: 'Python version for the runner.'
     required: false
-    default: '3.11'
+    default: '3.12'
 outputs:
   verdict:
     description: 'Scan verdict: SAFE_TO_SHIP, REVIEW, or BLOCK_SHIP'

@@ -5,7 +5,7 @@
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![GitHub Action](https://img.shields.io/badge/GitHub_Action-available-2088FF?logo=githubactions&logoColor=white)](docs/github-action.md)
 [![Chrome Extension](https://img.shields.io/badge/Chrome-Extension-4285F4?logo=googlechrome&logoColor=white)](extension/)
-[![Python](https://img.shields.io/badge/Python-3.9%2B-3776AB?logo=python&logoColor=white)](https://www.python.org/)
+[![Python](https://img.shields.io/badge/Python-3.12%2B-3776AB?logo=python&logoColor=white)](https://www.python.org/)
 
 Runtime leak detector for modern web apps. Finds exposed API keys, **validates BaaS misconfigurations** (Supabase RLS, Firebase Security Rules), and catches secrets in JavaScript bundles -- with a Chrome extension for real-time detection.
 
@@ -221,7 +221,7 @@ Open `http://localhost:5002`.
 If you do not use Poetry, create a virtual environment and install the package locally:
 
 ```bash
-python3.11 -m venv .venv
+python3.12 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
 pip install -e .
