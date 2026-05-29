@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>The Public Key Was Never the Problem: Why Vibe-Coded Apps Leak — KeyLeak Detector</title>
+<meta name="description" content="AI tools default to Supabase and Firebase, moving security into config they skip. Why vibe-coded apps leak, the four failure patterns, and how to probe RLS.">
+<link rel="canonical" href="https://keyleakdetector.com/blog/baas-security-risks-vibecoded-apps">
+<meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1">
+<meta name="theme-color" content="#0f172a">
+<meta name="author" content="Amal David">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="KeyLeak Detector">
+<meta property="og:title" content="The Public Key Was Never the Problem: Why Vibe-Coded Apps Leak">
+<meta property="og:description" content="AI tools default to Supabase and Firebase, moving security into config they skip. Why vibe-coded apps leak, the four failure patterns, and how to probe RLS.">
+<meta property="og:url" content="https://keyleakdetector.com/blog/baas-security-risks-vibecoded-apps">
+<meta property="og:image" content="https://keyleakdetector.com/blog/og-baas.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="article:published_time" content="2026-05-29">
+<meta property="article:author" content="Amal David">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="The Public Key Was Never the Problem: Why Vibe-Coded Apps Leak">
+<meta name="twitter:description" content="AI tools default to Supabase and Firebase, moving security into config they skip. Why vibe-coded apps leak, the four failure patterns, and how to probe RLS.">
+<meta name="twitter:image" content="https://keyleakdetector.com/blog/og-baas.png">
+<link rel="icon" type="image/png" sizes="128x128" href="/favicon-128.png">
+<link rel="alternate" type="application/rss+xml" title="KeyLeak Detector Blog" href="/feed.xml">
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "BlogPosting", "headline": "The Public Key Was Never the Problem: Why Vibe-Coded Apps Leak", "description": "AI tools default to Supabase and Firebase, moving security into config they skip. Why vibe-coded apps leak, the four failure patterns, and how to probe RLS.", "image": "https://keyleakdetector.com/blog/og-baas.png", "datePublished": "2026-05-29", "dateModified": "2026-05-29", "author": {"@type": "Person", "name": "Amal David"}, "publisher": {"@type": "Organization", "name": "KeyLeak Detector", "logo": {"@type": "ImageObject", "url": "https://keyleakdetector.com/favicon-128.png"}}, "mainEntityOfPage": {"@type": "WebPage", "@id": "https://keyleakdetector.com/blog/baas-security-risks-vibecoded-apps"}, "url": "https://keyleakdetector.com/blog/baas-security-risks-vibecoded-apps", "isAccessibleForFree": true}</script>
+<style>
+:root{--bg:#020617;--panel:#0f172a;--panel2:#0b1220;--line:#1e293b;--em:#34d399;--em2:#10b981;--text:#cbd5e1;--mut:#94a3b8;--dim:#64748b;}
+*{margin:0;padding:0;box-sizing:border-box;}
+html{scroll-behavior:smooth;}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Inter,Roboto,sans-serif;background:var(--bg);color:var(--text);line-height:1.7;-webkit-font-smoothing:antialiased;}
+.wrap{max-width:1140px;margin:0 auto;padding:0 24px;}
+.wrap-narrow{max-width:740px;margin:0 auto;padding:0 24px;}
+a{color:var(--em);text-decoration:none;}
+code,.mono{font-family:'SF Mono','Fira Code',ui-monospace,Consolas,monospace;}
+header{position:sticky;top:0;z-index:50;background:rgba(2,6,23,.8);backdrop-filter:blur(12px);border-bottom:1px solid var(--line);}
+nav{display:flex;align-items:center;justify-content:space-between;height:64px;}
+.brand{display:flex;align-items:center;gap:10px;font-weight:800;color:#f8fafc;font-size:17px;}
+.brand svg{width:28px;height:28px;}
+.navlinks{display:flex;align-items:center;gap:26px;}
+.navlinks a{color:var(--mut);font-size:14.5px;font-weight:500;}
+.navlinks a:hover{color:#f8fafc;}
+.btn{display:inline-block;padding:10px 18px;border-radius:9px;font-weight:700;font-size:14.5px;border:1px solid transparent;}
+.btn-ghost{border-color:var(--line);color:var(--text);}
+.btn-ghost:hover{border-color:#475569;}
+.eyebrow{color:var(--em);font-weight:700;font-size:13px;letter-spacing:1.5px;text-transform:uppercase;}
+/* article */
+.article{padding:52px 0 92px;}
+.back{color:var(--mut);font-size:14px;display:inline-block;margin-bottom:26px;}
+.back:hover{color:#f8fafc;}
+.article h1{font-size:clamp(30px,5vw,46px);line-height:1.1;letter-spacing:-1px;color:#f8fafc;margin:12px 0 16px;font-weight:800;}
+.dek{font-size:20px;line-height:1.5;color:var(--mut);margin-bottom:18px;}
+.post-meta{color:var(--dim);font-size:14px;border-bottom:1px solid var(--line);padding-bottom:22px;margin-bottom:32px;}
+.prose{font-size:17.5px;line-height:1.78;color:var(--text);}
+.prose h2{font-size:26px;font-weight:800;color:#f8fafc;margin:40px 0 14px;letter-spacing:-.4px;line-height:1.2;}
+.prose h3{font-size:20px;font-weight:700;color:#f1f5f9;margin:28px 0 10px;}
+.prose p{margin-bottom:20px;}
+.prose a{color:var(--em);text-decoration:underline;text-decoration-color:#34d39966;text-underline-offset:3px;}
+.prose a:hover{text-decoration-color:#34d399;}
+.prose strong{color:#f1f5f9;}
+.prose ul,.prose ol{margin:0 0 22px 0;padding-left:0;list-style:none;}
+.prose li{position:relative;padding-left:28px;margin-bottom:12px;}
+.prose ul li::before{content:"";position:absolute;left:3px;top:12px;width:6px;height:6px;border-radius:50%;background:var(--em);}
+.prose ol{counter-reset:li;}
+.prose ol li{counter-increment:li;}
+.prose ol li::before{content:counter(li);position:absolute;left:0;top:1px;color:var(--em);font-weight:700;font-size:14px;}
+.prose code{background:var(--panel2);border:1px solid var(--line);border-radius:5px;padding:1px 6px;font-size:14.5px;color:var(--em);word-break:break-word;}
+.prose blockquote{border-left:3px solid var(--em);padding-left:20px;margin:24px 0;color:#e2e8f0;font-style:italic;}
+.prose blockquote.stat{border:1px solid #34d39955;border-left:3px solid var(--em);background:rgba(52,211,153,.07);border-radius:12px;padding:20px 24px;margin:30px 0;font-size:19px;line-height:1.55;color:#e6eef0;font-style:normal;}
+.prose blockquote.stat a{color:#6ee7b7;}
+.sources{margin-top:48px;border-top:1px solid var(--line);padding-top:26px;}
+.sources h2{font-size:13px;text-transform:uppercase;letter-spacing:1.4px;color:var(--dim);margin-bottom:14px;}
+.sources ol{counter-reset:s;list-style:none;font-size:14px;}
+.sources li{counter-increment:s;position:relative;padding-left:28px;margin-bottom:9px;color:var(--mut);}
+.sources li::before{content:counter(s)".";position:absolute;left:0;color:var(--em);font-weight:700;}
+.sources a{color:var(--mut);text-decoration:underline;word-break:break-word;}
+.sources a:hover{color:#f8fafc;}
+.related{margin-top:36px;padding:22px 24px;border:1px solid var(--line);border-radius:12px;background:var(--panel);font-size:15px;color:var(--mut);}
+.related a{font-weight:700;color:var(--em);}
+.cta{margin-top:30px;padding:26px;border:1px solid #34d39955;border-radius:14px;background:rgba(52,211,153,.06);text-align:center;}
+.cta a{display:inline-block;margin-top:12px;background:var(--em2);color:#031412;font-weight:700;padding:11px 22px;border-radius:9px;}
+.cta a:hover{background:var(--em);}
+/* blog index */
+.bloghero{padding:60px 0 8px;}
+.bloghero h1{font-size:clamp(32px,5vw,46px);font-weight:800;letter-spacing:-1px;color:#f8fafc;margin:10px 0 12px;}
+.bloghero p{color:var(--mut);font-size:18px;max-width:62ch;}
+.bloglist{padding:30px 0 90px;display:grid;gap:18px;}
+.postcard{display:block;border:1px solid var(--line);border-radius:14px;padding:28px;background:var(--panel);transition:border-color .2s,transform .2s;}
+.postcard:hover{border-color:#2dd4bf55;transform:translateY(-2px);}
+.postcard h2{font-size:24px;color:#f8fafc;margin:8px 0 8px;letter-spacing:-.4px;line-height:1.18;}
+.postcard p{color:var(--mut);font-size:15.5px;}
+.postcard .meta{color:var(--dim);font-size:13.5px;margin-top:12px;}
+footer{border-top:1px solid var(--line);padding:48px 0;color:var(--dim);font-size:14px;}
+footer .wrap{display:flex;justify-content:space-between;flex-wrap:wrap;gap:18px;align-items:center;}
+footer a{color:var(--mut);}footer a:hover{color:#f8fafc;}
+.flinks{display:flex;gap:22px;flex-wrap:wrap;}
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute"><defs><symbol id="logo" viewBox="0 0 32 32"><rect width="32" height="32" rx="8" fill="#0f172a"/><path d="M16 5 L24 8 L24 13.5 L16 25 L8 13.5 L8 8 Z" fill="#34d399"/><circle cx="16" cy="12.8" r="2.7" fill="#0f172a"/><path d="M13.9 13.4 L18.1 13.4 L19.1 18.4 L12.9 18.4 Z" fill="#0f172a"/></symbol></defs></svg>
+<header><div class="wrap"><nav><a class="brand" href="/"><svg><use href="#logo"/></svg>KeyLeak Detector</a><div class="navlinks"><a href="/#features">Features</a><a href="/blog">Blog</a><a href="/#faq">FAQ</a><a href="https://github.com/Amal-David/keyleak-detector" class="btn btn-ghost">GitHub &#9733;</a></div></nav></div></header>
+<main class="article"><div class="wrap-narrow">
+<a class="back" href="/blog">&larr; All posts</a>
+<p class="eyebrow">BAAS SECURITY</p>
+<h1>The Public Key Was Never the Problem: Why Vibe-Coded Apps Leak</h1>
+<p class="dek">AI tools ship full-stack apps in minutes and skip the one config step that keeps your database from being world-readable. Here&#x27;s how to catch it before you ship.</p>
+<div class="post-meta">May 29, 2026 &middot; 7 min read</div>
+<article class="prose">
+<p>In July 2025, someone browsing 4chan found a door that was never locked. The Tea app — a women's dating-safety app that had rocketed up the App Store, built fast and shipped faster — had left a <a href="https://www.security.org/identity-theft/breach/tea-app/" target="_blank" rel="noopener">Firebase storage bucket open to the public internet</a>. Directory listing and all. No firewall was bypassed. No zero-day was burned. The bucket simply answered every request that arrived.</p>
+
+<p>What spilled out were tens of thousands of user images, including selfies and photos of government IDs that users had uploaded for identity verification. Days later, a second exposure leaked private messages going back years — conversations about abortion, infidelity, and assault, some carrying phone numbers and physical meeting locations. The data was neither encrypted nor access-restricted. For a product whose entire promise was keeping women safe, the irony was total.</p>
+
+<p>Here is the part that should worry every engineer shipping software in 2026: this was not a freak accident. It is the default failure mode of how modern apps now get built.</p>
+
+<h2>The security boundary moved, and the tooling didn't follow</h2>
+
+<p>AI coding tools — Cursor, Lovable, v0, Bolt, Replit — now generate full-stack applications in minutes. To make that magic work, they overwhelmingly default to Backend-as-a-Service: Supabase or Firebase. You describe an app, the model wires up a client SDK, a database, auth screens, and storage, and something that looks production-ready renders in your browser.</p>
+
+<p>BaaS is genuinely good infrastructure. But it relocates your security model. In a traditional server app, an authorization check is a line of code sitting directly in the request path — hard to skip, because if you skip it the feature breaks. In BaaS, access control lives <em>outside</em> the request path, in separate declarative artifacts: Postgres <strong>Row-Level Security (RLS)</strong> policies and Firebase <strong>Security Rules</strong>. The app's UI works perfectly whether or not those policies exist. "It works" tells you nothing about whether it's safe — and "it works" is exactly the success criterion an AI generation flow optimizes for. The model ships the feature and stops at the doorstep of the one place that actually matters.</p>
+
+<h2>The key is supposed to be public</h2>
+
+<p>This is the single sentence the whole problem hangs on, so read it twice: the Supabase <code>anon</code> key and the Firebase web config in your bundle are <strong>public by design</strong>. They are not secrets. Anyone can pull them from DevTools in ten seconds, and that is completely fine — <em>if and only if</em> the database enforces row-level access.</p>
+
+<p>The <code>anon</code> key carries the Postgres <code>anon</code> role, which has no <code>BYPASSRLS</code> attribute. Every query it makes is supposed to be filtered by RLS policies. With RLS on and policies written correctly, an exposed <code>anon</code> key is a non-event. With RLS <em>off</em>, that same public key reads every row in the table. The entire security boundary collapses from "protect the key" to one question: <strong>is RLS actually enforced?</strong> The engineers who burn a weekend trying to hide a key that was meant to be visible are guarding the wrong door entirely.</p>
+
+<h2>Why this is a time bomb, not a bug</h2>
+
+<p>The defaults make the unsafe path the path of least resistance. Supabase tables created via raw SQL historically ship with RLS <em>off</em> — you have to run <code>ALTER TABLE x ENABLE ROW LEVEL SECURITY</code> yourself. Firebase "test mode" grants public read <em>and write</em> to your entire database and storage for 30 days using <code>allow read, write: if true</code>. The 30-day timer is its own trap: it manufactures a false sense of safety, then breaks the live app when it expires, pressuring developers to just reopen the rule.</p>
+
+<p>Now stack on the volume. AI-authored code rose to <a href="https://getdx.com/blog/ai-generated-merged-code-holds-steady-at-30/" target="_blank" rel="noopener">27.4% of all merged production code in Q1 2026</a>, per DX's measurement across 500+ organizations. Supabase reports that <a href="https://supabase.com/wrapped" target="_blank" rel="noopener">more databases were created in 2025 than in all previous years combined</a>. And the quality gap is structural, not stylistic — Veracode tested over 100 models and found that when given a choice between secure and insecure implementations, they <a href="https://www.businesswire.com/news/home/20250730694951/en/AI-Generated-Code-Poses-Major-Security-Risks-in-Nearly-Half-of-All-Development-Tasks-Veracode-Research-Reveals" target="_blank" rel="noopener">picked the insecure one 45% of the time</a>.</p>
+
+<blockquote class="stat">Veracode found AI-generated <a href="https://www.helpnetsecurity.com/2025/08/07/create-ai-code-security-risks/" target="_blank" rel="noopener">Java failed security tests more than 70% of the time</a>, with Python, C#, and JavaScript between 38% and 45%.</blockquote>
+
+<p>More apps, shipping faster, with fewer security reviews — that is the acceleration mechanism. The code functions. It just isn't safe, and nobody checked.</p>
+
+<h2>The four failure patterns</h2>
+
+<p>The catalog is small, recurring, and every entry is one config line away from total exposure — and invisible from the rendered UI:</p>
+
+<ul>
+<li><strong>RLS never enabled / open tables.</strong> The table works, the demo works, and the <code>anon</code> key reads every row.</li>
+<li><strong>Public storage buckets.</strong> The Tea pattern. A bucket left readable, often with directory listing on, answering anonymous requests.</li>
+<li><strong><code>service_role</code> / admin keys in the client bundle.</strong> The <code>service_role</code> key bypasses RLS entirely and grants full admin access. It leaks when it's used in frontend code or inlined through a <code>NEXT_PUBLIC_</code> / <code>VITE_</code> env prefix. If it's in your bundle, RLS cannot save you — rotate it now.</li>
+<li><strong>Permissive default rules in production.</strong> A leftover <code>USING (true)</code> policy or <code>allow read, write: if true</code> that never got tightened.</li>
+</ul>
+
+<h2>The receipts: this is systemic</h2>
+
+<p>This is not a handful of careless teams. When security researcher Matt Palmer crawled 1,645 Lovable-generated projects (CVE-2025-48757), he found <a href="https://securityonline.info/cve-2025-48757-lovables-row-level-security-breakdown-exposes-sensitive-data-across-hundreds-of-projects/" target="_blank" rel="noopener">170 sites — 10.3% — readable or writable by unauthenticated requests using only the public anon key</a>, leaking names, emails, addresses, payment data, and third-party API keys.</p>
+
+<p>The Firebase side is older and larger. Avast scanned 180,300 Firebase databases and found <a href="https://therecord.media/more-than-10-of-firebase-databases-are-open-and-exposing-data" target="_blank" rel="noopener">10.7% — about 19,300 — left open to unauthenticated users</a>. A later crawl of 5.2 million domains surfaced <a href="https://www.theregister.com/2024/03/18/google_firebase_cloud_security/" target="_blank" rel="noopener">900+ misconfigured Firebase sites exposing roughly 125 million records, including 20 million plaintext passwords</a>. That predates the vibe-coding surge — which is now pouring fuel on a fire that was already burning.</p>
+
+<h2>Why reviewing the config isn't enough</h2>
+
+<p>The instinct, once you understand the problem, is "fine, we'll review the RLS policies." That fails in practice, and this is the differentiating claim of this piece: <strong>policies can look correct and still leak.</strong></p>
+
+<p>A stale <code>USING (true)</code> survives a redesign. A policy gets written but RLS is never actually toggled on for that table. A new table ships without anyone wiring policies. The <code>anon</code> role carries an over-broad <code>GRANT</code> nobody audited. Reading the config tells you <em>intent</em>. It does not tell you what an attacker walks away with. The only reliable proof is behavioral: hit the live endpoint, read-only, with the public key, and see whether rows come back.</p>
+
+<h2>How to probe (do this before every deploy)</h2>
+
+<p>For Supabase, query the REST endpoint with the anon key exactly as an attacker would:</p>
+
+<p><code>curl 'https://&lt;ref&gt;.supabase.co/rest/v1/&lt;table&gt;?select=*&amp;limit=1' -H 'apikey: &lt;anon_key&gt;' -H 'Authorization: Bearer &lt;anon_key&gt;'</code></p>
+
+<p>A properly secured table returns <code>[]</code>, an empty array. If rows come back, RLS is off and that table is world-readable — and because Range headers can page up to roughly 10,000 rows per request, the exposure is bulk, not one record at a time. The behavior is documented in Supabase's <a href="https://supabase.com/docs/guides/api/securing-your-api" target="_blank" rel="noopener">Securing your API</a> guide. Then grep your shipped JS bundle for the literal string <code>service_role</code> and for long JWT-like strings in DevTools &rarr; Sources. For Firebase, check whether storage buckets and database paths read without authentication.</p>
+
+<p>Treat this as a pre-deploy gate, not a one-time audit. Every new table and every redeploy can quietly reopen the hole — which is precisely why a single passing audit lulls teams right back into the Tea app's position.</p>
+
+<h2>Test it, don't eyeball it</h2>
+
+<p>Come back to those selfies and IDs. The lesson is not that AI coding is bad — it ships real features for real people at remarkable speed. The lesson is that the security boundary moved from imperative code you can't skip into declarative config you can, and the tooling that generates the app doesn't follow it there. You cannot eyeball your way to safety. You have to test whether the public key actually reads your data.</p>
+
+<p>That is exactly what <a href="https://keyleakdetector.com" target="_blank" rel="noopener">KeyLeak Detector</a> does — free, open-source, and running 100% locally. It scans JS bundles for exposed and <code>service_role</code> keys, validates whether a found key is still live, and actively probes Supabase and Firebase to confirm RLS is genuinely enforced before you ship. It runs as a Chrome extension, a Python CLI, and a GitHub Action, so the probe fires on every deploy instead of living in someone's memory. Grab it on <a href="https://github.com/Amal-David/keyleak-detector" target="_blank" rel="noopener">GitHub</a> and point it at your next build. The door is either locked or it isn't — stop guessing and check.</p>
+</article>
+<section class="sources"><h2>Sources</h2><ol><li><a href="https://www.security.org/identity-theft/breach/tea-app/" target="_blank" rel="noopener">Security.org — Tea app breach</a></li><li><a href="https://getdx.com/blog/ai-generated-merged-code-holds-steady-at-30/" target="_blank" rel="noopener">DX — AI-authored share of merged production code (Q1 2026)</a></li><li><a href="https://supabase.com/wrapped" target="_blank" rel="noopener">Supabase Wrapped 2025</a></li><li><a href="https://www.businesswire.com/news/home/20250730694951/en/AI-Generated-Code-Poses-Major-Security-Risks-in-Nearly-Half-of-All-Development-Tasks-Veracode-Research-Reveals" target="_blank" rel="noopener">Business Wire — Veracode 2025 GenAI Code Security Report</a></li><li><a href="https://www.helpnetsecurity.com/2025/08/07/create-ai-code-security-risks/" target="_blank" rel="noopener">Help Net Security — Veracode language-level failure rates</a></li><li><a href="https://securityonline.info/cve-2025-48757-lovables-row-level-security-breakdown-exposes-sensitive-data-across-hundreds-of-projects/" target="_blank" rel="noopener">SecurityOnline — CVE-2025-48757 Lovable RLS breakdown</a></li><li><a href="https://therecord.media/more-than-10-of-firebase-databases-are-open-and-exposing-data" target="_blank" rel="noopener">The Record — 10.7% of Firebase databases open (Avast)</a></li><li><a href="https://www.theregister.com/2024/03/18/google_firebase_cloud_security/" target="_blank" rel="noopener">The Register — 900+ misconfigured Firebase sites, 125M records</a></li><li><a href="https://supabase.com/docs/guides/api/securing-your-api" target="_blank" rel="noopener">Supabase Docs — Securing your API</a></li></ol></section>
+<div class="related">Keep reading &rarr; <a href="/blog/why-runtime-secret-scanning-matters">The Key Your Scanner Swore Wasn&#x27;t There</a></div>
+</div></main>
+<footer><div class="wrap"><a class="brand" href="/" style="font-size:15px"><svg width="22" height="22"><use href="#logo"/></svg>KeyLeak Detector</a><div class="flinks"><a href="/blog">Blog</a><a href="https://github.com/Amal-David/keyleak-detector">GitHub</a><a href="https://pypi.org/project/keyleak-detector/">PyPI</a><a href="/privacy">Privacy</a></div><div>MIT licensed &middot; &copy; 2026 Amal David</div></div></footer>
+</body>
+</html>

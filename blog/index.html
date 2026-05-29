@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Blog — KeyLeak Detector</title>
+<meta name="description" content="Field notes on runtime secret scanning, API key leaks, and BaaS (Supabase/Firebase) security from the team behind KeyLeak Detector.">
+<link rel="canonical" href="https://keyleakdetector.com/blog">
+<meta name="robots" content="index, follow, max-image-preview:large">
+<meta name="theme-color" content="#0f172a">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="KeyLeak Detector">
+<meta property="og:title" content="KeyLeak Detector Blog">
+<meta property="og:description" content="Runtime secret scanning, API key leaks, and BaaS security — field notes from KeyLeak Detector.">
+<meta property="og:url" content="https://keyleakdetector.com/blog">
+<meta property="og:image" content="https://keyleakdetector.com/og-image.png">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:image" content="https://keyleakdetector.com/og-image.png">
+<link rel="icon" type="image/png" sizes="128x128" href="/favicon-128.png">
+<link rel="alternate" type="application/rss+xml" title="KeyLeak Detector Blog" href="/feed.xml">
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "Blog", "name": "KeyLeak Detector Blog", "url": "https://keyleakdetector.com/blog", "description": "Runtime secret scanning, API key leaks, and BaaS security.", "publisher": {"@type": "Organization", "name": "KeyLeak Detector"}, "blogPost": [{"@type": "BlogPosting", "headline": "The Key Your Scanner Swore Wasn't There", "description": "Source-code scanners structurally can't see secrets injected at build time into JS bundles, runtime config, and BaaS keys. Here's why runtime scanning closes the gap.", "url": "https://keyleakdetector.com/blog/why-runtime-secret-scanning-matters", "datePublished": "2026-05-29", "author": {"@type": "Person", "name": "Amal David"}}, {"@type": "BlogPosting", "headline": "The Public Key Was Never the Problem: Why Vibe-Coded Apps Leak", "description": "AI tools default to Supabase and Firebase, moving security into config they skip. Why vibe-coded apps leak, the four failure patterns, and how to probe RLS.", "url": "https://keyleakdetector.com/blog/baas-security-risks-vibecoded-apps", "datePublished": "2026-05-29", "author": {"@type": "Person", "name": "Amal David"}}]}</script>
+<style>
+:root{--bg:#020617;--panel:#0f172a;--panel2:#0b1220;--line:#1e293b;--em:#34d399;--em2:#10b981;--text:#cbd5e1;--mut:#94a3b8;--dim:#64748b;}
+*{margin:0;padding:0;box-sizing:border-box;}
+html{scroll-behavior:smooth;}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Inter,Roboto,sans-serif;background:var(--bg);color:var(--text);line-height:1.7;-webkit-font-smoothing:antialiased;}
+.wrap{max-width:1140px;margin:0 auto;padding:0 24px;}
+.wrap-narrow{max-width:740px;margin:0 auto;padding:0 24px;}
+a{color:var(--em);text-decoration:none;}
+code,.mono{font-family:'SF Mono','Fira Code',ui-monospace,Consolas,monospace;}
+header{position:sticky;top:0;z-index:50;background:rgba(2,6,23,.8);backdrop-filter:blur(12px);border-bottom:1px solid var(--line);}
+nav{display:flex;align-items:center;justify-content:space-between;height:64px;}
+.brand{display:flex;align-items:center;gap:10px;font-weight:800;color:#f8fafc;font-size:17px;}
+.brand svg{width:28px;height:28px;}
+.navlinks{display:flex;align-items:center;gap:26px;}
+.navlinks a{color:var(--mut);font-size:14.5px;font-weight:500;}
+.navlinks a:hover{color:#f8fafc;}
+.btn{display:inline-block;padding:10px 18px;border-radius:9px;font-weight:700;font-size:14.5px;border:1px solid transparent;}
+.btn-ghost{border-color:var(--line);color:var(--text);}
+.btn-ghost:hover{border-color:#475569;}
+.eyebrow{color:var(--em);font-weight:700;font-size:13px;letter-spacing:1.5px;text-transform:uppercase;}
+/* article */
+.article{padding:52px 0 92px;}
+.back{color:var(--mut);font-size:14px;display:inline-block;margin-bottom:26px;}
+.back:hover{color:#f8fafc;}
+.article h1{font-size:clamp(30px,5vw,46px);line-height:1.1;letter-spacing:-1px;color:#f8fafc;margin:12px 0 16px;font-weight:800;}
+.dek{font-size:20px;line-height:1.5;color:var(--mut);margin-bottom:18px;}
+.post-meta{color:var(--dim);font-size:14px;border-bottom:1px solid var(--line);padding-bottom:22px;margin-bottom:32px;}
+.prose{font-size:17.5px;line-height:1.78;color:var(--text);}
+.prose h2{font-size:26px;font-weight:800;color:#f8fafc;margin:40px 0 14px;letter-spacing:-.4px;line-height:1.2;}
+.prose h3{font-size:20px;font-weight:700;color:#f1f5f9;margin:28px 0 10px;}
+.prose p{margin-bottom:20px;}
+.prose a{color:var(--em);text-decoration:underline;text-decoration-color:#34d39966;text-underline-offset:3px;}
+.prose a:hover{text-decoration-color:#34d399;}
+.prose strong{color:#f1f5f9;}
+.prose ul,.prose ol{margin:0 0 22px 0;padding-left:0;list-style:none;}
+.prose li{position:relative;padding-left:28px;margin-bottom:12px;}
+.prose ul li::before{content:"";position:absolute;left:3px;top:12px;width:6px;height:6px;border-radius:50%;background:var(--em);}
+.prose ol{counter-reset:li;}
+.prose ol li{counter-increment:li;}
+.prose ol li::before{content:counter(li);position:absolute;left:0;top:1px;color:var(--em);font-weight:700;font-size:14px;}
+.prose code{background:var(--panel2);border:1px solid var(--line);border-radius:5px;padding:1px 6px;font-size:14.5px;color:var(--em);word-break:break-word;}
+.prose blockquote{border-left:3px solid var(--em);padding-left:20px;margin:24px 0;color:#e2e8f0;font-style:italic;}
+.prose blockquote.stat{border:1px solid #34d39955;border-left:3px solid var(--em);background:rgba(52,211,153,.07);border-radius:12px;padding:20px 24px;margin:30px 0;font-size:19px;line-height:1.55;color:#e6eef0;font-style:normal;}
+.prose blockquote.stat a{color:#6ee7b7;}
+.sources{margin-top:48px;border-top:1px solid var(--line);padding-top:26px;}
+.sources h2{font-size:13px;text-transform:uppercase;letter-spacing:1.4px;color:var(--dim);margin-bottom:14px;}
+.sources ol{counter-reset:s;list-style:none;font-size:14px;}
+.sources li{counter-increment:s;position:relative;padding-left:28px;margin-bottom:9px;color:var(--mut);}
+.sources li::before{content:counter(s)".";position:absolute;left:0;color:var(--em);font-weight:700;}
+.sources a{color:var(--mut);text-decoration:underline;word-break:break-word;}
+.sources a:hover{color:#f8fafc;}
+.related{margin-top:36px;padding:22px 24px;border:1px solid var(--line);border-radius:12px;background:var(--panel);font-size:15px;color:var(--mut);}
+.related a{font-weight:700;color:var(--em);}
+.cta{margin-top:30px;padding:26px;border:1px solid #34d39955;border-radius:14px;background:rgba(52,211,153,.06);text-align:center;}
+.cta a{display:inline-block;margin-top:12px;background:var(--em2);color:#031412;font-weight:700;padding:11px 22px;border-radius:9px;}
+.cta a:hover{background:var(--em);}
+/* blog index */
+.bloghero{padding:60px 0 8px;}
+.bloghero h1{font-size:clamp(32px,5vw,46px);font-weight:800;letter-spacing:-1px;color:#f8fafc;margin:10px 0 12px;}
+.bloghero p{color:var(--mut);font-size:18px;max-width:62ch;}
+.bloglist{padding:30px 0 90px;display:grid;gap:18px;}
+.postcard{display:block;border:1px solid var(--line);border-radius:14px;padding:28px;background:var(--panel);transition:border-color .2s,transform .2s;}
+.postcard:hover{border-color:#2dd4bf55;transform:translateY(-2px);}
+.postcard h2{font-size:24px;color:#f8fafc;margin:8px 0 8px;letter-spacing:-.4px;line-height:1.18;}
+.postcard p{color:var(--mut);font-size:15.5px;}
+.postcard .meta{color:var(--dim);font-size:13.5px;margin-top:12px;}
+footer{border-top:1px solid var(--line);padding:48px 0;color:var(--dim);font-size:14px;}
+footer .wrap{display:flex;justify-content:space-between;flex-wrap:wrap;gap:18px;align-items:center;}
+footer a{color:var(--mut);}footer a:hover{color:#f8fafc;}
+.flinks{display:flex;gap:22px;flex-wrap:wrap;}
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute"><defs><symbol id="logo" viewBox="0 0 32 32"><rect width="32" height="32" rx="8" fill="#0f172a"/><path d="M16 5 L24 8 L24 13.5 L16 25 L8 13.5 L8 8 Z" fill="#34d399"/><circle cx="16" cy="12.8" r="2.7" fill="#0f172a"/><path d="M13.9 13.4 L18.1 13.4 L19.1 18.4 L12.9 18.4 Z" fill="#0f172a"/></symbol></defs></svg>
+<header><div class="wrap"><nav><a class="brand" href="/"><svg><use href="#logo"/></svg>KeyLeak Detector</a><div class="navlinks"><a href="/#features">Features</a><a href="/blog">Blog</a><a href="/#faq">FAQ</a><a href="https://github.com/Amal-David/keyleak-detector" class="btn btn-ghost">GitHub &#9733;</a></div></nav></div></header>
+<main><div class="wrap">
+<div class="bloghero">
+<p class="eyebrow">KeyLeak Blog</p>
+<h1>Field notes on leaks that static tools miss</h1>
+<p>Runtime secret scanning, exposed API keys, and BaaS (Supabase/Firebase) security — researched, sourced, and written for people who ship.</p>
+</div>
+<div class="bloglist">
+<a class="postcard" href="/blog/why-runtime-secret-scanning-matters"><p class="eyebrow">RUNTIME SECURITY</p><h2>The Key Your Scanner Swore Wasn&#x27;t There</h2><p>GitLeaks, TruffleHog, and GitHub secret scanning all came back green — and a researcher still pulled a live Stripe key out of your running app in under a minute.</p><div class="meta">May 29, 2026 &middot; 7 min read</div></a>
+<a class="postcard" href="/blog/baas-security-risks-vibecoded-apps"><p class="eyebrow">BAAS SECURITY</p><h2>The Public Key Was Never the Problem: Why Vibe-Coded Apps Leak</h2><p>AI tools ship full-stack apps in minutes and skip the one config step that keeps your database from being world-readable. Here&#x27;s how to catch it before you ship.</p><div class="meta">May 29, 2026 &middot; 7 min read</div></a>
+</div>
+</div></main>
+<footer><div class="wrap"><a class="brand" href="/" style="font-size:15px"><svg width="22" height="22"><use href="#logo"/></svg>KeyLeak Detector</a><div class="flinks"><a href="/blog">Blog</a><a href="https://github.com/Amal-David/keyleak-detector">GitHub</a><a href="https://pypi.org/project/keyleak-detector/">PyPI</a><a href="/privacy">Privacy</a></div><div>MIT licensed &middot; &copy; 2026 Amal David</div></div></footer>
+</body>
+</html>

@@ -1,0 +1,189 @@
+# KeyLeak Detector — Full Content for LLMs
+
+Source: https://keyleakdetector.com  |  License: MIT  |  Updated: 2026-05-29
+
+KeyLeak Detector is a free, open-source runtime secret scanner for web apps. It finds exposed API keys, validates Supabase/Firebase Row-Level-Security misconfigurations, tests whether a found key is still live, and catches secrets in JavaScript bundles. It runs 100% locally as a Chrome extension, a Python CLI (PyPI: keyleak-detector), and a GitHub Action. GitHub: https://github.com/Amal-David/keyleak-detector
+
+======================================================================
+# Articles
+
+## The Key Your Scanner Swore Wasn't There
+URL: https://keyleakdetector.com/blog/why-runtime-secret-scanning-matters
+Published: May 29, 2026 by Amal David
+Summary: GitLeaks, TruffleHog, and GitHub secret scanning all came back green — and a researcher still pulled a live Stripe key out of your running app in under a minute.
+
+The team did everything right. GitLeaks on every commit. TruffleHog in the CI pipeline. GitHub secret scanning watching the repo. Every push came back green, every pull request clean. Then a researcher opened the production site, popped open dev tools, and read a single minified JavaScript file. Inside it, in plaintext, sat a live Stripe sk_live_ key — full API access, real money. They had it in under a minute.
+
+The secret was never in the repo. Not in a commit, not in git history, not in any file a source scanner could read. It was injected at build time and shipped to every visitor. The lesson is uncomfortable and simple: your source code can be spotless while your running app bleeds.
+
+The structural blind spot
+
+This is not a tuning problem. You cannot regex your way out of it. GitLeaks, TruffleHog in repo mode, and GitHub secret scanning all operate on source files and git history. They are very good at that. But a whole class of secrets only comes into existence after the build: environment variables inlined into bundles, runtime config fetched when the app boots, values returned in API response bodies and headers, and original variable names and routes re-exposed by source maps.
+
+The artifact a source scanner would need to inspect — the minified bundle, the hydrated config object — does not exist in the repository. It is manufactured at build time and lives only in the deployed app. Intruder's research frames the gap bluntly: SAST tools "don't cover the full picture; secrets within JavaScript bundles slip through gaps," and infrastructure scanners "ignore JavaScript files that browsers would load." You are asking a tool to find something in a place it was never written.
+
+How secrets reach the runtime but never the repo
+
+Three modern delivery paths put secrets in front of users while keeping the repository clean.
+
+Build-time inlining. Next.js (NEXT_PUBLIC_*) and Vite (VITE_*) replace env-var references with their literal string values at build and bake them into the client bundle. Give a server secret the wrong prefix — NEXT_PUBLIC_STRIPE_SECRET=sk_live_... — and the literal key is hardcoded into shipped JavaScript. The repo only ever held process.env.NEXT_PUBLIC_STRIPE_SECRET, a perfectly innocent-looking reference. The scanner finds nothing because there is nothing to find. Vercel now shows dashboard warnings precisely because this footgun is so common.
+
+Edge and serverless config injection. On Vercel, Netlify, and Cloudflare, env vars live in the platform dashboard and are hydrated at deploy — never committed. That is good hygiene for server secrets. But the moment one reaches the client through inlining or a leaky public config endpoint, the only place to catch it is the running deployment, because it was never in a file git ever saw.
+
+BaaS clients that ship keys by design. Supabase anon keys and Firebase web configs are meant to be in the browser. More on why that is its own trap below.
+
+Source maps make all of this worse. When shipped to production by accident — extremely common — they reverse minification, restoring original variable names, file paths, and inlined constants, handing an attacker a readable map of your internal API routes. Source maps live in the deployed artifact, not the source tree a commit scanner reads.
+
+Public-by-design is not safe-by-default
+
+Here is where intuition fails. A Supabase anon key is supposed to be public. The security boundary was never the key — it's the server-side Row Level Security policy behind it. A static scanner sees a string and has two options: ignore it (correctly, it's "public") or flag it without any way to reason about whether the backend is actually locked down.
+
+And the default is exposed. Supabase auto-generates a REST API from your Postgres schema, but Row Level Security is off by default on tables created via SQL or the Table Editor. The app works flawlessly while unauthenticated requests carrying the public anon key quietly read and write protected rows. You cannot see this in source code. The only way to know is to issue a live, unauthenticated request and watch protected data come back. That question — does this public key return data it shouldn't? — is the dimension static tools cannot supply.
+
+Exploitability is the real signal
+
+A pattern match is a guess. A live probe is proof. The right question is not "does this look like a key?" but "is this key live, and what can it touch right now?"
+
+This is not theoretical. TruffleHog built its reputation on verifying detectors that authenticate against the real service and classify findings as verified, unverified, or revoked. Runtime scanning extends that idea to the deployed app itself: extract the secret and prove it works, probe whether a public BaaS key returns protected rows, and tell an active threat apart from a dead string. That is the difference between a noisy candidate list and a ranked incident queue.
+
+And dead strings are rarer than anyone hopes. GitGuardian retested credentials it had confirmed valid in 2022 and found the validity rate was still above 64% in January 2026 — with 70% of 2022-leaked secrets still active two years on. Leaked keys are almost never rotated. Exploitability is not a corner case; it is the norm.
+
+The gap is widening, not closing
+
+Three trends push more secrets into the runtime surface, and adoption only accelerates them. SPAs and client-heavy frameworks move more logic and config into the browser. Edge and serverless platforms normalize injecting config outside git. And AI app generators and BaaS-first scaffolding ship front-end-first apps with security defaults off. Every one of these relocates secrets and trust boundaries from the repo — where static tools look — to the running app, where they can't. The problem does not self-correct.
+
+The leak volume confirms the direction of travel. GitGuardian recorded 28.65 million new hardcoded secrets in public GitHub commits in 2025 — a 34% year-over-year jump — and AI-service secrets alone hit 1,275,105 detections, up 81%. That is just what was visible in public commits. The runtime surface is the part nobody is counting.
+
+Truffle Security scanned 400TB of web data and found 11,908 live secrets across 2.76 million pages — including roughly 1,500 Mailchimp API keys hardcoded directly into front-end HTML and JavaScript.
+
+The receipts
+
+This is not a hypothetical risk pattern. It is being exploited at scale, and the evidence is everywhere you point a runtime probe.
+
+- Intruder remotely scanned around 5 million applications and surfaced 42,000+ exposed tokens across 334 secret types — live GitHub and GitLab tokens, active Slack webhooks, and more, all living in JavaScript bundles that SAST and infra scanners structurally miss.
+
+- Cremit's study of Vercel-hosted services found a small but lethal slice shipping valid production secrets — Stripe sk_live_ keys, GitHub tokens, AWS secret access keys — straight into client bundles via NEXT_PUBLIC_ misuse.
+
+- CVE-2025-48757: researchers found Supabase tables across many Lovable-generated apps that were readable by unauthenticated requests using the public anon key — missing RLS, provable only at runtime.
+
+- Misconfigured Firebase has exposed enormous troves of user records and plaintext passwords across thousands of sites — a pure BaaS-rules failure invisible to source scanning.
+
+- Cyble found roughly 3,000 live production websites exposing active OpenAI API keys directly in client-side JavaScript.
+
+- The Rabbit R1 leaked hardcoded API keys that stayed valid well after notification; a DOGE developer's xAI key, found externally by GitGuardian, remained live even after public disclosure. The detection happened — too late, and the key kept working.
+
+For scale on why "too late" is the default outcome: in a controlled honeypot, an AWS key posted to a public repo was discovered and abused within one minute of exposure.
+
+Complement, not replacement
+
+Be clear about the framing, because the security audience will reject a false binary. Source scanners catch secrets before they ship and protect git history — that is the right place to stop a secret early, and you should keep every one of them. Runtime scanning catches what survives the build and reaches users, and proves exploitability. "Use this instead of GitLeaks" is wrong. The mature posture runs both: shift-left prevention on commits, plus deploy-time verification of the actual artifact users receive. Runtime scanning is the missing right-hand bookend of the pipeline.
+
+Make it a launch gate
+
+The operational home for this is a CI gate against your preview or staging deploy, after build but before promote-to-prod. Fetch and inspect the real built bundle. Hit the live endpoints the way an attacker would. Validate any key you find. Probe BaaS tables for missing RLS. Then fail the gate on a verified-live, high-severity finding — per PR, on the exact artifact your users will get. A commit scan can never inspect that artifact, because it does not exist yet at commit time. This gate catches the inlining mistake and the RLS regression on the build that ships.
+
+One objection blocks adoption: security teams will not send their bundles and keys to a third-party cloud. So don't. A runtime scanner that runs 100% locally — browser extension, CLI, and self-hosted Action — does live validation against the target's own endpoints without exfiltrating anything. That is what makes a deploy-time gate palatable.
+
+Scan what attackers scan
+
+The one line to keep: attackers don't scan your repo. They scan your running app. So scan it first — and scan it the way they would, against the live deployment, proving which keys are actually exploitable.
+
+KeyLeak Detector is a free, open-source runtime secret scanner built for exactly this gate. It finds exposed API keys in JS bundles, validates Supabase and Firebase RLS misconfigurations, and tests whether a found key is still live — all 100% locally, as a Chrome extension, a Python CLI, and a GitHub Action you can wire into your preview deploys. Point it at your staging URL before you promote to production. The code is on GitHub. Keep your source scanners. Add the bookend they were never built to be.
+
+Sources:
+- GitGuardian, The State of Secrets Sprawl 2026: https://blog.gitguardian.com/the-state-of-secrets-sprawl-2026/
+- GitGuardian, The State of Secrets Sprawl 2025 (press release): https://blog.gitguardian.com/the-state-of-secrets-sprawl-2025-pr/
+- Intruder, Secrets in your Bundle(.js): https://www.intruder.io/research/secrets-detection-javascript
+- Truffle Security, 12,000 Live API Keys in DeepSeek Training Data: https://trufflesecurity.com/blog/research-finds-12-000-live-api-keys-and-passwords-in-deepseek-s-training-data
+- TruffleHog, How TruffleHog Verifies Secrets: https://trufflesecurity.com/blog/how-trufflehog-verifies-secrets
+- Cyble / The Cyber Express, Exposed ChatGPT API Keys: https://thecyberexpress.com/exposed-chatgpt-api-keys-github-websites/
+- Comparitech, GitHub credential honeypot: https://www.comparitech.com/blog/information-security/github-honeypot/
+- Vercel, Public environment variable warnings: https://vercel.com/changelog/public-environment-variables-now-display-a-warning
+
+======================================================================
+
+## The Public Key Was Never the Problem: Why Vibe-Coded Apps Leak
+URL: https://keyleakdetector.com/blog/baas-security-risks-vibecoded-apps
+Published: May 29, 2026 by Amal David
+Summary: AI tools ship full-stack apps in minutes and skip the one config step that keeps your database from being world-readable. Here's how to catch it before you ship.
+
+In July 2025, someone browsing 4chan found a door that was never locked. The Tea app — a women's dating-safety app that had rocketed up the App Store, built fast and shipped faster — had left a Firebase storage bucket open to the public internet. Directory listing and all. No firewall was bypassed. No zero-day was burned. The bucket simply answered every request that arrived.
+
+What spilled out were tens of thousands of user images, including selfies and photos of government IDs that users had uploaded for identity verification. Days later, a second exposure leaked private messages going back years — conversations about abortion, infidelity, and assault, some carrying phone numbers and physical meeting locations. The data was neither encrypted nor access-restricted. For a product whose entire promise was keeping women safe, the irony was total.
+
+Here is the part that should worry every engineer shipping software in 2026: this was not a freak accident. It is the default failure mode of how modern apps now get built.
+
+The security boundary moved, and the tooling didn't follow
+
+AI coding tools — Cursor, Lovable, v0, Bolt, Replit — now generate full-stack applications in minutes. To make that magic work, they overwhelmingly default to Backend-as-a-Service: Supabase or Firebase. You describe an app, the model wires up a client SDK, a database, auth screens, and storage, and something that looks production-ready renders in your browser.
+
+BaaS is genuinely good infrastructure. But it relocates your security model. In a traditional server app, an authorization check is a line of code sitting directly in the request path — hard to skip, because if you skip it the feature breaks. In BaaS, access control lives outside the request path, in separate declarative artifacts: Postgres Row-Level Security (RLS) policies and Firebase Security Rules. The app's UI works perfectly whether or not those policies exist. "It works" tells you nothing about whether it's safe — and "it works" is exactly the success criterion an AI generation flow optimizes for. The model ships the feature and stops at the doorstep of the one place that actually matters.
+
+The key is supposed to be public
+
+This is the single sentence the whole problem hangs on, so read it twice: the Supabase anon key and the Firebase web config in your bundle are public by design. They are not secrets. Anyone can pull them from DevTools in ten seconds, and that is completely fine — if and only if the database enforces row-level access.
+
+The anon key carries the Postgres anon role, which has no BYPASSRLS attribute. Every query it makes is supposed to be filtered by RLS policies. With RLS on and policies written correctly, an exposed anon key is a non-event. With RLS off, that same public key reads every row in the table. The entire security boundary collapses from "protect the key" to one question: is RLS actually enforced? The engineers who burn a weekend trying to hide a key that was meant to be visible are guarding the wrong door entirely.
+
+Why this is a time bomb, not a bug
+
+The defaults make the unsafe path the path of least resistance. Supabase tables created via raw SQL historically ship with RLS off — you have to run ALTER TABLE x ENABLE ROW LEVEL SECURITY yourself. Firebase "test mode" grants public read and write to your entire database and storage for 30 days using allow read, write: if true. The 30-day timer is its own trap: it manufactures a false sense of safety, then breaks the live app when it expires, pressuring developers to just reopen the rule.
+
+Now stack on the volume. AI-authored code rose to 27.4% of all merged production code in Q1 2026, per DX's measurement across 500+ organizations. Supabase reports that more databases were created in 2025 than in all previous years combined. And the quality gap is structural, not stylistic — Veracode tested over 100 models and found that when given a choice between secure and insecure implementations, they picked the insecure one 45% of the time.
+
+Veracode found AI-generated Java failed security tests more than 70% of the time, with Python, C#, and JavaScript between 38% and 45%.
+
+More apps, shipping faster, with fewer security reviews — that is the acceleration mechanism. The code functions. It just isn't safe, and nobody checked.
+
+The four failure patterns
+
+The catalog is small, recurring, and every entry is one config line away from total exposure — and invisible from the rendered UI:
+
+- RLS never enabled / open tables. The table works, the demo works, and the anon key reads every row.
+
+- Public storage buckets. The Tea pattern. A bucket left readable, often with directory listing on, answering anonymous requests.
+
+- service_role / admin keys in the client bundle. The service_role key bypasses RLS entirely and grants full admin access. It leaks when it's used in frontend code or inlined through a NEXT_PUBLIC_ / VITE_ env prefix. If it's in your bundle, RLS cannot save you — rotate it now.
+
+- Permissive default rules in production. A leftover USING (true) policy or allow read, write: if true that never got tightened.
+
+The receipts: this is systemic
+
+This is not a handful of careless teams. When security researcher Matt Palmer crawled 1,645 Lovable-generated projects (CVE-2025-48757), he found 170 sites — 10.3% — readable or writable by unauthenticated requests using only the public anon key, leaking names, emails, addresses, payment data, and third-party API keys.
+
+The Firebase side is older and larger. Avast scanned 180,300 Firebase databases and found 10.7% — about 19,300 — left open to unauthenticated users. A later crawl of 5.2 million domains surfaced 900+ misconfigured Firebase sites exposing roughly 125 million records, including 20 million plaintext passwords. That predates the vibe-coding surge — which is now pouring fuel on a fire that was already burning.
+
+Why reviewing the config isn't enough
+
+The instinct, once you understand the problem, is "fine, we'll review the RLS policies." That fails in practice, and this is the differentiating claim of this piece: policies can look correct and still leak.
+
+A stale USING (true) survives a redesign. A policy gets written but RLS is never actually toggled on for that table. A new table ships without anyone wiring policies. The anon role carries an over-broad GRANT nobody audited. Reading the config tells you intent. It does not tell you what an attacker walks away with. The only reliable proof is behavioral: hit the live endpoint, read-only, with the public key, and see whether rows come back.
+
+How to probe (do this before every deploy)
+
+For Supabase, query the REST endpoint with the anon key exactly as an attacker would:
+
+curl 'https://<ref>.supabase.co/rest/v1/<table>?select=*&limit=1' -H 'apikey: <anon_key>' -H 'Authorization: Bearer <anon_key>'
+
+A properly secured table returns [], an empty array. If rows come back, RLS is off and that table is world-readable — and because Range headers can page up to roughly 10,000 rows per request, the exposure is bulk, not one record at a time. The behavior is documented in Supabase's Securing your API guide. Then grep your shipped JS bundle for the literal string service_role and for long JWT-like strings in DevTools → Sources. For Firebase, check whether storage buckets and database paths read without authentication.
+
+Treat this as a pre-deploy gate, not a one-time audit. Every new table and every redeploy can quietly reopen the hole — which is precisely why a single passing audit lulls teams right back into the Tea app's position.
+
+Test it, don't eyeball it
+
+Come back to those selfies and IDs. The lesson is not that AI coding is bad — it ships real features for real people at remarkable speed. The lesson is that the security boundary moved from imperative code you can't skip into declarative config you can, and the tooling that generates the app doesn't follow it there. You cannot eyeball your way to safety. You have to test whether the public key actually reads your data.
+
+That is exactly what KeyLeak Detector does — free, open-source, and running 100% locally. It scans JS bundles for exposed and service_role keys, validates whether a found key is still live, and actively probes Supabase and Firebase to confirm RLS is genuinely enforced before you ship. It runs as a Chrome extension, a Python CLI, and a GitHub Action, so the probe fires on every deploy instead of living in someone's memory. Grab it on GitHub and point it at your next build. The door is either locked or it isn't — stop guessing and check.
+
+Sources:
+- Security.org — Tea app breach: https://www.security.org/identity-theft/breach/tea-app/
+- DX — AI-authored share of merged production code (Q1 2026): https://getdx.com/blog/ai-generated-merged-code-holds-steady-at-30/
+- Supabase Wrapped 2025: https://supabase.com/wrapped
+- Business Wire — Veracode 2025 GenAI Code Security Report: https://www.businesswire.com/news/home/20250730694951/en/AI-Generated-Code-Poses-Major-Security-Risks-in-Nearly-Half-of-All-Development-Tasks-Veracode-Research-Reveals
+- Help Net Security — Veracode language-level failure rates: https://www.helpnetsecurity.com/2025/08/07/create-ai-code-security-risks/
+- SecurityOnline — CVE-2025-48757 Lovable RLS breakdown: https://securityonline.info/cve-2025-48757-lovables-row-level-security-breakdown-exposes-sensitive-data-across-hundreds-of-projects/
+- The Record — 10.7% of Firebase databases open (Avast): https://therecord.media/more-than-10-of-firebase-databases-are-open-and-exposing-data
+- The Register — 900+ misconfigured Firebase sites, 125M records: https://www.theregister.com/2024/03/18/google_firebase_cloud_security/
+- Supabase Docs — Securing your API: https://supabase.com/docs/guides/api/securing-your-api
+
+======================================================================

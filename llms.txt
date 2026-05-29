@@ -37,6 +37,11 @@ Every scan returns a verdict (SAFE TO SHIP / REVIEW / BLOCK SHIP), redacted proo
 - CLI: `pip install keyleak-detector` then `keyleak browser-scan https://your-app.example.com --html`
 - GitHub Action: `uses: Amal-David/keyleak-detector@v0.5.0`
 
+## Articles
+
+- [The Key Your Scanner Swore Wasn't There](https://keyleakdetector.com/blog/why-runtime-secret-scanning-matters) — GitLeaks, TruffleHog, and GitHub secret scanning all came back green — and a researcher still pulled a live Stripe key out of your running app in under a minute.
+- [The Public Key Was Never the Problem: Why Vibe-Coded Apps Leak](https://keyleakdetector.com/blog/baas-security-risks-vibecoded-apps) — AI tools ship full-stack apps in minutes and skip the one config step that keeps your database from being world-readable. Here's how to catch it before you ship.
+
 ## Links
 
 - GitHub: https://github.com/Amal-David/keyleak-detector
