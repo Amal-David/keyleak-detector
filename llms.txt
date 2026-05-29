@@ -39,6 +39,6 @@ Every scan returns a verdict (SAFE TO SHIP / REVIEW / BLOCK SHIP), redacted proo
 
 ## Articles
 
-- [The Key Your Scanner Swore Wasn't There](https://keyleakdetector.com/blog/why-runtime-secret-scanning-matters) — GitLeaks, TruffleHog, and GitHub secret scanning all came back green — and a researcher still pulled a live Stripe secret key out of your running app in under a minute.
-- [The Public Key Was Never the Problem: Why Vibe-Coded Apps Leak](https://keyleakdetector.com/blog/baas-security-risks-vibecoded-apps) — AI tools ship full-stack apps in minutes and skip the one config step that keeps your database from being world-readable. Here's how to catch it before you ship.
+- [The Key Your Scanner Swore Wasn't There](https://keyleakdetector.com/blog/why-runtime-secret-scanning-matters) — I built KeyLeak Detector after watching a live Stripe sk_live_ secret key get pulled out of an app whose GitLeaks, TruffleHog, and GitHub scans were all green — because none of those scanners were ever built to look at the running app.
+- [The Public Key Was Never the Problem: Why Vibe-Coded Apps Leak](https://keyleakdetector.com/blog/baas-security-risks-vibecoded-apps) — I kept watching AI-built apps ship with the database door wide open, so I started probing RLS before every deploy instead of trusting the config — here's the pattern and how I check for it.
 
