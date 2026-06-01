@@ -24,6 +24,7 @@ from .reporting import (
     report_to_text,
 )
 from .offline_guard import install_socket_block, print_egress_banner
+from .proxy import ProxyError, is_loopback_proxy, preflight, resolve_proxy
 from .self_audit import run_self_audit
 from .suppressions import apply_suppressions
 
@@ -35,9 +36,31 @@ def main(argv: Optional[List[str]] = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
 
-    if getattr(args, "offline", False):
+    try:
+        proxy = resolve_proxy(getattr(args, "proxy", "") or "")
+    except ProxyError as exc:
+        print(str(exc), file=sys.stderr)
+        return 1
+
+    offline = getattr(args, "offline", False)
+    if offline and proxy and not is_loopback_proxy(proxy):
+        print(
+            f"--offline allows only loopback proxies. Refusing {proxy!r}. "
+            "Use a local proxy such as --proxy warp or --proxy tor.",
+            file=sys.stderr,
+        )
+        return 1
+
+    if offline:
         install_socket_block()
         print_egress_banner()
+
+    if proxy:
+        try:
+            preflight(proxy)
+        except ProxyError as exc:
+            print(str(exc), file=sys.stderr)
+            return 1
 
     if args.command == "local":
         try:
@@ -118,7 +141,7 @@ def main(argv: Optional[List[str]] = None) -> int:
 
         if args.feed_command == "sync":
             try:
-                entries = query_osv_malicious(ecosystem=args.ecosystem)
+                entries = query_osv_malicious(ecosystem=args.ecosystem, proxy=proxy)
             except Exception as exc:
                 print(f"feed sync failed: {exc}", file=sys.stderr)
                 return 1
@@ -189,6 +212,7 @@ def main(argv: Optional[List[str]] = None) -> int:
                 headless=not args.headed,
                 baas_validate=args.baas_validate,
                 baas_tables=extra_tables,
+                proxy=proxy,
             )
         except Exception as exc:
             print(f"browser-scan failed: {exc}", file=sys.stderr)
@@ -213,7 +237,8 @@ def main(argv: Optional[List[str]] = None) -> int:
                 baas_tables=extra_tables,
                 scan_budget_seconds=int(args.scan_budget),
                 launch_profile=args.launch_profile,
-                offline=getattr(args, "offline", False),
+                offline=offline,
+                proxy=proxy,
             )
         except Exception as exc:
             print(f"site-scan failed: {exc}", file=sys.stderr)
@@ -257,6 +282,17 @@ def build_parser() -> argparse.ArgumentParser:
         "--offline",
         action="store_true",
         help="Refuse any outbound socket. Only loopback connections allowed.",
+    )
+    parser.add_argument(
+        "--proxy",
+        default="",
+        metavar="URL",
+        help=(
+            "Route scan traffic through a proxy for privacy. Accepts http://, "
+            "https://, socks5:// URLs, or the aliases 'warp' (Cloudflare WARP, "
+            "socks5://127.0.0.1:40000) and 'tor' (socks5://127.0.0.1:9050). "
+            "Must precede the subcommand. SOCKS5 needs `pip install requests[socks]`."
+        ),
     )
     parser.add_argument(
         "--no-default-suppressions",

@@ -102,6 +102,37 @@ keyleak local . --fail-on high
 # Output formats: --json, --sarif, --markdown, --html
 ```
 
+### Private scans through a proxy
+
+Route a scan's outbound traffic through a proxy with the global `--proxy` flag
+(off by default). It covers every outbound path of a scan — crt.sh subdomain
+lookups, the Playwright crawl, and BaaS validation probes:
+
+```bash
+# Cloudflare WARP (recommended): a free, local SOCKS5 proxy.
+#   warp-cli set-mode proxy && warp-cli connect
+keyleak --proxy warp site-scan example.com
+
+# Tor (socks5://127.0.0.1:9050)
+keyleak --proxy tor site-scan example.com
+
+# Any explicit proxy URL — http://, https://, or socks5://
+keyleak --proxy socks5://127.0.0.1:1080 browser-scan https://your-app.vercel.app
+```
+
+Notes:
+- `--proxy` is a **global** flag, so it must come **before** the subcommand
+  (like `--offline`).
+- `socks5://` proxies need PySocks (`pip install requests[socks]`); the `warp`
+  and `tor` aliases are SOCKS5.
+- **Privacy caveat:** a proxy operator can see (and log) the traffic you route
+  through it — including secrets a scan discovers. Prefer a trusted local proxy
+  such as Cloudflare WARP or Tor over random free public proxies, which are an
+  active man-in-the-middle risk.
+- WARP/Tor are loopback proxies, so `--proxy warp` coexists with `--offline`. A
+  non-loopback proxy is rejected under `--offline`. The local KeyLeak web bridge
+  is never proxied.
+
 ### HTML Report
 
 The `--html` flag generates a self-contained dark-theme vulnerability report:

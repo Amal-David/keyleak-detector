@@ -60,6 +60,31 @@ class CrtShTests(unittest.TestCase):
                                side_effect=ss.requests.RequestException("no net")):
             self.assertEqual(ss._crt_sh_subdomains("example.com"), [])
 
+    def test_proxy_is_passed_to_requests(self):
+        captured = {}
+
+        def fake_get(*a, **k):
+            captured.update(k)
+            return _FakeResp([])
+
+        with mock.patch.object(ss.requests, "get", side_effect=fake_get):
+            ss._crt_sh_subdomains("example.com", proxy="socks5://127.0.0.1:40000")
+        self.assertEqual(
+            captured["proxies"],
+            {"http": "socks5://127.0.0.1:40000", "https": "socks5://127.0.0.1:40000"},
+        )
+
+    def test_no_proxy_passes_none(self):
+        captured = {}
+
+        def fake_get(*a, **k):
+            captured.update(k)
+            return _FakeResp([])
+
+        with mock.patch.object(ss.requests, "get", side_effect=fake_get):
+            ss._crt_sh_subdomains("example.com")
+        self.assertIsNone(captured["proxies"])
+
 
 class DiscoverTests(unittest.TestCase):
     def test_offline_uses_no_network(self):
@@ -149,6 +174,25 @@ class ScanSiteTests(unittest.TestCase):
             report = ss.scan_site("example.com")   # must not raise
         self.assertEqual(report.findings, [])
         self.assertEqual(report.extra["pages_scanned"], 1)
+
+    def test_proxy_threaded_to_crawl_and_browser_scan(self):
+        seen = {}
+
+        def fake_crawl(hosts, **k):
+            seen["crawl_proxy"] = k.get("proxy")
+            return ["https://example.com/"]
+
+        def fake_scan(url, **k):
+            seen["scan_proxy"] = k.get("proxy")
+            return ScanReport(target=url, scan_mode="browser", findings=[])
+
+        with mock.patch.object(ss, "discover_subdomains", lambda d, **k: ["example.com"]), \
+             mock.patch.object(ss, "crawl_pages", fake_crawl), \
+             mock.patch.object(ss, "run_browser_scan", fake_scan):
+            ss.scan_site("example.com", proxy="warp-resolved")
+
+        self.assertEqual(seen["crawl_proxy"], "warp-resolved")
+        self.assertEqual(seen["scan_proxy"], "warp-resolved")
 
     def test_normalizes_url_to_registrable_domain(self):
         captured = {}
