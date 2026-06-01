@@ -351,6 +351,7 @@ def crawl_pages(
     headless: bool = True,
     proxy: Optional[str] = None,
     collect_raw: Optional[Set[str]] = None,
+    target_guard: Optional[Callable[[str], Optional[str]]] = None,
     on_progress: ProgressFn = None,
 ) -> List[str]:
     """Breadth-first crawl across ``hosts`` up to ``depth`` link levels.
@@ -364,6 +365,8 @@ def crawl_pages(
     seen: Set[str] = set()
     roots = []
     for h in hosts:
+        if target_guard is not None and target_guard(h) is not None:
+            continue
         root = _normalize_url(f"https://{h}")
         if root not in seen:
             seen.add(root)
@@ -382,6 +385,9 @@ def crawl_pages(
         try:
             while queue and len(results) < max_pages:
                 url, level = queue.popleft()
+                # SSRF guard: a discovered link may resolve to an internal host.
+                if target_guard is not None and target_guard(urlparse(url).hostname) is not None:
+                    continue
                 results.append(url)
                 if level >= depth:
                     continue
@@ -540,9 +546,15 @@ def scan_site(
     offline: bool = False,
     proxy: Optional[str] = None,
     auto_install: bool = True,
+    target_guard: Optional[Callable[[str], Optional[str]]] = None,
     on_progress: ProgressFn = None,
 ) -> ScanReport:
     """Full Site Scan: discover subdomains, crawl pages, scan each for secrets.
+
+    ``target_guard``, if given, is called with each host before it is probed,
+    crawled, or scanned; a non-None return means "skip this host". The web path
+    passes an SSRF guard here so subdomain enumeration and link-following can't
+    reach internal/metadata addresses (CLI leaves it unset).
 
     Returns an aggregated ScanReport whose ``extra`` carries the scanned
     subdomains, page count, and a ``provenance`` map (finding id -> URLs).
@@ -564,6 +576,18 @@ def scan_site(
     )
     if not subdomains:
         subdomains = [domain]
+
+    # SSRF guard: drop any discovered subdomain that resolves to a blocked
+    # (internal/metadata) address before it is ever probed or crawled.
+    if target_guard is not None:
+        safe_hosts: List[str] = []
+        for host in subdomains:
+            reason = target_guard(host)
+            if reason is None:
+                safe_hosts.append(host)
+            else:
+                _emit(on_progress, "subdomains", f"Skipping {host}: {reason}")
+        subdomains = safe_hosts or [domain]
 
     # Subdomain-takeover check runs in parallel with the crawl/scan below. It
     # only uses ``requests`` (no Playwright), so a single worker thread safely
@@ -594,13 +618,16 @@ def scan_site(
         urls = crawl_pages(
             subdomains, depth=depth, max_pages=max_pages,
             headless=headless, proxy=proxy, collect_raw=raw_query_urls,
-            on_progress=on_progress,
+            target_guard=target_guard, on_progress=on_progress,
         )
 
         for finding in _dangerous_param_findings(raw_query_urls):
             pairs.append((finding, finding.evidence.request_url))
         total = len(urls)
         for i, url in enumerate(urls):
+            # SSRF guard: a crawled link may resolve to an internal address.
+            if target_guard is not None and target_guard(urlparse(url).hostname) is not None:
+                continue
             _emit(on_progress, "scan", f"Scanning [{i + 1}/{total}] {url}", i + 1, total)
             try:
                 report = run_browser_scan(

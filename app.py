@@ -1431,6 +1431,9 @@ async def _run_full_site_scan(url, parsed_url, scan_id):
             max_subdomains=50,
             baas_validate=baas_validate,
             auto_install=False,  # never install binaries from the web request path
+            # SSRF guard applies to every enumerated subdomain and crawled link,
+            # not just the initial URL.
+            target_guard=_scan_target_is_blocked,
             on_progress=_progress,
         )
 

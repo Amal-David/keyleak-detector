@@ -474,7 +474,11 @@ def _to_finding(entry: Dict[str, Any], target: str, run_salt: Optional[bytes] = 
     value = str(entry.get("value") or "")
     # Redact before the value ever leaves this process. The browser path used to
     # store the raw match in ``redacted_value``/``snippet``, leaking cleartext
-    # secrets into reports, CI artifacts, and the /scan JSON response.
+    # secrets into reports, CI artifacts, and the /scan JSON response. Always use
+    # salted (HMAC) redaction — never the partial prefix/suffix masking — so a
+    # caller that forgets to pass a salt can't leak secret fragments.
+    if run_salt is None:
+        run_salt = new_run_salt()
     redacted = redact_value(value, run_salt=run_salt)
     evidence = Evidence(
         source=source,
