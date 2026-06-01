@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import unittest
 from unittest import mock
+from urllib.parse import urlparse
 
 import keyleak.site_scanner as ss
 from keyleak.models import ScanReport
@@ -48,7 +49,8 @@ class SiteScannerSSRFTests(unittest.TestCase):
         )
         # Blocked links must not crowd out allowed ones from the budget.
         self.assertEqual(out, ["https://ok.example.com/a", "https://ok.example.com/b"])
-        self.assertFalse(any("bad.example.com" in s for s in seen))
+        seen_hosts = {urlparse(s).hostname for s in seen}
+        self.assertNotIn("bad.example.com", seen_hosts)
 
     def test_blocked_apex_is_not_reinserted(self):
         seen = {}
