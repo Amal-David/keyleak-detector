@@ -1399,6 +1399,68 @@ def scan_events(scan_id):
 def index():
     return render_template('index.html')
 
+async def _run_full_site_scan(url, parsed_url, scan_id):
+    """Full Site Scan: enumerate subdomains + crawl all pages of a domain.
+
+    Runs the synchronous site_scanner engine in a thread executor (it uses
+    sync Playwright, which must not share the async event loop) and streams
+    per-phase progress over the existing SSE channel.
+    """
+    from keyleak.site_scanner import scan_site
+
+    domain = parsed_url.hostname
+    if not domain:
+        return jsonify({'error': 'Invalid URL host'}), 400
+    _emit_progress(scan_id, f"Full Site Scan: discovering subdomains for {domain}...")
+
+    def _progress(ev):
+        _emit_progress(scan_id, ev.get("message") if isinstance(ev, dict) else str(ev))
+
+    def _run():
+        return scan_site(
+            domain,
+            depth=3,
+            max_pages=100,
+            max_subdomains=25,
+            baas_validate=True,
+            on_progress=_progress,
+        )
+
+    try:
+        loop = asyncio.get_event_loop()
+        report = await loop.run_in_executor(None, _run)
+    except Exception:
+        logger.exception("Full site scan failed")
+        err = {'error': 'Full site scan failed. Check server logs for details.'}
+        if scan_id and scan_id in _scan_queues:
+            _scan_queues[scan_id].put({'type': 'result', 'data': err})
+        return jsonify(err), 500
+
+    findings = [f.to_dict() for f in report.findings]
+    response_data = {
+        'url': url,
+        'status': 'completed',
+        'scan_mode': 'full-site',
+        'verdict': report.verdict,
+        'retest_command': report.retest_command,
+        'report': report.to_dict(),
+        'findings': findings,
+        'scan_summary': report.summary,
+        'subdomains': report.extra.get('subdomains', []),
+        'pages_scanned': report.extra.get('pages_scanned', 0),
+        'provenance': report.extra.get('provenance', {}),
+        'details': {
+            'unique_findings': len(findings),
+            'hosts_scanned': report.extra.get('hosts_scanned', 0),
+            'pages_scanned': report.extra.get('pages_scanned', 0),
+            'scan_timestamp': datetime.now().isoformat(),
+        },
+    }
+    if scan_id and scan_id in _scan_queues:
+        _scan_queues[scan_id].put({'type': 'result', 'data': response_data})
+    return jsonify(response_data)
+
+
 @app.route('/scan', methods=['POST'])
 async def scan():
     global mitm_thread, mitm_running
@@ -1449,8 +1511,12 @@ async def scan():
         _scan_queues[scan_id] = Queue()
         _scan_queue_created[scan_id] = time.monotonic()
 
+    # Full Site Scan: subdomain enumeration + multi-page crawl of the domain.
+    if scan_mode == 'full-site':
+        return await _run_full_site_scan(url, parsed_url, scan_id)
+
     if scan_mode not in {'basic', 'extensive'}:
-        return jsonify({'error': 'Invalid scan mode. Use basic or extensive.'}), 400
+        return jsonify({'error': 'Invalid scan mode. Use basic, extensive, or full-site.'}), 400
     
     try:
         # Reset findings

@@ -2,6 +2,7 @@ document.addEventListener('DOMContentLoaded', function() {
     const urlInput = document.getElementById('urlInput');
     const scanButton = document.getElementById('scanButton');
     const extensiveScanButton = document.getElementById('extensiveScanButton');
+    const fullSiteScanButton = document.getElementById('fullSiteScanButton');
     const buttonText = document.getElementById('buttonText');
     const buttonSpinner = document.getElementById('buttonSpinner');
     const resultsSection = document.getElementById('results');
@@ -39,6 +40,9 @@ document.addEventListener('DOMContentLoaded', function() {
 
     scanButton.addEventListener('click', () => startScan('basic'));
     extensiveScanButton.addEventListener('click', openExtensiveModal);
+    if (fullSiteScanButton) {
+        fullSiteScanButton.addEventListener('click', () => startScan('full-site'));
+    }
 
     if (closeExtensiveModal) {
         closeExtensiveModal.addEventListener('click', closeExtensiveScanModal);
@@ -221,16 +225,21 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     function setLoading(isLoading, scanMode = 'basic') {
+        const label = scanMode === 'extensive' ? 'EXTENSIVE...'
+            : scanMode === 'full-site' ? 'SITE SCAN...'
+            : 'BASIC SCAN';
         if (isLoading) {
             scanButton.disabled = true;
             extensiveScanButton.disabled = true;
-            buttonText.textContent = scanMode === 'extensive' ? 'EXTENSIVE...' : 'BASIC SCAN';
+            if (fullSiteScanButton) fullSiteScanButton.disabled = true;
+            buttonText.textContent = label;
             buttonSpinner.classList.remove('hidden');
             scanButton.classList.remove('hover:bg-emerald-500');
             extensiveScanButton.classList.remove('hover:bg-violet-500');
         } else {
             scanButton.disabled = false;
             extensiveScanButton.disabled = false;
+            if (fullSiteScanButton) fullSiteScanButton.disabled = false;
             buttonText.textContent = 'BASIC SCAN';
             buttonSpinner.classList.add('hidden');
             scanButton.classList.add('hover:bg-emerald-500');
@@ -288,10 +297,30 @@ document.addEventListener('DOMContentLoaded', function() {
             `;
         }
 
-        displayFilters(data.findings || []);
+        // Full Site Scan: show subdomain + page-count summary
+        const subdomains = data.subdomains || (data.report && data.report.subdomains) || [];
+        if (Array.isArray(subdomains) && subdomains.length) {
+            const pages = data.pages_scanned || (data.report && data.report.pages_scanned) || 0;
+            const chip = document.createElement('div');
+            chip.className = 'mt-3 text-xs font-mono text-sky-300 bg-sky-900/20 border border-sky-800 rounded px-3 py-2';
+            chip.innerHTML = `<span class="text-sky-400 font-bold">FULL SITE</span> &middot; ${subdomains.length} subdomain(s) &middot; ${pages} page(s) scanned`
+                + `<div class="text-slate-400 mt-1 break-all">${subdomains.map(escapeHtml).join(', ')}</div>`;
+            scanSummary.appendChild(chip);
+        }
 
-        if (data.findings && data.findings.length > 0) {
-            data.findings.forEach(finding => {
+        const normalizedFindings = data.report && Array.isArray(data.report.findings)
+            ? data.report.findings
+            : (data.findings || []);
+
+        const provenance = data.provenance || (data.report && data.report.provenance) || {};
+
+        displayFilters(normalizedFindings);
+
+        if (normalizedFindings.length > 0) {
+            normalizedFindings.forEach(finding => {
+                if (finding.id && Array.isArray(provenance[finding.id])) {
+                    finding._seenOn = provenance[finding.id];
+                }
                 findingsList.appendChild(renderFinding(finding));
             });
         } else {
@@ -310,8 +339,9 @@ document.addEventListener('DOMContentLoaded', function() {
             title.textContent = 'NO PAGE SECRETS FOUND';
             copy.textContent = 'The verdict includes attack-surface findings. Review the attack vectors below.';
         } else {
-            title.textContent = 'NO SECRETS FOUND';
-            copy.textContent = 'Target appears clean for this scan profile.';
+            const packs = data.report && Array.isArray(data.report.packs) ? data.report.packs.join(', ') : 'selected';
+            title.textContent = 'NO FINDINGS IN COVERED PACKS';
+            copy.textContent = `No findings were detected in the ${packs} pack coverage for this scan profile.`;
         }
 
         noFindings.classList.remove('hidden');
@@ -322,7 +352,7 @@ document.addEventListener('DOMContentLoaded', function() {
             return;
         }
 
-        const reportFindings = data.report && Array.isArray(data.report.findings) ? data.report.findings : [];
+        const reportFindings = data.report && Array.isArray(data.report.findings) ? data.report.findings : (data.findings || []);
         const firstFinding = reportFindings[0];
         const verdict = data.verdict || (data.report && data.report.verdict) || {
             label: reportFindings.length ? 'REVIEW' : 'SAFE TO SHIP',
@@ -391,12 +421,39 @@ document.addEventListener('DOMContentLoaded', function() {
             filterDiv.appendChild(btn);
         });
 
+        const packs = Array.from(new Set(findings.map(finding => finding.category).filter(Boolean))).sort();
+        packs.forEach(pack => {
+            const btn = document.createElement('button');
+            btn.className = 'filter-button font-mono border-slate-600 text-slate-300 bg-slate-900/70';
+            btn.dataset.pack = pack;
+            btn.dataset.active = 'true';
+            btn.textContent = pack.toUpperCase();
+            btn.addEventListener('click', () => {
+                const nowActive = btn.dataset.active !== 'true';
+                btn.dataset.active = nowActive ? 'true' : 'false';
+                document.querySelectorAll(`.finding-card.pack-${cssToken(pack)}`).forEach(el => {
+                    el.classList.toggle('filtered-out', !nowActive);
+                });
+            });
+            filterDiv.appendChild(btn);
+        });
+
         resultsFilters.appendChild(filterDiv);
     }
 
     function renderFinding(finding) {
         const findingElement = document.createElement('div');
-        findingElement.className = `p-6 finding-card severity-${finding.severity || 'low'}`;
+        const category = finding.category || 'unknown';
+        findingElement.className = `p-6 finding-card severity-${finding.severity || 'low'} pack-${cssToken(category)}`;
+        const evidence = finding.evidence || {};
+        const redactedValue = evidence.redacted_value || finding.redacted_value || '[redacted]';
+        const source = evidence.source || finding.source || '';
+        const line = evidence.line || finding.line;
+        const snippet = evidence.snippet || finding.context_lines || '';
+        const fix = finding.remediation || finding.recommendation || 'Review and remove exposed sensitive data.';
+        const detectorId = finding.detector_id || '';
+        const confidence = finding.confidence !== undefined ? String(finding.confidence) : '';
+        const validationStatus = finding.validation_status || '';
 
         let severityIcon = '○';
         let severityColor = 'text-blue-400';
@@ -434,14 +491,19 @@ document.addEventListener('DOMContentLoaded', function() {
                     <div>
                         <p class="text-slate-500 text-xs font-mono mb-1">VALUE:</p>
                         <div class="bg-slate-900 border border-slate-700 rounded p-2 overflow-x-auto">
-                            <code class="text-xs font-mono text-emerald-400 break-all">${escapeHtml(finding.value || finding.match || 'N/A')}</code>
+                            <code class="text-xs font-mono text-emerald-400 break-all">${escapeHtml(redactedValue)}</code>
                         </div>
                     </div>
 
-                    ${finding.source ? `<div class="text-xs font-mono break-all"><span class="text-slate-500">SOURCE:</span><span class="text-slate-400 ml-2">${escapeHtml(finding.source)}</span></div>` : ''}
-                    ${finding.line ? `<div class="text-xs font-mono"><span class="text-slate-500">LINE:</span><span class="text-slate-400 ml-2">${finding.line}</span></div>` : ''}
-                    ${finding.context_lines ? `<div><p class="text-slate-500 text-xs font-mono mb-1">CONTEXT:</p><div class="bg-slate-900 rounded p-3 overflow-x-auto border border-slate-700"><pre class="text-xs font-mono text-slate-400 whitespace-pre"><code>${escapeHtml(finding.context_lines)}</code></pre></div></div>` : ''}
-                    ${finding.recommendation ? `<div class="bg-slate-900/50 border border-slate-700 rounded p-3"><p class="text-slate-500 text-xs font-mono mb-1">FIX:</p><p class="text-slate-400 text-xs leading-relaxed">${escapeHtml(finding.recommendation)}</p></div>` : ''}
+                    ${source ? `<div class="text-xs font-mono break-all"><span class="text-slate-500">SOURCE:</span><span class="text-slate-400 ml-2">${escapeHtml(source)}</span></div>` : ''}
+                    ${Array.isArray(finding._seenOn) && finding._seenOn.length ? `<div class="text-xs font-mono break-all"><span class="text-slate-500">SEEN ON:</span><span class="text-sky-400 ml-2">${finding._seenOn.length} page(s)</span><div class="text-slate-500 mt-1">${finding._seenOn.slice(0, 5).map(escapeHtml).join('<br>')}</div></div>` : ''}
+                    <div class="text-xs font-mono"><span class="text-slate-500">PACK:</span><span class="text-slate-400 ml-2">${escapeHtml(category)}</span></div>
+                    ${detectorId ? `<div class="text-xs font-mono break-all"><span class="text-slate-500">DETECTOR:</span><span class="text-slate-400 ml-2">${escapeHtml(detectorId)}</span></div>` : ''}
+                    ${confidence ? `<div class="text-xs font-mono"><span class="text-slate-500">CONFIDENCE:</span><span class="text-slate-400 ml-2">${escapeHtml(confidence)}</span></div>` : ''}
+                    ${validationStatus ? `<div class="text-xs font-mono"><span class="text-slate-500">STATUS:</span><span class="text-slate-400 ml-2">${escapeHtml(validationStatus)}</span></div>` : ''}
+                    ${line ? `<div class="text-xs font-mono"><span class="text-slate-500">LINE:</span><span class="text-slate-400 ml-2">${line}</span></div>` : ''}
+                    ${snippet ? `<div><p class="text-slate-500 text-xs font-mono mb-1">CONTEXT:</p><div class="bg-slate-900 rounded p-3 overflow-x-auto border border-slate-700"><pre class="text-xs font-mono text-slate-400 whitespace-pre"><code>${escapeHtml(snippet)}</code></pre></div></div>` : ''}
+                    <div class="bg-slate-900/50 border border-slate-700 rounded p-3"><p class="text-slate-500 text-xs font-mono mb-1">FIX:</p><p class="text-slate-400 text-xs leading-relaxed">${escapeHtml(fix)}</p></div>
                 </div>
             </div>
         `;
@@ -515,7 +577,7 @@ document.addEventListener('DOMContentLoaded', function() {
                         </div>
                         <div class="text-xs font-mono text-slate-500">${escapeHtml((finding.severity || 'low').toUpperCase())}</div>
                     </div>
-                    <div class="mt-2 text-xs text-slate-400 font-mono break-words">${escapeHtml(finding.details || finding.value || '')}</div>
+                    <div class="mt-2 text-xs text-slate-400 font-mono break-words">${escapeHtml(finding.details || finding.redacted_value || '')}</div>
                     ${finding.url ? `
                         <div class="mt-2 text-xs text-slate-500 font-mono break-all">URL: ${escapeHtml(finding.url)}</div>
                     ` : ''}
@@ -574,6 +636,10 @@ document.addEventListener('DOMContentLoaded', function() {
             return 'UNKNOWN';
         }
         return String(type).split('_').join(' ').toUpperCase();
+    }
+
+    function cssToken(value) {
+        return String(value || 'unknown').toLowerCase().replace(/[^a-z0-9_-]/g, '-');
     }
 
     function escapeHtml(text) {

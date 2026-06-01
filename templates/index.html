@@ -73,6 +73,17 @@
                                     <p class="text-violet-200 text-xs font-mono leading-relaxed">Use throwaway bearer tokens or session cookies only. Authenticated scans help catch runtime leaks that appear after login.</p>
                                     <p class="text-slate-500 text-xs font-mono leading-relaxed">Everything runs locally. Basic scan stays unauthenticated.</p>
                                 </div>
+                                <button
+                                    id="fullSiteScanButton"
+                                    class="w-full mt-3 bg-sky-600 hover:bg-sky-500 text-white font-semibold py-3 px-6 rounded-lg transition-all duration-200 flex items-center justify-center gap-2 font-mono text-sm border border-sky-400/50"
+                                    title="Enumerate subdomains and crawl every page of the domain"
+                                >
+                                    <span aria-hidden="true">SITE</span>
+                                    <span>FULL SITE SCAN (SUBDOMAINS + CRAWL)</span>
+                                </button>
+                                <div class="scanner-helper">
+                                    <p class="text-sky-200 text-xs font-mono leading-relaxed">Enumerates subdomains (crt.sh + DNS) and crawls every page of the domain, then scans each one. This is an active scan &mdash; only run it against systems you own or are authorized to test.</p>
+                                </div>
                             </div>
                         </div>
                     </div>

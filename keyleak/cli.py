@@ -207,10 +207,13 @@ def main(argv: Optional[List[str]] = None) -> int:
                 args.domain,
                 depth=int(args.depth),
                 max_pages=int(args.max_pages),
+                max_subdomains=int(args.max_subdomains),
                 headless=not args.headed,
                 baas_validate=args.baas_validate,
                 baas_tables=extra_tables,
                 scan_budget_seconds=int(args.scan_budget),
+                launch_profile=args.launch_profile,
+                offline=getattr(args, "offline", False),
             )
         except Exception as exc:
             print(f"site-scan failed: {exc}", file=sys.stderr)
@@ -357,11 +360,16 @@ def build_parser() -> argparse.ArgumentParser:
 
     site_scan = subparsers.add_parser(
         "site-scan",
-        help="Discover subdomains, crawl pages, and scan an entire site for secrets and BaaS vulnerabilities.",
+        help=(
+            "Full Site Scan: enumerate subdomains (crt.sh + DNS) and crawl every page of a "
+            "domain for secrets and BaaS misconfigurations. Authorized targets only."
+        ),
     )
     site_scan.add_argument("domain", help="Domain or URL to scan (e.g., example.com)")
-    site_scan.add_argument("--depth", default="1", help="Link crawl depth per host (default: 1).")
-    site_scan.add_argument("--max-pages", default="20", help="Maximum pages to scan (default: 20).")
+    site_scan.add_argument("--depth", default="3", help="Link crawl depth per host (default: 3).")
+    site_scan.add_argument("--max-pages", default="100", help="Maximum pages to scan (default: 100).")
+    site_scan.add_argument("--max-subdomains", default="25", help="Maximum subdomains to scan (default: 25).")
+    site_scan.add_argument("--launch-profile", default="launch-gate", choices=["launch-gate", "local-dev", "bug-bounty", "ci", "full"])
     site_scan.add_argument("--scan-budget", default="30", help="Per-page timeout in seconds.")
     site_scan.add_argument("--headed", action="store_true", help="Show browser windows.")
     site_scan.add_argument("--baas-validate", action="store_true", help="Enable active BaaS validation probes.")
