@@ -442,6 +442,23 @@ def scan_site(
     if not subdomains:
         subdomains = [domain]
 
+    # Subdomain-takeover check runs in parallel with the crawl/scan below. It
+    # only uses ``requests`` (no Playwright), so a single worker thread safely
+    # overlaps the main-thread browser work and adds almost no wall-clock time.
+    takeover_pool = None
+    takeover_future = None
+    if not offline:
+        from concurrent.futures import ThreadPoolExecutor
+
+        from .subdomain_takeover import check_subdomain_takeovers
+
+        _emit(on_progress, "takeover",
+              f"Checking {len(subdomains)} subdomain(s) for takeover in parallel")
+        takeover_pool = ThreadPoolExecutor(max_workers=1)
+        takeover_future = takeover_pool.submit(
+            check_subdomain_takeovers, subdomains, proxy=proxy
+        )
+
     raw_query_urls: Set[str] = set()
     urls = crawl_pages(
         subdomains, depth=depth, max_pages=max_pages,
@@ -471,6 +488,23 @@ def scan_site(
             print(f"[keyleak]   Error scanning {url}: {exc}", file=sys.stderr)
             continue
 
+    # Join the parallel subdomain-takeover check and fold its findings in.
+    takeover_count = 0
+    if takeover_future is not None:
+        try:
+            takeover_findings = takeover_future.result()
+        except Exception:
+            takeover_findings = []
+        finally:
+            takeover_pool.shutdown(wait=False)
+        for f in takeover_findings:
+            pairs.append((f, f.source))
+        takeover_count = len(takeover_findings)
+        if takeover_count:
+            _emit(on_progress, "takeover",
+                  f"Subdomain-takeover check flagged {takeover_count} host(s)",
+                  takeover_count, takeover_count)
+
     findings, provenance = _merge_findings(pairs)
     _emit(on_progress, "done",
           f"Full site scan complete: {len(findings)} unique finding(s) from {total} page(s)",
@@ -489,5 +523,6 @@ def scan_site(
         "pages_scanned": total,
         "scanned_urls": urls,
         "provenance": provenance,
+        "subdomain_takeovers": takeover_count,
     })
     return report
