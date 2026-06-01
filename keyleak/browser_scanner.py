@@ -28,6 +28,7 @@ from typing import Any, Callable, Dict, List, Optional
 
 from .extension_bundle import extension_pattern_payload
 from .models import Evidence, Finding, ScanReport
+from .proxy import playwright_proxy
 from .reporting import build_report
 
 
@@ -320,10 +321,12 @@ def run_browser_scan(
     baas_validate: bool = False,
     baas_prober: Optional[Any] = None,
     baas_tables: Optional[List[str]] = None,
+    proxy: Optional[str] = None,
 ) -> ScanReport:
     """Drive Playwright Chromium, inject the analyzer, return a ScanReport.
 
-    Raises ``ImportError`` if Playwright is not installed.
+    Raises ``ImportError`` if Playwright is not installed. When ``proxy`` is set,
+    both the browser and BaaS validation probes route through it.
     """
 
     try:
@@ -337,7 +340,7 @@ def run_browser_scan(
     init_script = _build_init_script()
 
     with sync_playwright() as p:
-        browser = p.chromium.launch(headless=headless)
+        browser = p.chromium.launch(headless=headless, proxy=playwright_proxy(proxy))
         context_kwargs: Dict[str, Any] = {"viewport": DEFAULT_VIEWPORT}
         if auth_state_path:
             context_kwargs["storage_state"] = auth_state_path
@@ -371,7 +374,7 @@ def run_browser_scan(
         baas_extraction = {"tables": list(baas_tables), "rpcs": [], "buckets": []}
 
     findings = [_to_finding(entry, url) for entry in raw or []]
-    baas_findings = _run_baas_validation(raw, baas_extraction, baas_validate, baas_prober)
+    baas_findings = _run_baas_validation(raw, baas_extraction, baas_validate, baas_prober, proxy)
     findings.extend(baas_findings)
 
     return build_report(
@@ -388,15 +391,21 @@ def _run_baas_validation(
     baas_extraction: Optional[Dict[str, Any]],
     baas_validate: bool,
     baas_prober: Optional[Any],
+    proxy: Optional[str] = None,
 ) -> List[Finding]:
     if not baas_validate:
         return []
 
-    from .baas_validator import extract_baas_config, validate_baas_config
+    from .baas_validator import extract_baas_config, make_default_prober, validate_baas_config
 
     config = extract_baas_config(raw_findings, baas_extraction)
     if config is None:
         return []
+
+    # Route validation probes through the same proxy as the browser, unless the
+    # caller injected its own prober (tests do this).
+    if baas_prober is None and proxy:
+        baas_prober = make_default_prober(proxy)
 
     validation = validate_baas_config(config, prober=baas_prober, js_extraction=baas_extraction)
     return validation.findings

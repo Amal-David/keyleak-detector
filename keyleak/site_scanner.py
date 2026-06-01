@@ -25,6 +25,7 @@ import tldextract
 
 from .browser_scanner import run_browser_scan
 from .models import Finding, ScanReport
+from .proxy import playwright_proxy, requests_proxies
 from .reporting import build_report
 
 
@@ -76,7 +77,7 @@ def _resolves(host: str) -> bool:
         return False
 
 
-def _crt_sh_subdomains(domain: str, timeout: int = 12) -> List[str]:
+def _crt_sh_subdomains(domain: str, timeout: int = 12, proxy: Optional[str] = None) -> List[str]:
     """Passive subdomain discovery via crt.sh certificate transparency logs.
 
     No external binary required. Returns names within the target domain.
@@ -89,6 +90,7 @@ def _crt_sh_subdomains(domain: str, timeout: int = 12) -> List[str]:
             params={"q": f"%.{domain}", "output": "json"},
             timeout=timeout,
             headers={"User-Agent": "keyleak-detector/full-site-scan"},
+            proxies=requests_proxies(proxy),
         )
         resp.raise_for_status()
         entries = resp.json()
@@ -125,6 +127,7 @@ def discover_subdomains(
     *,
     max_subdomains: int = MAX_SUBDOMAINS_DEFAULT,
     offline: bool = False,
+    proxy: Optional[str] = None,
     on_progress: ProgressFn = None,
 ) -> List[str]:
     """Discover subdomains within ``domain``, scoped and capped.
@@ -141,7 +144,7 @@ def discover_subdomains(
         return [domain]
 
     subfinder = set(_subfinder_subdomains(domain))
-    crt = set(_crt_sh_subdomains(domain))
+    crt = set(_crt_sh_subdomains(domain, proxy=proxy))
     if crt:
         _emit(on_progress, "subdomains", f"crt.sh returned {len(crt)} candidate names")
     brute_force = {f"{sub}.{domain}" for sub in COMMON_SUBDOMAINS}
@@ -216,6 +219,7 @@ def crawl_pages(
     depth: int = 3,
     max_pages: int = MAX_PAGES_DEFAULT,
     headless: bool = True,
+    proxy: Optional[str] = None,
     on_progress: ProgressFn = None,
 ) -> List[str]:
     """Breadth-first crawl across ``hosts`` up to ``depth`` link levels.
@@ -240,7 +244,7 @@ def crawl_pages(
     queue: deque = deque((r, 0) for r in roots)
 
     with sync_playwright() as p:
-        browser = p.chromium.launch(headless=headless)
+        browser = p.chromium.launch(headless=headless, proxy=playwright_proxy(proxy))
         try:
             while queue and len(results) < max_pages:
                 url, level = queue.popleft()
@@ -327,6 +331,7 @@ def scan_site(
     scan_budget_seconds: int = 30,
     launch_profile: str = "launch-gate",
     offline: bool = False,
+    proxy: Optional[str] = None,
     on_progress: ProgressFn = None,
 ) -> ScanReport:
     """Full Site Scan: discover subdomains, crawl pages, scan each for secrets.
@@ -344,14 +349,15 @@ def scan_site(
     _emit(on_progress, "start", f"Starting full site scan for {domain}")
 
     subdomains = discover_subdomains(
-        domain, max_subdomains=max_subdomains, offline=offline, on_progress=on_progress
+        domain, max_subdomains=max_subdomains, offline=offline,
+        proxy=proxy, on_progress=on_progress,
     )
     if not subdomains:
         subdomains = [domain]
 
     urls = crawl_pages(
         subdomains, depth=depth, max_pages=max_pages,
-        headless=headless, on_progress=on_progress,
+        headless=headless, proxy=proxy, on_progress=on_progress,
     )
 
     pairs: List[Tuple[Finding, str]] = []
@@ -366,6 +372,7 @@ def scan_site(
                 baas_prober=baas_prober,
                 baas_tables=baas_tables,
                 scan_budget_seconds=scan_budget_seconds,
+                proxy=proxy,
             )
             for f in report.findings:
                 pairs.append((f, url))

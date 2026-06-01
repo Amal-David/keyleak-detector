@@ -99,23 +99,37 @@ class BaaSValidation:
 # Default HTTP prober — overridden by tests.
 # ---------------------------------------------------------------------------
 
-def _default_prober(method: str, url: str, headers: Dict[str, str], body: Optional[str] = None) -> Dict[str, Any]:  # pragma: no cover
-    import requests as _requests
+def make_default_prober(proxy: Optional[str] = None):
+    """Build an HTTP prober, optionally routing probes through ``proxy``."""
 
-    kwargs: Dict[str, Any] = {"headers": headers, "timeout": 10}
-    if body is not None and method.upper() in ("POST", "PUT", "PATCH"):
-        kwargs["data"] = body
-    resp = _requests.request(method, url, **kwargs)
-    response_body: Any = None
-    try:
-        response_body = resp.json()
-    except Exception:
-        response_body = resp.text[:500] if resp.text else None
-    return {
-        "status_code": resp.status_code,
-        "body": response_body,
-        "headers": {k.lower(): v for k, v in resp.headers.items()},
-    }
+    from .proxy import requests_proxies
+
+    proxies = requests_proxies(proxy)
+
+    def _prober(method: str, url: str, headers: Dict[str, str], body: Optional[str] = None) -> Dict[str, Any]:  # pragma: no cover
+        import requests as _requests
+
+        kwargs: Dict[str, Any] = {"headers": headers, "timeout": 10}
+        if proxies:
+            kwargs["proxies"] = proxies
+        if body is not None and method.upper() in ("POST", "PUT", "PATCH"):
+            kwargs["data"] = body
+        resp = _requests.request(method, url, **kwargs)
+        response_body: Any = None
+        try:
+            response_body = resp.json()
+        except Exception:
+            response_body = resp.text[:500] if resp.text else None
+        return {
+            "status_code": resp.status_code,
+            "body": response_body,
+            "headers": {k.lower(): v for k, v in resp.headers.items()},
+        }
+
+    return _prober
+
+
+_default_prober = make_default_prober()
 
 
 # ---------------------------------------------------------------------------
