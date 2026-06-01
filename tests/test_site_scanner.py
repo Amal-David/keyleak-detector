@@ -87,23 +87,49 @@ class CrtShTests(unittest.TestCase):
 
 
 class DiscoverTests(unittest.TestCase):
-    def test_offline_uses_no_network(self):
+    def test_offline_uses_no_network_and_fills_sources(self):
         def fail(*a, **k):
-            raise AssertionError("network must not be touched in offline mode")
+            raise AssertionError("offline mode must not touch network or install")
         with mock.patch.object(ss, "_crt_sh_subdomains", fail), \
              mock.patch.object(ss, "_subfinder_subdomains", fail), \
+             mock.patch.object(ss, "_amass_subdomains", fail), \
+             mock.patch.object(ss, "_ensure_subfinder", fail), \
              mock.patch.object(ss, "_resolves", fail):
-            self.assertEqual(ss.discover_subdomains("example.com", offline=True),
-                             ["example.com"])
+            sources = {}
+            out = ss.discover_subdomains("example.com", offline=True, sources_out=sources)
+        self.assertEqual(out, ["example.com"])
+        # offline still returns a consistent discovery_sources structure
+        self.assertEqual(sources["by_host"], {"example.com": "apex"})
+        self.assertEqual(sources["kept"], {"apex": 1})
 
     def test_caps_and_requires_resolution(self):
         with mock.patch.object(ss, "_subfinder_subdomains", lambda d: []), \
+             mock.patch.object(ss, "_amass_subdomains", lambda d: []), \
              mock.patch.object(ss, "_crt_sh_subdomains",
                                lambda d, **k: [f"s{i}.example.com" for i in range(50)]), \
              mock.patch.object(ss, "_resolves", lambda h: True):
             out = ss.discover_subdomains("example.com", max_subdomains=5)
         self.assertEqual(len(out), 5)
         self.assertEqual(out[0], "example.com")     # apex leads
+
+    def test_amass_unioned_with_source_attribution(self):
+        with mock.patch.object(ss, "_subfinder_subdomains", lambda d: []), \
+             mock.patch.object(ss, "_amass_subdomains", lambda d: ["a.example.com"]), \
+             mock.patch.object(ss, "_crt_sh_subdomains", lambda d, **k: ["b.example.com"]), \
+             mock.patch.object(ss, "_resolves", lambda h: True):
+            sources = {}
+            out = ss.discover_subdomains("example.com", sources_out=sources)
+        # amass hits are unioned alongside crt.sh
+        self.assertIn("a.example.com", out)
+        self.assertIn("b.example.com", out)
+        # each kept host is attributed to the source that surfaced it
+        self.assertEqual(sources["by_host"]["a.example.com"], "amass")
+        self.assertEqual(sources["by_host"]["b.example.com"], "crt.sh")
+        self.assertEqual(sources["by_host"]["example.com"], "apex")
+        # per-source candidate + kept counts are reported
+        self.assertEqual(sources["candidates"]["amass"], 1)
+        self.assertEqual(sources["candidates"]["crt.sh"], 1)
+        self.assertGreaterEqual(sources["kept"].get("amass", 0), 1)
 
 
 class FilterLinksTests(unittest.TestCase):
@@ -210,6 +236,63 @@ class ScanSiteTests(unittest.TestCase):
         # Credentials/port stripped, reduced to the registrable domain (eTLD+1).
         self.assertEqual(captured["domain"], "example.com")
         self.assertEqual(report.target, "example.com")
+
+
+class AutoInstallTests(unittest.TestCase):
+    def test_present_subfinder_skips_install(self):
+        with mock.patch.object(ss.shutil, "which",
+                               side_effect=lambda n: "/usr/bin/subfinder" if n == "subfinder" else None), \
+             mock.patch.object(ss.subprocess, "run",
+                               side_effect=AssertionError("must not install when present")):
+            self.assertTrue(ss._ensure_subfinder(auto_install=True))
+
+    def test_no_install_when_opted_out(self):
+        with mock.patch.object(ss.shutil, "which", lambda n: None), \
+             mock.patch.object(ss.subprocess, "run",
+                               side_effect=AssertionError("must not install when opted out")):
+            self.assertFalse(ss._ensure_subfinder(auto_install=False))
+
+    def test_env_opt_out_blocks_install(self):
+        with mock.patch.object(ss.shutil, "which", lambda n: None), \
+             mock.patch.dict(ss.os.environ, {"KEYLEAK_NO_AUTO_INSTALL": "1"}), \
+             mock.patch.object(ss.subprocess, "run",
+                               side_effect=AssertionError("env opt-out must block install")):
+            self.assertFalse(ss._ensure_subfinder(auto_install=True))
+
+    def test_env_value_zero_does_not_block(self):
+        # Only explicit truthy values opt out; "0"/"false" must NOT block install.
+        calls = []
+
+        def fake_run(cmd, *a, **k):
+            calls.append(cmd)
+
+            class _R:
+                returncode, stdout, stderr = 0, "", ""
+
+            return _R()
+
+        with mock.patch.object(ss.shutil, "which",
+                               lambda n: "/opt/homebrew/bin/brew" if n == "brew" else None), \
+             mock.patch.dict(ss.os.environ, {"KEYLEAK_NO_AUTO_INSTALL": "0"}), \
+             mock.patch.object(ss.subprocess, "run", fake_run):
+            ss._ensure_subfinder(auto_install=True)
+        self.assertTrue(any("brew" in c for c in calls),
+                        "KEYLEAK_NO_AUTO_INSTALL=0 must not block auto-install")
+
+    def test_discover_threads_auto_install_flag(self):
+        captured = {}
+
+        def fake_ensure(*, auto_install, on_progress=None):
+            captured["auto_install"] = auto_install
+            return False
+
+        with mock.patch.object(ss, "_ensure_subfinder", fake_ensure), \
+             mock.patch.object(ss, "_subfinder_subdomains", lambda d: []), \
+             mock.patch.object(ss, "_amass_subdomains", lambda d: []), \
+             mock.patch.object(ss, "_crt_sh_subdomains", lambda d, **k: []), \
+             mock.patch.object(ss, "_resolves", lambda h: True):
+            ss.discover_subdomains("example.com", auto_install=True)
+        self.assertTrue(captured["auto_install"])
 
 
 if __name__ == "__main__":

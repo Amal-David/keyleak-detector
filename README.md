@@ -15,7 +15,7 @@ Static scanners find hardcoded secrets in source code. KeyLeak finds the ones th
 
 - **BaaS vulnerability scanner**: Detects Supabase/Firebase/Appwrite config in minified JS bundles, extracts table names, and actively probes whether Row-Level Security is enforced. A Supabase anon key is harmless if RLS works. KeyLeak tests whether it does.
 - **Chrome extension**: Detects leaked keys in real-time as you browse. TEST button validates whether a found key is still active (supports 14 providers). JWT decoder surfaces suspicious claims (service_role, admin flags, broad scopes).
-- **Full Site Scan**: Enumerates subdomains (crt.sh certificate transparency + DNS — no external tools needed), crawls every page of the domain, and scans them all, reporting which subdomains/pages each leak appeared on. One command (or one click in the web UI) for a full domain audit. Authorized targets only.
+- **Full Site Scan**: Enumerates subdomains (crt.sh certificate transparency + DNS, and a deep scan auto-installs **subfinder** — pinned, opt-out — for far richer discovery; **amass** is used too if present), crawls every page of the domain, and scans them all, reporting which subdomains/pages each leak appeared on plus a per-source discovery breakdown. One command (or one click in the web UI) for a full domain audit. Authorized targets only.
 - **200+ first-party domain suppression**: No false positives when browsing Google, AWS, Azure, GitHub, Stripe, etc.
 
 ## Install
@@ -93,8 +93,11 @@ keyleak browser-scan https://your-app.vercel.app --html > report.html
 # Scan with BaaS validation (tests Supabase RLS, Firebase rules)
 keyleak browser-scan https://your-app.vercel.app --baas-validate --html > report.html
 
-# Full Site Scan — subdomain enumeration (crt.sh + DNS) + multi-page crawl, all pages scanned
-keyleak site-scan example.com --depth 3 --max-pages 100 --max-subdomains 25 --baas-validate --html > report.html
+# Full Site Scan — subdomain enumeration (subfinder/amass if installed + crt.sh + DNS) + multi-page crawl
+keyleak site-scan example.com --depth 3 --max-pages 100 --max-subdomains 50 --baas-validate --html > report.html
+# A deep scan auto-installs subfinder if it's missing (brew → pinned `go install`), then uses it;
+# pass --no-auto-install (or set KEYLEAK_NO_AUTO_INSTALL=1) to stay on crt.sh + DNS only.
+# amass is also auto-used if present. `keyleak doctor` reports which enumerators are active.
 
 # Scan local files for secrets
 keyleak local . --fail-on high
