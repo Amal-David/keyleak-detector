@@ -106,6 +106,22 @@ def check_node() -> CheckResult:
     return _ok("node", "node is available.")
 
 
+def check_subdomain_tools() -> CheckResult:
+    """Optional enumerators that enrich Full Site Scan subdomain discovery."""
+
+    present = [t for t in ("subfinder", "amass") if shutil.which(t)]
+    if present:
+        return _ok(
+            "subdomain-tools",
+            f"{', '.join(present)} on PATH — richer Full Site Scan discovery.",
+        )
+    return _warn(
+        "subdomain-tools",
+        "subfinder/amass not found; Full Site Scan uses crt.sh + DNS only.",
+        fix="Optional: `brew install subfinder` (or amass) for deeper subdomain enumeration.",
+    )
+
+
 def check_poetry() -> CheckResult:
     if shutil.which("poetry") is None:
         return _warn(
@@ -152,6 +168,7 @@ CHECKS = (
     check_playwright,
     check_mitmproxy_cert,
     check_node,
+    check_subdomain_tools,
     check_poetry,
     check_network_egress,
     check_allowlist_sanity,

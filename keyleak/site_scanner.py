@@ -13,6 +13,8 @@ number of subdomains and pages. Read-only: crawl + passive scan only.
 from __future__ import annotations
 
 import json
+import os
+import shutil
 import socket
 import subprocess
 import sys
@@ -51,7 +53,7 @@ COMMON_SUBDOMAINS = [
 ]
 
 # Hard caps to keep a scan bounded and polite.
-MAX_SUBDOMAINS_DEFAULT = 25
+MAX_SUBDOMAINS_DEFAULT = 50
 MAX_PAGES_DEFAULT = 100
 
 ProgressFn = Optional[Callable[[Dict[str, Any]], None]]
@@ -132,57 +134,175 @@ def _subfinder_subdomains(domain: str) -> List[str]:
     return []
 
 
+def _amass_subdomains(domain: str) -> List[str]:
+    """Use the optional amass binary (passive mode) if present, else empty."""
+    try:
+        result = subprocess.run(
+            ["amass", "enum", "-passive", "-norecursive", "-d", domain, "-timeout", "2"],
+            capture_output=True, text=True, timeout=180,
+        )
+        if result.returncode == 0 and result.stdout.strip():
+            out = {
+                line.strip().lower()
+                for line in result.stdout.splitlines()
+                if line.strip()
+            }
+            return sorted(h for h in out if h == domain or h.endswith("." + domain))
+    except (FileNotFoundError, subprocess.TimeoutExpired, OSError):
+        pass
+    return []
+
+
+SUBFINDER_VERSION = "v2.14.0"
+
+
+def _go_bin_dir() -> Optional[str]:
+    """Best-effort location of the Go install bin dir (GOBIN or GOPATH/bin)."""
+    for var in ("GOBIN", "GOPATH"):
+        try:
+            out = subprocess.run(["go", "env", var], capture_output=True,
+                                 text=True, timeout=10).stdout.strip()
+        except (subprocess.SubprocessError, OSError):
+            continue
+        if out:
+            return out if var == "GOBIN" else os.path.join(out, "bin")
+    return os.path.join(os.path.expanduser("~"), "go", "bin")
+
+
+def _ensure_subfinder(*, auto_install: bool, on_progress: ProgressFn = None) -> bool:
+    """Make subfinder available for a deep scan, installing it if needed.
+
+    If subfinder is missing and ``auto_install`` is set (and the env var
+    ``KEYLEAK_NO_AUTO_INSTALL`` is unset), try Homebrew first, then a pinned
+    ``go install``. Never raises — a failed install just means discovery
+    falls back to crt.sh + DNS. Returns True if subfinder is usable.
+    """
+    if shutil.which("subfinder"):
+        return True
+    no_auto_install = (os.environ.get("KEYLEAK_NO_AUTO_INSTALL", "").strip().lower()
+                       in {"1", "true", "yes", "on"})
+    if not auto_install or no_auto_install:
+        return False
+
+    if shutil.which("brew"):
+        _emit(on_progress, "install",
+              "subfinder not found — installing via Homebrew (brew install subfinder)...")
+        try:
+            subprocess.run(["brew", "install", "subfinder"],
+                           check=True, capture_output=True, text=True, timeout=900)
+        except (subprocess.SubprocessError, OSError) as exc:
+            _emit(on_progress, "install", f"brew install subfinder failed: {exc}")
+
+    if not shutil.which("subfinder") and shutil.which("go"):
+        _emit(on_progress, "install",
+              f"Installing subfinder via go install (pinned {SUBFINDER_VERSION})...")
+        try:
+            subprocess.run(
+                ["go", "install",
+                 f"github.com/projectdiscovery/subfinder/v2/cmd/subfinder@{SUBFINDER_VERSION}"],
+                check=True, capture_output=True, text=True, timeout=900,
+            )
+            gobin = _go_bin_dir()
+            exe_name = "subfinder.exe" if os.name == "nt" else "subfinder"
+            if gobin and os.path.isfile(os.path.join(gobin, exe_name)):
+                os.environ["PATH"] = gobin + os.pathsep + os.environ.get("PATH", "")
+        except (subprocess.SubprocessError, OSError) as exc:
+            _emit(on_progress, "install", f"go install subfinder failed: {exc}")
+
+    ok = shutil.which("subfinder") is not None
+    _emit(on_progress, "install",
+          "subfinder ready." if ok else "Could not install subfinder; using crt.sh + DNS only.")
+    return ok
+
+
 def discover_subdomains(
     domain: str,
     *,
     max_subdomains: int = MAX_SUBDOMAINS_DEFAULT,
     offline: bool = False,
     proxy: Optional[str] = None,
+    auto_install: bool = False,
+    sources_out: Optional[Dict[str, Any]] = None,
     on_progress: ProgressFn = None,
 ) -> List[str]:
     """Discover subdomains within ``domain``, scoped and capped.
 
-    Sources (union): subfinder (if installed) + crt.sh + DNS brute-force of
-    common names. Each candidate is DNS-resolved to drop dead names, then the
-    list is capped at ``max_subdomains``. With ``offline=True`` no network is
-    used and only the bare domain is returned.
+    Sources (union, in priority order): subfinder + amass (if installed) +
+    crt.sh certificate transparency + DNS brute-force of common names. Each
+    candidate is DNS-resolved to drop dead names, then the list is capped at
+    ``max_subdomains``. With ``offline=True`` no network is used and only the
+    bare domain is returned.
+
+    If ``sources_out`` is provided, it is populated with a per-source
+    breakdown: ``candidates`` (counts found per source), ``kept`` (counts of
+    resolved hosts attributed to each source), and ``by_host`` (host -> source).
     """
     domain = domain.strip().lower().split(":")[0]
 
     if offline:
         _emit(on_progress, "subdomains", "Offline mode — skipping subdomain discovery", 1, 1)
+        if sources_out is not None:
+            sources_out.update({
+                "candidates": {"subfinder": 0, "amass": 0, "crt.sh": 0, "dns-brute": 0},
+                "kept": {"apex": 1},
+                "by_host": {domain: "apex"},
+            })
         return [domain]
 
+    _ensure_subfinder(auto_install=auto_install, on_progress=on_progress)
     subfinder = set(_subfinder_subdomains(domain))
+    amass = set(_amass_subdomains(domain))
     crt = set(_crt_sh_subdomains(domain, proxy=proxy))
-    if crt:
-        _emit(on_progress, "subdomains", f"crt.sh returned {len(crt)} candidate names")
     brute_force = {f"{sub}.{domain}" for sub in COMMON_SUBDOMAINS}
+    _emit(on_progress, "subdomains",
+          f"Candidates — subfinder {len(subfinder)}, amass {len(amass)}, "
+          f"crt.sh {len(crt)}, dns-brute {len(brute_force)}")
 
     # Build the candidate list in source-priority order — bare domain, then
-    # passive discovery (subfinder, crt.sh), then guessed names last — so a
-    # small cap never drops a real hit in favour of a brute-force guess that
-    # merely sorts earlier alphabetically.
+    # passive discovery (subfinder, amass, crt.sh), then guessed names last —
+    # so a small cap never drops a real hit in favour of a brute-force guess
+    # that merely sorts earlier alphabetically. Attribute each host to the
+    # first (highest-priority) source that surfaced it.
+    source_of: Dict[str, str] = {domain: "apex"}
     ordered: List[str] = [domain]
     seen = {domain}
-    for bucket in (sorted(subfinder), sorted(crt), sorted(brute_force)):
-        for host in bucket:
+    for label, bucket in (("subfinder", subfinder), ("amass", amass),
+                          ("crt.sh", crt), ("dns-brute", brute_force)):
+        for host in sorted(bucket):
             if host not in seen:
                 seen.add(host)
+                source_of[host] = label
                 ordered.append(host)
 
     # Keep only names that actually resolve, capped at max_subdomains.
     resolved: List[str] = []
+    kept_counts: Dict[str, int] = {}
     for host in ordered:
         if len(resolved) >= max_subdomains:
             break
         if _resolves(host):
             resolved.append(host)
+            src = source_of.get(host, "dns-brute")
+            kept_counts[src] = kept_counts.get(src, 0) + 1
 
     if not resolved:
         resolved = [domain]
+        kept_counts = {"apex": 1}
+
+    if sources_out is not None:
+        sources_out.update({
+            "candidates": {
+                "subfinder": len(subfinder), "amass": len(amass),
+                "crt.sh": len(crt), "dns-brute": len(brute_force),
+            },
+            "kept": kept_counts,
+            "by_host": {h: source_of.get(h, "dns-brute") for h in resolved},
+        })
+
+    kept_summary = ", ".join(f"{k} {v}" for k, v in sorted(kept_counts.items()))
     _emit(on_progress, "subdomains",
-          f"Discovered {len(resolved)} live host(s)", len(resolved), len(resolved))
+          f"Discovered {len(resolved)} live host(s) [{kept_summary}]",
+          len(resolved), len(resolved))
     return resolved
 
 
@@ -419,6 +539,7 @@ def scan_site(
     launch_profile: str = "launch-gate",
     offline: bool = False,
     proxy: Optional[str] = None,
+    auto_install: bool = True,
     on_progress: ProgressFn = None,
 ) -> ScanReport:
     """Full Site Scan: discover subdomains, crawl pages, scan each for secrets.
@@ -435,9 +556,11 @@ def scan_site(
 
     _emit(on_progress, "start", f"Starting full site scan for {domain}")
 
+    discovery_sources: Dict[str, Any] = {}
     subdomains = discover_subdomains(
         domain, max_subdomains=max_subdomains, offline=offline,
-        proxy=proxy, on_progress=on_progress,
+        proxy=proxy, auto_install=auto_install,
+        sources_out=discovery_sources, on_progress=on_progress,
     )
     if not subdomains:
         subdomains = [domain]
@@ -524,5 +647,6 @@ def scan_site(
         "scanned_urls": urls,
         "provenance": provenance,
         "subdomain_takeovers": takeover_count,
+        "discovery_sources": discovery_sources,
     })
     return report

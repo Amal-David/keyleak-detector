@@ -1421,8 +1421,9 @@ async def _run_full_site_scan(url, parsed_url, scan_id):
             domain,
             depth=3,
             max_pages=100,
-            max_subdomains=25,
+            max_subdomains=50,
             baas_validate=True,
+            auto_install=False,  # never install binaries from the web request path
             on_progress=_progress,
         )
 
