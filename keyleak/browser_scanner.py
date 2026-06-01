@@ -175,6 +175,50 @@ _INIT_SCRIPT_TEMPLATE = r"""
     return window.__keyleak_findings;
   };
 
+  // Frontend dependency hygiene — report the versions of well-known libraries
+  // the page actually loaded, so Python can flag known-vulnerable releases.
+  // Reads runtime version globals first, then falls back to parsing the version
+  // out of <script src> filenames for libraries not exposed as globals.
+  window.__keyleak_library_scan = function () {
+    var libs = [];
+    try {
+      if (window.jQuery && window.jQuery.fn && window.jQuery.fn.jquery) {
+        libs.push({name: 'jquery', version: window.jQuery.fn.jquery, source: 'global'});
+      } else if (window.$ && window.$.fn && window.$.fn.jquery) {
+        libs.push({name: 'jquery', version: window.$.fn.jquery, source: 'global'});
+      }
+      if (window.bootstrap && (window.bootstrap.Tooltip || window.bootstrap.Alert)) {
+        libs.push({name: 'bootstrap', version: (window.bootstrap.Tooltip || window.bootstrap.Alert).VERSION, source: 'global'});
+      } else if (window.jQuery && window.jQuery.fn && window.jQuery.fn.tooltip && window.jQuery.fn.tooltip.Constructor) {
+        // Bootstrap 4 registers as a jQuery plugin exposing Constructor.VERSION.
+        libs.push({name: 'bootstrap', version: window.jQuery.fn.tooltip.Constructor.VERSION, source: 'global'});
+      }
+      if (window.React && window.React.version) {
+        libs.push({name: 'react', version: window.React.version, source: 'global'});
+      }
+      if (window.Vue && window.Vue.version) {
+        libs.push({name: 'vue', version: window.Vue.version, source: 'global'});
+      }
+      if (window.angular && typeof window.angular.version === 'object' && window.angular.version.full) {
+        libs.push({name: 'angular', version: window.angular.version.full, source: 'global'});
+      }
+      var SRC_RE = [
+        ['jquery', /jquery[-.]?(\d+\.\d+\.\d+)/i],
+        ['bootstrap', /bootstrap[-.]?(\d+\.\d+\.\d+)/i],
+        ['angular', /angular[-.]?(\d+\.\d+\.\d+)/i]
+      ];
+      var srcs = document.querySelectorAll('script[src]');
+      for (var i = 0; i < srcs.length; i++) {
+        var src = srcs[i].src || '';
+        for (var j = 0; j < SRC_RE.length; j++) {
+          var m = SRC_RE[j][1].exec(src);
+          if (m) libs.push({name: SRC_RE[j][0], version: m[1], source: 'script-url', url: src});
+        }
+      }
+    } catch (_err) { /* swallow — best-effort enumeration */ }
+    return libs;
+  };
+
   // Wave 4.1 — BaaS config extraction.
   // Fetches all JS bundles loaded by the page and extracts Supabase/Firebase
   // configuration: project URL, anon key, table names, RPC functions, and
@@ -362,6 +406,15 @@ def run_browser_scan(
         except Exception:
             pass
 
+        # Enumerate loaded frontend libraries + versions for CVE matching.
+        libraries = []
+        try:
+            libraries = page.evaluate(
+                "() => window.__keyleak_library_scan ? window.__keyleak_library_scan() : []"
+            )
+        except Exception:
+            pass
+
         browser.close()
 
     # Merge extra --baas-tables into extraction
@@ -376,6 +429,9 @@ def run_browser_scan(
     findings = [_to_finding(entry, url) for entry in raw or []]
     baas_findings = _run_baas_validation(raw, baas_extraction, baas_validate, baas_prober, proxy)
     findings.extend(baas_findings)
+
+    from .js_library_cves import _library_cve_findings
+    findings.extend(_library_cve_findings(libraries or [], url))
 
     return build_report(
         url,

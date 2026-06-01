@@ -342,6 +342,20 @@ DETECTORS = [
         attack_scenario="The embedded credentials grant whatever role the DB user has — typically full read of every row. Attackers pull customer PII, payment records, and password hashes for credential stuffing elsewhere; if the DB is internet-reachable it's game over.",
     ),
     Detector(
+        "dotnet_sql_connection_string",
+        r"(?:(?:Server|Data Source)\s*=\s*[^;'\"]+;[\s\S]{0,200}?(?:Password|Pwd)\s*=\s*[^;'\"\s]{3,}|jdbc:(?:sqlserver|postgresql|mysql|oracle:thin)://[^\s'\"]+[?;&](?:password|pwd)\s*=\s*[^\s'\"&;]{3,})",
+        "critical",
+        "ADO.NET / ODBC / JDBC database connection string with an embedded password.",
+        "Rotate the database password, move connection strings to a server-side secret store, and never ship them in client bundles, config files, or logs.",
+        ["env", "ci", "docker", "config", "code", "sourcemaps", "logs"],
+        validation_status="validated",
+        references=(
+            "https://cwe.mitre.org/data/definitions/798.html",
+            "https://cheatsheetseries.owasp.org/cheatsheets/Secrets_Management_Cheat_Sheet.html",
+        ),
+        attack_scenario="A connection string with a high-privilege account (e.g. the SQL Server `sa` login) hands an attacker direct read/write to every database on that instance. On shared/multi-tenant hosting, one exposed string compromises every co-located tenant's data at once.",
+    ),
+    Detector(
         "private_key",
         r"-----BEGIN (?:(?:RSA|DSA|EC|OPENSSH) )?PRIVATE KEY-----[\s\S]+?-----END (?:(?:RSA|DSA|EC|OPENSSH) )?PRIVATE KEY-----",
         "critical",
@@ -977,7 +991,7 @@ DETECTORS = [
         "validated",
         ("https://owasp.org/Top10/A07_2021-Identification_and_Authentication_Failures/",),
         True,
-        attack_scenario="The server sends the OTP value in the API response. An attacker reads it from the network tab and enters it — bypassing two-factor authentication entirely. This was exploited in the CBSE exam portal breach (2026).",
+        attack_scenario="The server sends the OTP value in the API response. An attacker reads it from the network tab and enters it — bypassing two-factor authentication entirely. This is a recurring cause of real-world authentication breaches.",
     ),
     Detector(
         "hardcoded_credential_in_bundle",

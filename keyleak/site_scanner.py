@@ -20,15 +20,25 @@ import subprocess
 import sys
 from collections import deque
 from typing import Any, Callable, Dict, List, Optional, Set, Tuple
-from urllib.parse import urlparse
+from urllib.parse import parse_qs, urlparse, urlsplit
 
 import requests
 import tldextract
 
 from .browser_scanner import run_browser_scan
-from .models import Finding, ScanReport
+from .models import Evidence, Finding, ScanReport, confidence_for_severity
 from .proxy import playwright_proxy, requests_proxies
 from .reporting import build_report
+
+
+# Query parameter names that commonly feed OS command / code execution sinks.
+DANGEROUS_PARAMS = {
+    "cmd", "command", "exec", "execute", "shell", "system", "run",
+    "code", "func", "function", "ping",
+}
+# Server-executed endpoints (vs. static assets); a dangerous param here is worse.
+_SERVER_EXEC_EXT = (".aspx", ".asp", ".jsp", ".php", ".cgi", ".do", ".action")
+_EXEC_FAMILY = {"cmd", "command", "exec", "execute", "shell", "system", "run"}
 
 
 COMMON_SUBDOMAINS = [
@@ -340,12 +350,16 @@ def crawl_pages(
     max_pages: int = MAX_PAGES_DEFAULT,
     headless: bool = True,
     proxy: Optional[str] = None,
+    collect_raw: Optional[Set[str]] = None,
     on_progress: ProgressFn = None,
 ) -> List[str]:
     """Breadth-first crawl across ``hosts`` up to ``depth`` link levels.
 
     Same-registrable-domain scope, normalized dedup, global ``max_pages`` cap.
-    Falls back to host roots only when Playwright is unavailable.
+    Falls back to host roots only when Playwright is unavailable. When
+    ``collect_raw`` is given, in-scope hrefs that carry a query string are added
+    to it verbatim (before normalization strips the query) so callers can scan
+    them for dangerous parameters.
     """
     seen: Set[str] = set()
     roots = []
@@ -392,6 +406,14 @@ def crawl_pages(
                         except Exception:
                             pass
                 registrable = registrable_domain(urlparse(url).netloc)
+                if collect_raw is not None:
+                    for link in links:
+                        if "?" not in link:
+                            continue
+                        lp = urlparse(link)
+                        if lp.scheme in ("http", "https") and lp.netloc \
+                                and registrable_domain(lp.netloc) == registrable:
+                            collect_raw.add(link)
                 remaining = max_pages - (len(results) + len(queue))
                 for nu in _filter_links(links, registrable, seen, remaining):
                     queue.append((nu, level + 1))
@@ -438,6 +460,71 @@ def _deduplicate_findings(findings: List[Finding]) -> List[Finding]:
     return merged
 
 
+def _dangerous_param_findings(urls: Set[str]) -> List[Finding]:
+    """Flag crawled URLs whose query string carries a command-injection-shaped
+    parameter (``?cmd=``, ``?exec=``, …). Deduplicated by (host, path, params).
+
+    These are leads: the parameter name is suggestive, not proof of a sink.
+    Query *values* are never echoed (they may themselves be attacker payloads).
+    """
+    findings: List[Finding] = []
+    seen: Set[Tuple[str, str, Tuple[str, ...]]] = set()
+    for url in urls or set():
+        try:
+            parts = urlsplit(url)
+        except ValueError:
+            continue
+        if not parts.query:
+            continue
+        params = parse_qs(parts.query, keep_blank_values=True)
+        hits = tuple(sorted(p for p in params if p.lower() in DANGEROUS_PARAMS))
+        if not hits:
+            continue
+        path = parts.path or "/"
+        key = (parts.netloc, path, hits)
+        if key in seen:
+            continue
+        seen.add(key)
+
+        server_exec = path.lower().endswith(_SERVER_EXEC_EXT)
+        exec_family = any(h.lower() in _EXEC_FAMILY for h in hits)
+        severity = "high" if (server_exec and exec_family) else "medium"
+        loc = f"{parts.scheme}://{parts.netloc}{path}"
+        names = ", ".join(hits)
+        findings.append(
+            Finding(
+                type="dangerous_url_parameter",
+                severity=severity,
+                confidence=confidence_for_severity(severity),
+                detector_id="appsec.dangerous_url_param",
+                source=loc,
+                evidence=Evidence(
+                    source=loc,
+                    snippet=f"{path}?{names}=…",
+                    redacted_value=names,
+                    request_url=loc,
+                ),
+                risk_reason=(
+                    f"A crawled link exposes the query parameter(s) {names} on "
+                    f"{'a server-executed endpoint ' if server_exec else ''}{path} — "
+                    "a common command-injection / RCE vector."
+                ),
+                remediation=(
+                    "Treat this parameter as untrusted input: never pass it to a shell, "
+                    "OS command, or eval; validate against a strict allowlist and re-test "
+                    "the endpoint."
+                ),
+                validation_status="lead",
+                category="appsec",
+                references=[
+                    "https://cwe.mitre.org/data/definitions/78.html",
+                    "https://owasp.org/www-community/attacks/Command_Injection",
+                ],
+            )
+        )
+    return findings
+
+
 def scan_site(
     domain: str,
     *,
@@ -478,12 +565,33 @@ def scan_site(
     if not subdomains:
         subdomains = [domain]
 
+    # Subdomain-takeover check runs in parallel with the crawl/scan below. It
+    # only uses ``requests`` (no Playwright), so a single worker thread safely
+    # overlaps the main-thread browser work and adds almost no wall-clock time.
+    takeover_pool = None
+    takeover_future = None
+    if not offline:
+        from concurrent.futures import ThreadPoolExecutor
+
+        from .subdomain_takeover import check_subdomain_takeovers
+
+        _emit(on_progress, "takeover",
+              f"Checking {len(subdomains)} subdomain(s) for takeover in parallel")
+        takeover_pool = ThreadPoolExecutor(max_workers=1)
+        takeover_future = takeover_pool.submit(
+            check_subdomain_takeovers, subdomains, proxy=proxy
+        )
+
+    raw_query_urls: Set[str] = set()
     urls = crawl_pages(
         subdomains, depth=depth, max_pages=max_pages,
-        headless=headless, proxy=proxy, on_progress=on_progress,
+        headless=headless, proxy=proxy, collect_raw=raw_query_urls,
+        on_progress=on_progress,
     )
 
     pairs: List[Tuple[Finding, str]] = []
+    for finding in _dangerous_param_findings(raw_query_urls):
+        pairs.append((finding, finding.evidence.request_url))
     total = len(urls)
     for i, url in enumerate(urls):
         _emit(on_progress, "scan", f"Scanning [{i + 1}/{total}] {url}", i + 1, total)
@@ -503,6 +611,23 @@ def scan_site(
             print(f"[keyleak]   Error scanning {url}: {exc}", file=sys.stderr)
             continue
 
+    # Join the parallel subdomain-takeover check and fold its findings in.
+    takeover_count = 0
+    if takeover_future is not None:
+        try:
+            takeover_findings = takeover_future.result()
+        except Exception:
+            takeover_findings = []
+        finally:
+            takeover_pool.shutdown(wait=False)
+        for f in takeover_findings:
+            pairs.append((f, f.source))
+        takeover_count = len(takeover_findings)
+        if takeover_count:
+            _emit(on_progress, "takeover",
+                  f"Subdomain-takeover check flagged {takeover_count} host(s)",
+                  takeover_count, takeover_count)
+
     findings, provenance = _merge_findings(pairs)
     _emit(on_progress, "done",
           f"Full site scan complete: {len(findings)} unique finding(s) from {total} page(s)",
@@ -521,6 +646,7 @@ def scan_site(
         "pages_scanned": total,
         "scanned_urls": urls,
         "provenance": provenance,
+        "subdomain_takeovers": takeover_count,
         "discovery_sources": discovery_sources,
     })
     return report
