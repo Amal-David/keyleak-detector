@@ -213,7 +213,7 @@ def _filter_links(
 def crawl_pages(
     hosts: List[str],
     *,
-    depth: int = 1,
+    depth: int = 3,
     max_pages: int = MAX_PAGES_DEFAULT,
     headless: bool = True,
     on_progress: ProgressFn = None,
@@ -317,7 +317,7 @@ def _deduplicate_findings(findings: List[Finding]) -> List[Finding]:
 def scan_site(
     domain: str,
     *,
-    depth: int = 1,
+    depth: int = 3,
     max_pages: int = MAX_PAGES_DEFAULT,
     max_subdomains: int = MAX_SUBDOMAINS_DEFAULT,
     headless: bool = True,
@@ -334,10 +334,12 @@ def scan_site(
     Returns an aggregated ScanReport whose ``extra`` carries the scanned
     subdomains, page count, and a ``provenance`` map (finding id -> URLs).
     """
-    parsed = urlparse(domain)
-    if parsed.netloc:
-        domain = parsed.netloc
-    domain = domain.strip().lower().split(":")[0]
+    # Normalize to the registrable domain (eTLD+1), tolerating full URLs,
+    # credentials, ports, and IPv6 literals (parsed.hostname drops user/port).
+    raw = domain.strip()
+    parsed = urlparse(raw if "://" in raw else f"//{raw}")
+    host = (parsed.hostname or raw).strip().lower()
+    domain = registrable_domain(host)
 
     _emit(on_progress, "start", f"Starting full site scan for {domain}")
 

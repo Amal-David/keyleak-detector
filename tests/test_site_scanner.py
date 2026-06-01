@@ -150,6 +150,23 @@ class ScanSiteTests(unittest.TestCase):
         self.assertEqual(report.findings, [])
         self.assertEqual(report.extra["pages_scanned"], 1)
 
+    def test_normalizes_url_to_registrable_domain(self):
+        captured = {}
+
+        def fake_discover(domain, **kwargs):
+            captured["domain"] = domain
+            return [domain]
+
+        with mock.patch.object(ss, "discover_subdomains", fake_discover), \
+             mock.patch.object(ss, "crawl_pages", lambda hosts, **k: []), \
+             mock.patch.object(ss, "run_browser_scan",
+                               lambda url, **k: ScanReport(target=url, scan_mode="browser", findings=[])):
+            report = ss.scan_site("https://user:pass@app.example.com:8443/dashboard")
+
+        # Credentials/port stripped, reduced to the registrable domain (eTLD+1).
+        self.assertEqual(captured["domain"], "example.com")
+        self.assertEqual(report.target, "example.com")
+
 
 if __name__ == "__main__":
     unittest.main()
