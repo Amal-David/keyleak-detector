@@ -583,50 +583,57 @@ def scan_site(
         )
 
     raw_query_urls: Set[str] = set()
-    urls = crawl_pages(
-        subdomains, depth=depth, max_pages=max_pages,
-        headless=headless, proxy=proxy, collect_raw=raw_query_urls,
-        on_progress=on_progress,
-    )
-
     pairs: List[Tuple[Finding, str]] = []
-    for finding in _dangerous_param_findings(raw_query_urls):
-        pairs.append((finding, finding.evidence.request_url))
-    total = len(urls)
-    for i, url in enumerate(urls):
-        _emit(on_progress, "scan", f"Scanning [{i + 1}/{total}] {url}", i + 1, total)
-        try:
-            report = run_browser_scan(
-                url,
-                headless=headless,
-                baas_validate=baas_validate,
-                baas_prober=baas_prober,
-                baas_tables=baas_tables,
-                scan_budget_seconds=scan_budget_seconds,
-                proxy=proxy,
-            )
-            for f in report.findings:
-                pairs.append((f, url))
-        except Exception as exc:
-            print(f"[keyleak]   Error scanning {url}: {exc}", file=sys.stderr)
-            continue
-
-    # Join the parallel subdomain-takeover check and fold its findings in.
     takeover_count = 0
-    if takeover_future is not None:
-        try:
-            takeover_findings = takeover_future.result()
-        except Exception:
-            takeover_findings = []
-        finally:
+    total = 0
+    urls: List[str] = []
+    # Everything from the crawl through the takeover join runs inside a
+    # try/finally so the background takeover pool is always shut down — even if
+    # crawl_pages or the per-host scan raises.
+    try:
+        urls = crawl_pages(
+            subdomains, depth=depth, max_pages=max_pages,
+            headless=headless, proxy=proxy, collect_raw=raw_query_urls,
+            on_progress=on_progress,
+        )
+
+        for finding in _dangerous_param_findings(raw_query_urls):
+            pairs.append((finding, finding.evidence.request_url))
+        total = len(urls)
+        for i, url in enumerate(urls):
+            _emit(on_progress, "scan", f"Scanning [{i + 1}/{total}] {url}", i + 1, total)
+            try:
+                report = run_browser_scan(
+                    url,
+                    headless=headless,
+                    baas_validate=baas_validate,
+                    baas_prober=baas_prober,
+                    baas_tables=baas_tables,
+                    scan_budget_seconds=scan_budget_seconds,
+                    proxy=proxy,
+                )
+                for f in report.findings:
+                    pairs.append((f, url))
+            except Exception as exc:
+                print(f"[keyleak]   Error scanning {url}: {exc}", file=sys.stderr)
+                continue
+
+        # Join the parallel subdomain-takeover check and fold its findings in.
+        if takeover_future is not None:
+            try:
+                takeover_findings = takeover_future.result()
+            except Exception:
+                takeover_findings = []
+            for f in takeover_findings:
+                pairs.append((f, f.source))
+            takeover_count = len(takeover_findings)
+            if takeover_count:
+                _emit(on_progress, "takeover",
+                      f"Subdomain-takeover check flagged {takeover_count} host(s)",
+                      takeover_count, takeover_count)
+    finally:
+        if takeover_pool is not None:
             takeover_pool.shutdown(wait=False)
-        for f in takeover_findings:
-            pairs.append((f, f.source))
-        takeover_count = len(takeover_findings)
-        if takeover_count:
-            _emit(on_progress, "takeover",
-                  f"Subdomain-takeover check flagged {takeover_count} host(s)",
-                  takeover_count, takeover_count)
 
     findings, provenance = _merge_findings(pairs)
     _emit(on_progress, "done",

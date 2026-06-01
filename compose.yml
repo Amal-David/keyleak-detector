@@ -9,6 +9,9 @@ services:
     environment:
       - PORT=5002
       - PYTHONUNBUFFERED=1
+      # Container listens on all interfaces (reachable via the port mapping);
+      # the host default is loopback-only.
+      - KEYLEAK_HOST=0.0.0.0
     volumes:
       # Mount logs directory (optional - for persistent logs)
       - ./logs:/app/logs

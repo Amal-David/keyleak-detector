@@ -12,6 +12,8 @@ import logging
 import asyncio
 import tempfile
 from urllib.parse import urlparse, parse_qs
+
+from keyleak.net_guard import scan_target_block_reason as _scan_target_is_blocked
 from datetime import datetime
 from functools import wraps
 from typing import Dict, List, Optional, Tuple, Union, Any
@@ -1416,13 +1418,18 @@ async def _run_full_site_scan(url, parsed_url, scan_id):
     def _progress(ev):
         _emit_progress(scan_id, ev.get("message") if isinstance(ev, dict) else str(ev))
 
+    # Active BaaS validation sends live probes to third-party infra, so it is
+    # opt-in (default off) on the web path. Read it here, in the request
+    # context, before handing off to the executor thread.
+    baas_validate = bool((request.json or {}).get('baas_validate', False))
+
     def _run():
         return scan_site(
             domain,
             depth=3,
             max_pages=100,
             max_subdomains=50,
-            baas_validate=True,
+            baas_validate=baas_validate,
             auto_install=False,  # never install binaries from the web request path
             on_progress=_progress,
         )
@@ -1506,6 +1513,12 @@ async def scan():
             return jsonify({'error': 'Invalid URL format'}), 400
     except Exception as e:
         return jsonify({'error': f'Invalid URL: {str(e)}'}), 400
+
+    # SSRF guard: never let a scan request reach internal/metadata addresses.
+    block_reason = _scan_target_is_blocked(parsed_url.hostname)
+    if block_reason:
+        logger.warning("Blocked scan target %s: %s", parsed_url.hostname, block_reason)
+        return jsonify({'error': block_reason}), 400
 
     # Set up SSE progress queue after validation (reuse if SSE endpoint pre-created it)
     if scan_id and scan_id not in _scan_queues:
@@ -1856,6 +1869,12 @@ def install_browser_deps():
 if __name__ == '__main__':
     # Install browser dependencies if needed
     install_browser_deps()
-    
-    # Start the Flask app on port 5002 (5000 is often used by AirPlay on macOS)
-    app.run(host='0.0.0.0', port=5002, debug=True)
+
+    # Bind to loopback by default — the scanner holds discovered secrets and auth
+    # tokens, so it must not be world-reachable unless the operator opts in.
+    # Containers set KEYLEAK_HOST=0.0.0.0 explicitly. Debug is always off unless
+    # KEYLEAK_DEBUG is set (never ship the Werkzeug debugger to a bound port).
+    host = os.environ.get('KEYLEAK_HOST', '127.0.0.1')
+    port = int(os.environ.get('KEYLEAK_PORT', os.environ.get('PORT', '5002')))
+    debug = os.environ.get('KEYLEAK_DEBUG', '').strip().lower() in {'1', 'true', 'yes', 'on'}
+    app.run(host=host, port=port, debug=debug)
