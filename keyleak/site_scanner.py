@@ -318,11 +318,13 @@ def _filter_links(
     registrable: str,
     seen: Set[str],
     remaining: int,
+    target_guard: Optional[Callable[[str], Optional[str]]] = None,
 ) -> List[str]:
     """Pure helper: keep in-scope, http(s), de-duplicated links.
 
     Updates ``seen`` in place with normalized URLs. Returns up to
-    ``remaining`` newly discovered normalized URLs, in order.
+    ``remaining`` newly discovered normalized URLs, in order. Links blocked by
+    ``target_guard`` are skipped here so they never consume the crawl budget.
     """
     out: List[str] = []
     if remaining <= 0:
@@ -334,6 +336,8 @@ def _filter_links(
         if p.scheme not in ("http", "https") or not p.netloc:
             continue
         if registrable_domain(p.netloc) != registrable:
+            continue
+        if target_guard is not None and target_guard(p.hostname) is not None:
             continue
         normalized = _normalize_url(link)
         if normalized in seen:
@@ -385,9 +389,6 @@ def crawl_pages(
         try:
             while queue and len(results) < max_pages:
                 url, level = queue.popleft()
-                # SSRF guard: a discovered link may resolve to an internal host.
-                if target_guard is not None and target_guard(urlparse(url).hostname) is not None:
-                    continue
                 results.append(url)
                 if level >= depth:
                     continue
@@ -418,10 +419,11 @@ def crawl_pages(
                             continue
                         lp = urlparse(link)
                         if lp.scheme in ("http", "https") and lp.netloc \
-                                and registrable_domain(lp.netloc) == registrable:
+                                and registrable_domain(lp.netloc) == registrable \
+                                and not (target_guard is not None and target_guard(lp.hostname) is not None):
                             collect_raw.add(link)
                 remaining = max_pages - (len(results) + len(queue))
-                for nu in _filter_links(links, registrable, seen, remaining):
+                for nu in _filter_links(links, registrable, seen, remaining, target_guard):
                     queue.append((nu, level + 1))
         finally:
             browser.close()
@@ -587,7 +589,14 @@ def scan_site(
                 safe_hosts.append(host)
             else:
                 _emit(on_progress, "subdomains", f"Skipping {host}: {reason}")
-        subdomains = safe_hosts or [domain]
+        # Only fall back to the apex if it isn't itself blocked — never re-add a
+        # host target_guard just rejected (it would still be probed for takeover).
+        if safe_hosts:
+            subdomains = safe_hosts
+        elif target_guard(domain) is None:
+            subdomains = [domain]
+        else:
+            subdomains = []
 
     # Subdomain-takeover check runs in parallel with the crawl/scan below. It
     # only uses ``requests`` (no Playwright), so a single worker thread safely
