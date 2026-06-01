@@ -1408,7 +1408,9 @@ async def _run_full_site_scan(url, parsed_url, scan_id):
     """
     from keyleak.site_scanner import scan_site
 
-    domain = parsed_url.netloc.split(':')[0]
+    domain = parsed_url.hostname
+    if not domain:
+        return jsonify({'error': 'Invalid URL host'}), 400
     _emit_progress(scan_id, f"Full Site Scan: discovering subdomains for {domain}...")
 
     def _progress(ev):
@@ -1427,9 +1429,9 @@ async def _run_full_site_scan(url, parsed_url, scan_id):
     try:
         loop = asyncio.get_event_loop()
         report = await loop.run_in_executor(None, _run)
-    except Exception as e:
-        logger.warning(f"Full site scan failed: {e}")
-        err = {'error': f'Full site scan failed: {str(e)}'}
+    except Exception:
+        logger.exception("Full site scan failed")
+        err = {'error': 'Full site scan failed. Check server logs for details.'}
         if scan_id and scan_id in _scan_queues:
             _scan_queues[scan_id].put({'type': 'result', 'data': err})
         return jsonify(err), 500

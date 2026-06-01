@@ -69,7 +69,8 @@ def registrable_domain(host: str) -> str:
 
 def _resolves(host: str) -> bool:
     try:
-        socket.getaddrinfo(host, None, socket.AF_INET, socket.SOCK_STREAM)
+        # AF_UNSPEC so IPv6-only hosts are also treated as live.
+        socket.getaddrinfo(host, None, socket.AF_UNSPEC, socket.SOCK_STREAM)
         return True
     except (socket.gaierror, OSError):
         return False
@@ -139,21 +140,26 @@ def discover_subdomains(
         _emit(on_progress, "subdomains", "Offline mode — skipping subdomain discovery", 1, 1)
         return [domain]
 
-    candidates: Set[str] = {domain}
-    candidates.update(_subfinder_subdomains(domain))
-
-    crt = _crt_sh_subdomains(domain)
+    subfinder = set(_subfinder_subdomains(domain))
+    crt = set(_crt_sh_subdomains(domain))
     if crt:
-        candidates.update(crt)
         _emit(on_progress, "subdomains", f"crt.sh returned {len(crt)} candidate names")
+    brute_force = {f"{sub}.{domain}" for sub in COMMON_SUBDOMAINS}
 
-    for sub in COMMON_SUBDOMAINS:
-        candidates.add(f"{sub}.{domain}")
+    # Build the candidate list in source-priority order — bare domain, then
+    # passive discovery (subfinder, crt.sh), then guessed names last — so a
+    # small cap never drops a real hit in favour of a brute-force guess that
+    # merely sorts earlier alphabetically.
+    ordered: List[str] = [domain]
+    seen = {domain}
+    for bucket in (sorted(subfinder), sorted(crt), sorted(brute_force)):
+        for host in bucket:
+            if host not in seen:
+                seen.add(host)
+                ordered.append(host)
 
-    # Keep only names that actually resolve, capped.
+    # Keep only names that actually resolve, capped at max_subdomains.
     resolved: List[str] = []
-    # Always try the bare domain first so it leads the list.
-    ordered = [domain] + sorted(c for c in candidates if c != domain)
     for host in ordered:
         if len(resolved) >= max_subdomains:
             break
@@ -241,6 +247,7 @@ def crawl_pages(
                 results.append(url)
                 if level >= depth:
                     continue
+                context = None
                 try:
                     context = browser.new_context(viewport={"width": 1280, "height": 1024})
                     page = context.new_page()
@@ -250,9 +257,16 @@ def crawl_pages(
                         "() => Array.from(document.querySelectorAll('a[href]'))"
                         ".map(a => a.href).filter(h => h.startsWith('http'))"
                     )
-                    context.close()
                 except Exception:
                     continue
+                finally:
+                    # Always release the context, even when goto/evaluate raised,
+                    # so failed hosts don't leak browser contexts during a crawl.
+                    if context is not None:
+                        try:
+                            context.close()
+                        except Exception:
+                            pass
                 registrable = registrable_domain(urlparse(url).netloc)
                 remaining = max_pages - (len(results) + len(queue))
                 for nu in _filter_links(links, registrable, seen, remaining):
