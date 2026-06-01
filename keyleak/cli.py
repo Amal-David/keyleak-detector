@@ -406,7 +406,7 @@ def build_parser() -> argparse.ArgumentParser:
     site_scan.add_argument("--depth", default="3", help="Link crawl depth per host (default: 3).")
     site_scan.add_argument("--max-pages", default="100", help="Maximum pages to scan (default: 100).")
     site_scan.add_argument("--max-subdomains", default="50", help="Maximum subdomains to scan (default: 50).")
-    site_scan.add_argument("--no-auto-install", action="store_true", help="Don't auto-install subfinder for deeper discovery; use crt.sh + DNS only (also via KEYLEAK_NO_AUTO_INSTALL=1).")
+    site_scan.add_argument("--no-auto-install", action="store_true", help="Don't auto-install subfinder; still use amass if already on PATH, otherwise fall back to crt.sh + DNS (also via KEYLEAK_NO_AUTO_INSTALL=1).")
     site_scan.add_argument("--launch-profile", default="launch-gate", choices=["launch-gate", "local-dev", "bug-bounty", "ci", "full"])
     site_scan.add_argument("--scan-budget", default="30", help="Per-page timeout in seconds.")
     site_scan.add_argument("--headed", action="store_true", help="Show browser windows.")

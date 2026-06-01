@@ -169,7 +169,9 @@ def _ensure_subfinder(*, auto_install: bool, on_progress: ProgressFn = None) -> 
     """
     if shutil.which("subfinder"):
         return True
-    if not auto_install or os.environ.get("KEYLEAK_NO_AUTO_INSTALL"):
+    no_auto_install = (os.environ.get("KEYLEAK_NO_AUTO_INSTALL", "").strip().lower()
+                       in {"1", "true", "yes", "on"})
+    if not auto_install or no_auto_install:
         return False
 
     if shutil.which("brew"):
@@ -191,7 +193,8 @@ def _ensure_subfinder(*, auto_install: bool, on_progress: ProgressFn = None) -> 
                 check=True, capture_output=True, text=True, timeout=900,
             )
             gobin = _go_bin_dir()
-            if gobin and os.path.isfile(os.path.join(gobin, "subfinder")):
+            exe_name = "subfinder.exe" if os.name == "nt" else "subfinder"
+            if gobin and os.path.isfile(os.path.join(gobin, exe_name)):
                 os.environ["PATH"] = gobin + os.pathsep + os.environ.get("PATH", "")
         except (subprocess.SubprocessError, OSError) as exc:
             _emit(on_progress, "install", f"go install subfinder failed: {exc}")
@@ -228,6 +231,12 @@ def discover_subdomains(
 
     if offline:
         _emit(on_progress, "subdomains", "Offline mode — skipping subdomain discovery", 1, 1)
+        if sources_out is not None:
+            sources_out.update({
+                "candidates": {"subfinder": 0, "amass": 0, "crt.sh": 0, "dns-brute": 0},
+                "kept": {"apex": 1},
+                "by_host": {domain: "apex"},
+            })
         return [domain]
 
     _ensure_subfinder(auto_install=auto_install, on_progress=on_progress)

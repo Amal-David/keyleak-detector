@@ -87,14 +87,20 @@ class CrtShTests(unittest.TestCase):
 
 
 class DiscoverTests(unittest.TestCase):
-    def test_offline_uses_no_network(self):
+    def test_offline_uses_no_network_and_fills_sources(self):
         def fail(*a, **k):
-            raise AssertionError("network must not be touched in offline mode")
+            raise AssertionError("offline mode must not touch network or install")
         with mock.patch.object(ss, "_crt_sh_subdomains", fail), \
              mock.patch.object(ss, "_subfinder_subdomains", fail), \
+             mock.patch.object(ss, "_amass_subdomains", fail), \
+             mock.patch.object(ss, "_ensure_subfinder", fail), \
              mock.patch.object(ss, "_resolves", fail):
-            self.assertEqual(ss.discover_subdomains("example.com", offline=True),
-                             ["example.com"])
+            sources = {}
+            out = ss.discover_subdomains("example.com", offline=True, sources_out=sources)
+        self.assertEqual(out, ["example.com"])
+        # offline still returns a consistent discovery_sources structure
+        self.assertEqual(sources["by_host"], {"example.com": "apex"})
+        self.assertEqual(sources["kept"], {"apex": 1})
 
     def test_caps_and_requires_resolution(self):
         with mock.patch.object(ss, "_subfinder_subdomains", lambda d: []), \
@@ -252,6 +258,26 @@ class AutoInstallTests(unittest.TestCase):
              mock.patch.object(ss.subprocess, "run",
                                side_effect=AssertionError("env opt-out must block install")):
             self.assertFalse(ss._ensure_subfinder(auto_install=True))
+
+    def test_env_value_zero_does_not_block(self):
+        # Only explicit truthy values opt out; "0"/"false" must NOT block install.
+        calls = []
+
+        def fake_run(cmd, *a, **k):
+            calls.append(cmd)
+
+            class _R:
+                returncode, stdout, stderr = 0, "", ""
+
+            return _R()
+
+        with mock.patch.object(ss.shutil, "which",
+                               lambda n: "/opt/homebrew/bin/brew" if n == "brew" else None), \
+             mock.patch.dict(ss.os.environ, {"KEYLEAK_NO_AUTO_INSTALL": "0"}), \
+             mock.patch.object(ss.subprocess, "run", fake_run):
+            ss._ensure_subfinder(auto_install=True)
+        self.assertTrue(any("brew" in c for c in calls),
+                        "KEYLEAK_NO_AUTO_INSTALL=0 must not block auto-install")
 
     def test_discover_threads_auto_install_flag(self):
         captured = {}
