@@ -22,6 +22,59 @@ VERDICT_REVIEW = "REVIEW"
 VERDICT_BLOCK = "BLOCK_SHIP"
 
 
+# Wave 1.6 — Structured Remediation contract.
+#
+# Every finding's emitter (Markdown, SARIF, the CLI `explain` subcommand, the
+# extension popup) renders the same four-field card so developers see
+# *what leaked*, *why it matters*, *what to do*, and *how to verify*.
+# Detectors can populate ``Remediation`` explicitly; if absent, an auto-derived
+# Remediation is built from the existing ``description`` / ``attack_scenario``
+# / ``remediation`` (single-line) fields so all 43 detectors satisfy the
+# contract by default.
+
+@dataclass
+class Remediation:
+    what_leaked: str
+    why_it_matters: str
+    fix_steps: List[str]
+    verify_command: str = ""
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "what_leaked": self.what_leaked,
+            "why_it_matters": self.why_it_matters,
+            "fix_steps": list(self.fix_steps),
+            "verify_command": self.verify_command,
+        }
+
+    @classmethod
+    def from_dict(cls, payload: Dict[str, Any]) -> "Remediation":
+        return cls(
+            what_leaked=str(payload.get("what_leaked") or ""),
+            why_it_matters=str(payload.get("why_it_matters") or ""),
+            fix_steps=[str(step) for step in (payload.get("fix_steps") or [])],
+            verify_command=str(payload.get("verify_command") or ""),
+        )
+
+
+def derive_remediation(
+    description: str,
+    attack_scenario: Optional[str],
+    remediation_text: str,
+) -> Remediation:
+    """Build a structured Remediation from existing detector fields."""
+
+    fix_steps = [step.strip() for step in (remediation_text or "").split(". ") if step.strip()]
+    if not fix_steps and remediation_text:
+        fix_steps = [remediation_text.strip()]
+    return Remediation(
+        what_leaked=description.strip(),
+        why_it_matters=(attack_scenario or description).strip(),
+        fix_steps=fix_steps,
+        verify_command="",
+    )
+
+
 @dataclass
 class Evidence:
     source: str
@@ -63,9 +116,14 @@ class Finding:
     evidence: Evidence
     risk_reason: str
     remediation: str
-    validation_status: str = "not_validated"
+    validation_status: str = "lead"
+    category: str = ""
     references: List[str] = field(default_factory=list)
     id: str = ""
+    # Wave 1.6 — Structured Remediation card. Optional dict (kept dict-shaped
+    # for backward compat with from_dict consumers). Populated by ``scan_text``
+    # from the detector. Reporters render it if present.
+    remediation_v2: Optional[Dict[str, Any]] = None
 
     def __post_init__(self) -> None:
         self.severity = normalize_severity(self.severity)
@@ -80,7 +138,7 @@ class Finding:
             )
 
     def to_dict(self) -> Dict[str, Any]:
-        return {
+        payload = {
             "id": self.id,
             "type": self.type,
             "severity": self.severity,
@@ -92,9 +150,13 @@ class Finding:
             "redacted_value": self.evidence.redacted_value,
             "risk_reason": self.risk_reason,
             "remediation": self.remediation,
+            "category": self.category,
             "references": self.references,
             "validation_status": self.validation_status,
         }
+        if self.remediation_v2:
+            payload["remediation_v2"] = dict(self.remediation_v2)
+        return payload
 
     @classmethod
     def from_dict(cls, payload: Dict[str, Any]) -> "Finding":
@@ -115,9 +177,11 @@ class Finding:
             evidence=evidence,
             risk_reason=str(payload.get("risk_reason") or ""),
             remediation=str(payload.get("remediation") or ""),
-            validation_status=str(payload.get("validation_status") or "not_validated"),
+            validation_status=str(payload.get("validation_status") or "lead"),
+            category=str(payload.get("category") or payload.get("pack") or ""),
             references=list(payload.get("references") or []),
             id=str(payload.get("id") or ""),
+            remediation_v2=payload.get("remediation_v2"),
         )
 
 
@@ -222,6 +286,12 @@ def finding_from_legacy(raw: Dict[str, Any], detector_prefix: str = "runtime") -
     finding_type = str(raw.get("type") or "unknown")
     severity = normalize_severity(raw.get("severity"))
     source = str(raw.get("source") or "unknown")
+    category = str(raw.get("category") or raw.get("pack") or "")
+    if not category:
+        if finding_type == "access_control_issue":
+            category = "access-control"
+        else:
+            category = "leak"
     raw_value = raw.get("value") if raw.get("value") is not None else raw.get("match", "")
     redacted_value = redact_value(raw_value)
     snippet = raw.get("context_lines") or raw.get("context") or raw.get("details") or ""
@@ -249,6 +319,7 @@ def finding_from_legacy(raw: Dict[str, Any], detector_prefix: str = "runtime") -
         evidence=evidence,
         risk_reason=str(raw.get("context") or raw.get("details") or f"{finding_type} detected in {source}"),
         remediation=str(raw.get("recommendation") or "Review this finding and remove exposed sensitive data."),
-        validation_status=str(raw.get("validation_status") or "not_validated"),
+        validation_status=str(raw.get("validation_status") or ("lead" if category != "leak" else "validated")),
+        category=category,
         references=list(raw.get("references") or []),
     )
