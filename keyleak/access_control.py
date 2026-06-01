@@ -49,6 +49,9 @@ def compare_access_control_urls(
             )
         except requests.RequestException:
             continue
+        except Exception:
+            # Injectable `fetch` may raise non-requests exceptions; skip the URL.
+            continue
 
         if not _successful(response_a) or not _successful(response_b):
             continue

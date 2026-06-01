@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 import os
 import re
 from pathlib import Path
@@ -603,7 +604,6 @@ def _shannon_entropy(value: object) -> float:
     counts: dict = {}
     for ch in text:
         counts[ch] = counts.get(ch, 0) + 1
-    import math
 
     total = len(text)
     return -sum((c / total) * math.log2(c / total) for c in counts.values())

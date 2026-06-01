@@ -55,7 +55,9 @@ def _safe_extract_zip(zf: zipfile.ZipFile, dest: Path) -> None:
     dest = dest.resolve()
     for info in zf.infolist():
         target = (dest / info.filename).resolve()
-        if not str(target).startswith(str(dest)):
+        try:
+            target.relative_to(dest)
+        except ValueError:
             raise ArchiveScanError(f"Path traversal in zip entry: {info.filename}")
     zf.extractall(dest)
 
@@ -64,7 +66,9 @@ def _safe_extract_tar(tf: tarfile.TarFile, dest: Path) -> None:
     dest = dest.resolve()
     for member in tf.getmembers():
         target = (dest / member.name).resolve()
-        if not str(target).startswith(str(dest)):
+        try:
+            target.relative_to(dest)
+        except ValueError:
             raise ArchiveScanError(f"Path traversal in tar entry: {member.name}")
     # Python 3.12+: pass filter='data' for additional safety. We resolve paths
     # ourselves above; the filter argument is a defense-in-depth.
