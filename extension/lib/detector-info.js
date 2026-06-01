@@ -792,7 +792,7 @@ export const DETECTOR_INFO = {
     "validation_status": "validated"
   },
   "otp_in_response": {
-    "attack_scenario": "The server sends the OTP value in the API response. An attacker reads it from the network tab and enters it \u2014 bypassing two-factor authentication entirely. This was exploited in the CBSE exam portal breach (2026).",
+    "attack_scenario": "The server sends the OTP value in the API response. An attacker reads it from the network tab and enters it \u2014 bypassing two-factor authentication entirely. This is a recurring cause of real-world authentication breaches.",
     "categories": [
       "sourcemaps",
       "code",
