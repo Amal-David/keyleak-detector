@@ -74,6 +74,19 @@ and I'll re-plan from it.**
 - CLI subcommands: `scan, local, site-scan, browser-scan, self-audit, explain,
   diff, feed, archive, watch, doctor, demo, disclose, allowlist-diff`.
 
+## Standing process: Adversarial Review Gate (every step)
+
+Every completed artifact (research output, design doc, code milestone) passes
+through an adversarial review gate before it's considered done:
+1. Spawn N reviewers (parallel, distinct critical lenses) that **question,
+   validate, demand proof, and find gaps** — harshly. Each returns a score
+   (0–100) + `must_fix` + `unsupported_claims` + `evidence_gaps`.
+2. If any reviewer scores < 85 or raises a must-fix, **revise** and re-review.
+3. Repeat until all reviewers ≥ 85 (or 3 rounds, then record residual risk).
+4. Log the outcome in `reviews/REVIEW-LOG.md` (round, scores, what changed).
+Proof, not assertion: code must show passing tests; designs must cite real
+`file:line` grounding and feasible probes.
+
 ## Phase plan
 
 - **P1 Research** (multi-agent, parallel) → raw catalog per slice. *(in progress)*
