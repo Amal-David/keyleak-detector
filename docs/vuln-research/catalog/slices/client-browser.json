@@ -1,0 +1,261 @@
+[
+  {
+    "id": "reflected-xss",
+    "name": "Reflected XSS",
+    "owasp_category": "A03:2021 Injection",
+    "frameworks": [
+      "agnostic"
+    ],
+    "description": "User-supplied input from query parameters, path segments, or HTTP headers is echoed back into HTML responses without encoding, enabling immediate script execution in the victim's browser. It is the most common XSS class surfaced in bug bounties because it requires no stored state.",
+    "runtime_discovery": "Inject a benign HTML marker (e.g., <kbd>keyleak-xss-probe-UNIQUEID</kbd> or <b>keyleak</b>) into every parameter of every crawled form and URL query string. If the marker appears unescaped in the response body (confirmed by parsing the DOM, not just string search), escalate to a script payload. Compare reflected value across HTML context, attribute context, and JS string context.",
+    "detection_signal": "Injected marker string appears verbatim in the DOM response with HTML tag structure intact (status 200); DOMParser confirms it as an element node rather than a text node. Any occurrence of <script>, onerror=, onload=, or javascript: derived from probe input in the response.",
+    "active_probe": true,
+    "severity": "high",
+    "prevalence": "common",
+    "slice": "client-browser",
+    "uid": "client-browser__reflected-xss",
+    "class_hint": "xss"
+  },
+  {
+    "id": "stored-xss",
+    "name": "Stored XSS",
+    "owasp_category": "A03:2021 Injection",
+    "frameworks": [
+      "agnostic"
+    ],
+    "description": "Attacker-controlled data persisted server-side (comments, profile fields, messages, ticket bodies) is rendered back to other users without HTML encoding, causing persistent script execution for every visitor who loads the affected page.",
+    "runtime_discovery": "Submit a benign but unique HTML marker through every write-capable form field (comment box, display name, address line, description). Then re-fetch the page or report view as a different authenticated user (auth-diff scan). If the marker appears unencoded in the second user's DOM, it is stored XSS. Check rendered HTML, not just raw HTTP body, to catch cases where SSR escapes but client-side frameworks re-inject.",
+    "detection_signal": "Probe string submitted by User A appears as an unescaped HTML node (not a text node) in the DOM fetched by User B. Alert or script-execution event fires in headless browser. The response page contains the exact probe token in an element or attribute position.",
+    "active_probe": true,
+    "severity": "high",
+    "prevalence": "common",
+    "slice": "client-browser",
+    "uid": "client-browser__stored-xss",
+    "class_hint": "xss"
+  },
+  {
+    "id": "dom-xss",
+    "name": "DOM-Based XSS",
+    "owasp_category": "A03:2021 Injection",
+    "frameworks": [
+      "agnostic"
+    ],
+    "description": "Client-side JavaScript reads attacker-controlled sources (location.hash, location.search, document.referrer, postMessage data, localStorage values) and writes them to dangerous sinks (innerHTML, document.write, eval, insertAdjacentHTML) without sanitization, causing script execution entirely within the browser without a round-trip to the server.",
+    "runtime_discovery": "Inject XSS payloads in the URL fragment (#) and query string, then observe the page with a headless browser for alert/console-error callbacks or DOM node insertion. Enumerate event listeners on message events and send synthetic postMessage payloads containing HTML. Observe DOM state before and after controlled input via page.evaluate.",
+    "detection_signal": "Headless browser fires an alert or throws a controlled error after injected fragment/query payload. DOM snapshot contains injected HTML as an element node after JavaScript execution. Source-map scan reveals innerHTML/outerHTML assignment from location.hash or message.data (pattern already in detectors.py xss_sink_lead).",
+    "active_probe": true,
+    "severity": "high",
+    "prevalence": "common",
+    "slice": "client-browser",
+    "uid": "client-browser__dom-xss",
+    "class_hint": "xss"
+  },
+  {
+    "id": "cors-misconfiguration",
+    "name": "CORS Misconfiguration (Credentialed Cross-Origin Read)",
+    "owasp_category": "A05:2021 Security Misconfiguration",
+    "frameworks": [
+      "agnostic"
+    ],
+    "description": "The server reflects the request Origin header into Access-Control-Allow-Origin (or uses a wildcard combined with Access-Control-Allow-Credentials: true), allowing any malicious website to read authenticated API responses cross-origin using the victim's session cookies.",
+    "runtime_discovery": "Send OPTIONS and GET requests to every discovered API endpoint with a synthetic Origin header (e.g., Origin: https://attacker.keyleak.test). Inspect response for Access-Control-Allow-Origin reflecting the probe value AND Access-Control-Allow-Credentials: true. Also probe null origin (Origin: null) which some CORS stacks allow.",
+    "detection_signal": "Response header Access-Control-Allow-Origin matches the injected probe origin exactly (not a wildcard) while Access-Control-Allow-Credentials: true is also present. Or: Access-Control-Allow-Origin: * on an endpoint that also sets a session cookie. Any reflection of the Origin: null value.",
+    "active_probe": true,
+    "severity": "high",
+    "prevalence": "common",
+    "slice": "client-browser",
+    "uid": "client-browser__cors-misconfiguration",
+    "class_hint": "cors"
+  },
+  {
+    "id": "missing-csp",
+    "name": "Missing or Weak Content Security Policy",
+    "owasp_category": "A05:2021 Security Misconfiguration",
+    "frameworks": [
+      "agnostic"
+    ],
+    "description": "Absence of a Content-Security-Policy response header (or a policy containing unsafe-inline, unsafe-eval, or wildcard source expressions) removes the browser-enforced last line of defense against XSS, making any injected script execute without restriction.",
+    "runtime_discovery": "Inspect the Content-Security-Policy and Content-Security-Policy-Report-Only response headers on every crawled page response. Parse the policy directives to detect absent script-src, presence of unsafe-inline or unsafe-eval, wildcard (*) sources in script-src or default-src, or missing upgrade-insecure-requests.",
+    "detection_signal": "Response has no CSP header at all; or script-src contains 'unsafe-inline', 'unsafe-eval', or a wildcard host (https://*); or default-src is * with no restrictive script-src override. Passive observation of response headers only \u2014 no active probe needed.",
+    "active_probe": false,
+    "severity": "medium",
+    "prevalence": "ubiquitous",
+    "slice": "client-browser",
+    "uid": "client-browser__missing-csp",
+    "class_hint": "xss"
+  },
+  {
+    "id": "prototype-pollution",
+    "name": "Client-Side Prototype Pollution",
+    "owasp_category": "A03:2021 Injection",
+    "frameworks": [
+      "agnostic"
+    ],
+    "description": "JavaScript query-string or JSON parsers (qs, jQuery deep-extend, lodash.merge) allow an attacker to inject properties into Object.prototype via crafted keys like __proto__[foo]=bar, affecting every downstream object in the page and potentially escalating to XSS through gadget chains.",
+    "runtime_discovery": "Fetch each crawled URL and append a probe query string: ?__proto__[keyleaktest]=polluted and ?constructor[prototype][keyleaktest]=polluted. After page load, execute page.evaluate(() => ({}).keyleaktest) in the headless browser context. A non-undefined return value confirms pollution. Also fuzz JSON request bodies on API endpoints with {\"__proto__\":{\"keyleaktest\":true}}.",
+    "detection_signal": "page.evaluate returns a non-undefined value for a sentinel property name seeded only via the probe parameter (e.g., ({}).keyleaktest === 'polluted'). Console errors referencing prototype or constructor mutations are also a secondary signal.",
+    "active_probe": true,
+    "severity": "high",
+    "prevalence": "occasional",
+    "slice": "client-browser",
+    "uid": "client-browser__prototype-pollution",
+    "class_hint": "xss"
+  },
+  {
+    "id": "postmessage-abuse",
+    "name": "postMessage Origin Validation Bypass",
+    "owasp_category": "A03:2021 Injection",
+    "frameworks": [
+      "agnostic"
+    ],
+    "description": "Event listeners registered for window message events fail to validate the origin of the sender (or use a regex bypass like /trusted.com/.test(event.origin)), allowing a malicious cross-origin frame or popup to send crafted data that the page acts on, leading to XSS, open redirect, or data exfiltration.",
+    "runtime_discovery": "Enumerate message event listeners by injecting a script that captures addEventListener('message', ...) registrations and logs the handler source. Send synthetic window.postMessage payloads from the scanner context with a crafted origin and data payload containing HTML/JS. Observe DOM changes, navigation events, or data exposure after message receipt.",
+    "detection_signal": "DOM mutation or navigation occurs after a synthetic postMessage from a non-matching origin. Source-map or bundle scan finds message event handler that either lacks origin check or uses string.includes/regex match (xss_sink_lead pattern triggers on message.data reaching innerHTML). Headless browser fires an alert or script executes following the probe message.",
+    "active_probe": true,
+    "severity": "high",
+    "prevalence": "occasional",
+    "slice": "client-browser",
+    "uid": "client-browser__postmessage-abuse",
+    "class_hint": "xss"
+  },
+  {
+    "id": "exposed-source-maps",
+    "name": "Exposed JavaScript Source Maps with Embedded Secrets",
+    "owasp_category": "A02:2021 Cryptographic Failures",
+    "frameworks": [
+      "agnostic"
+    ],
+    "description": "Production JS bundles include a sourceMappingURL directive pointing to publicly accessible .map files that reconstruct original source code, exposing API keys, internal endpoint URLs, business logic, and secrets that were present at build time.",
+    "runtime_discovery": "Crawl all JS bundle URLs loaded by each page. For each bundle, extract the sourceMappingURL comment. Fetch the referenced .map file (same-origin check). Parse the source map and run credential-pattern detectors against each reconstructed source file. Also probe for .map by appending .map to every bundle URL even if no directive is present.",
+    "detection_signal": "HTTP 200 response for <bundle>.js.map with a valid JSON source map body (version:3, sources array, sourcesContent). Credential detector patterns (API keys, tokens, DB URLs) match inside reconstructed sourcesContent entries. The sourceMappingURL is present in the bundle but the .map endpoint is unprotected.",
+    "active_probe": true,
+    "severity": "high",
+    "prevalence": "common",
+    "slice": "client-browser",
+    "uid": "client-browser__exposed-source-maps",
+    "class_hint": "cmd-injection"
+  },
+  {
+    "id": "clickjacking",
+    "name": "Clickjacking (Missing Frame Ancestor Protection)",
+    "owasp_category": "A05:2021 Security Misconfiguration",
+    "frameworks": [
+      "agnostic"
+    ],
+    "description": "Pages that handle sensitive actions (fund transfers, settings changes, account deletion, OAuth confirmation) can be embedded in cross-origin iframes because they lack X-Frame-Options or a restrictive frame-ancestors CSP directive, enabling UI redress attacks.",
+    "runtime_discovery": "For every page returned with HTTP 200, inspect the X-Frame-Options header (must be DENY or SAMEORIGIN) and the Content-Security-Policy header for a frame-ancestors directive. Attempt to embed the target URL in a data-URI iframe from the scanner's headless browser context and observe whether the frame loads.",
+    "detection_signal": "Response header X-Frame-Options is absent or set to ALLOWALL; CSP frame-ancestors is absent or set to *; headless browser successfully renders the target page inside a cross-origin iframe without error. Pages containing form[action] or button[type=submit] that load in the iframe are higher priority.",
+    "active_probe": true,
+    "severity": "medium",
+    "prevalence": "common",
+    "slice": "client-browser",
+    "uid": "client-browser__clickjacking",
+    "class_hint": "cors"
+  },
+  {
+    "id": "sensitive-data-in-localstorage",
+    "name": "Sensitive Credentials / Tokens in localStorage or sessionStorage",
+    "owasp_category": "A02:2021 Cryptographic Failures",
+    "frameworks": [
+      "agnostic"
+    ],
+    "description": "Authentication tokens, API keys, PII, or session identifiers are persisted in Web Storage (localStorage, sessionStorage), where they are accessible to any same-origin JavaScript, including injected scripts from XSS, making exfiltration trivial compared to HttpOnly cookies.",
+    "runtime_discovery": "After authenticating and loading each crawled page, execute page.evaluate to enumerate all localStorage and sessionStorage keys and values. Run credential-pattern detectors (JWT regex, API key patterns, email/SSN patterns) against every key-value pair. Also check IndexedDB stores and Cache Storage for the same patterns.",
+    "detection_signal": "localStorage or sessionStorage contains a value matching a known token pattern (JWT: eyJ..., Bearer token, API key prefix like sk-, AIza, AKIA). Scanner's browser_scanner.py already enumerates storage and runs detector patterns \u2014 the finding source will be localStorage:<key> or sessionStorage:<key>.",
+    "active_probe": false,
+    "severity": "medium",
+    "prevalence": "common",
+    "slice": "client-browser",
+    "uid": "client-browser__sensitive-data-in-localstorage",
+    "class_hint": "xss"
+  },
+  {
+    "id": "sensitive-data-in-dom",
+    "name": "Sensitive Data Rendered into DOM / Hidden Fields",
+    "owasp_category": "A02:2021 Cryptographic Failures",
+    "frameworks": [
+      "agnostic"
+    ],
+    "description": "Server-side templates or SPAs render secrets, internal tokens, user PII, or CSRF tokens with excessive scope into HTML hidden inputs, data-* attributes, inline JS variables, or JSON blobs embedded in script tags, exposing them to any party who can read the page DOM.",
+    "runtime_discovery": "Crawl and render each page, then scan the full document.documentElement.outerHTML (and all inline script text) against credential and PII detector patterns. Pay particular attention to <script>window.__INITIAL_STATE__=...</script>, <input type=hidden>, data-token=, and meta[name=csrf-token] attributes. Run as both unauthenticated and authenticated users to compare exposure.",
+    "detection_signal": "Credential-pattern match (API key, JWT, private key PEM, SSN, credit card number) found in the raw DOM string at a source prefixed 'document'. Finding type source_map_reference or xss_sink_lead does not cover this \u2014 it is a distinct leak:dom_secret finding class. Inline JSON blobs containing keys like apiKey, accessToken, secretKey trigger the match.",
+    "active_probe": false,
+    "severity": "high",
+    "prevalence": "common",
+    "slice": "client-browser",
+    "uid": "client-browser__sensitive-data-in-dom",
+    "class_hint": "csrf"
+  },
+  {
+    "id": "open-redirect-client-side",
+    "name": "Open Redirect via Client-Side URL Parameter",
+    "owasp_category": "A01:2021 Broken Access Control",
+    "frameworks": [
+      "agnostic"
+    ],
+    "description": "The application reads a redirect target from a query parameter (next=, redirect=, returnUrl=, goto=, url=) and passes it to location.href or location.replace without validating that the destination is same-origin, enabling phishing redirects and OAuth token theft via crafted links.",
+    "runtime_discovery": "Enumerate all URL parameters and form fields named next, redirect, return, returnUrl, url, to, goto, dest, target. Substitute the value with https://attacker.keyleak.test and observe via headless browser whether navigation to that domain occurs or a 3xx Location header points there. Also probe with relative paths like //attacker.keyleak.test to bypass naive scheme checks.",
+    "detection_signal": "Navigation event fires in the headless browser to an origin other than the target app's origin after injecting the probe URL into a recognized redirect parameter. HTTP 302/303 Location header contains the injected external URL. page.url() after load equals the injected attacker domain.",
+    "active_probe": true,
+    "severity": "medium",
+    "prevalence": "common",
+    "slice": "client-browser",
+    "uid": "client-browser__open-redirect-client-side",
+    "class_hint": "open-redirect"
+  },
+  {
+    "id": "js-framework-debug-mode",
+    "name": "JavaScript Framework Debug / Development Mode Enabled in Production",
+    "owasp_category": "A05:2021 Security Misconfiguration",
+    "frameworks": [
+      "React",
+      "Vue",
+      "Angular",
+      "Ember",
+      "Next.js"
+    ],
+    "description": "Client-side frameworks (React DevTools hook present, Vue devtools enabled, Angular development mode, Next.js __NEXT_DATA__ with full server props) emit verbose stack traces, expose internal component trees, and sometimes include source code or environment variables that should never reach production.",
+    "runtime_discovery": "After page load, execute page.evaluate to check for __REACT_DEVTOOLS_GLOBAL_HOOK__, window.__VUE__, window.ng (Angular DevMode), and the size/contents of window.__NEXT_DATA__. Inspect inline <script id='__NEXT_DATA__'> JSON for env vars, API keys, or server-side props. Check if React is running in development mode via __REACT_DEVTOOLS_GLOBAL_HOOK__.renderers.",
+    "detection_signal": "page.evaluate returns truthy for __REACT_DEVTOOLS_GLOBAL_HOOK__ on a production domain. window.__NEXT_DATA__ contains keys like env, serverSideProps, or buildId with non-production values. Angular ng.probe() is callable on the window. Vue devtools warning banner visible in page text. Credential patterns match inside the __NEXT_DATA__ JSON blob.",
+    "active_probe": false,
+    "severity": "medium",
+    "prevalence": "occasional",
+    "slice": "client-browser",
+    "uid": "client-browser__js-framework-debug-mode",
+    "class_hint": "cmd-injection"
+  },
+  {
+    "id": "cors-wildcard-sensitive-api",
+    "name": "CORS Wildcard on Sensitive / Authenticated API Endpoint",
+    "owasp_category": "A05:2021 Security Misconfiguration",
+    "frameworks": [
+      "agnostic"
+    ],
+    "description": "An API endpoint that returns user-specific data or accepts authenticated actions responds with Access-Control-Allow-Origin: * without also requiring credentials, but the broad wildcard still enables cross-site exfiltration of sensitive data by any third-party page using a simple fetch.",
+    "runtime_discovery": "Send a GET request to each discovered API endpoint with a cross-origin Origin header. If the response contains Access-Control-Allow-Origin: * AND the response body contains patterns matching PII, tokens, user data, or structured JSON with field names like email, userId, token \u2014 flag it. Distinguish from static asset wildcards (images, fonts) by checking Content-Type and response body structure.",
+    "detection_signal": "Response header Access-Control-Allow-Origin: * on an endpoint whose Content-Type is application/json AND whose body matches at least one credential or PII detector pattern (email address, userId, JWT, access_token field). Differs from the credentialed CORS finding \u2014 credentials header not required, but data sensitivity is the signal.",
+    "active_probe": true,
+    "severity": "medium",
+    "prevalence": "common",
+    "slice": "client-browser",
+    "uid": "client-browser__cors-wildcard-sensitive-api",
+    "class_hint": "cors"
+  },
+  {
+    "id": "subresource-integrity-missing",
+    "name": "Missing Subresource Integrity (SRI) on Third-Party Scripts",
+    "owasp_category": "A08:2021 Software and Data Integrity Failures",
+    "frameworks": [
+      "agnostic"
+    ],
+    "description": "Script and link tags loading third-party resources (CDN-hosted libraries, analytics, payment widgets) lack integrity= and crossorigin= attributes, meaning a CDN compromise or BGP hijack silently delivers malicious code to all users without the browser detecting the tampering.",
+    "runtime_discovery": "Crawl each rendered page and parse all <script src=...> and <link rel=stylesheet href=...> tags whose src/href points to a domain other than the first-party origin. Check whether each external tag includes a valid integrity= hash attribute. Also flag <script src=> pointing to third-party domains served without HTTPS.",
+    "detection_signal": "HTML DOM contains at least one <script src=https://cdn.example.com/...> or <link href=https://...> where the src/href host does not match the page origin AND the tag lacks an integrity= attribute. Pure passive DOM observation \u2014 no active probe needed.",
+    "active_probe": false,
+    "severity": "medium",
+    "prevalence": "ubiquitous",
+    "slice": "client-browser",
+    "uid": "client-browser__subresource-integrity-missing",
+    "class_hint": "cmd-injection"
+  }
+]

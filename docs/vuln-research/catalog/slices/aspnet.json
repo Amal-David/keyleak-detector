@@ -1,0 +1,278 @@
+[
+  {
+    "id": "aspnet-mass-assignment-overposting",
+    "name": "ASP.NET Model Binding Mass Assignment (Overposting)",
+    "owasp_category": "A01:2021 Broken Access Control",
+    "frameworks": [
+      "ASP.NET MVC",
+      "ASP.NET Core"
+    ],
+    "description": "ASP.NET model binders automatically map HTTP request fields to C# model properties. If the controller action does not whitelist bindable fields, an attacker can POST extra fields (e.g., IsAdmin=true, Role=Admin, Balance=9999) that overwrite protected database columns.",
+    "runtime_discovery": "Submit every discovered form with appended hidden fields matching common sensitive property names (IsAdmin, Role, RoleId, IsActive, Balance, Price, ApprovedById, OwnerId). Observe whether the extra fields silently persist in subsequent GET responses, audit-trail entries, or API reads. Auth-diff: compare account state between a normal user who submitted the field and one who did not.",
+    "detection_signal": "POST with extra parameter (e.g. IsAdmin=true) followed by GET of same resource returns the mutated value, or a 200 OK with no validation error when the field should be server-side-only. A field absent from the rendered HTML form but accepted without a 400/422 response is a positive signal.",
+    "active_probe": true,
+    "severity": "high",
+    "prevalence": "common",
+    "slice": "aspnet",
+    "uid": "aspnet__aspnet-mass-assignment-overposting",
+    "class_hint": "mass-assignment"
+  },
+  {
+    "id": "aspnet-viewstate-mac-disabled",
+    "name": "ASP.NET ViewState MAC Disabled / Weak Machine Key",
+    "owasp_category": "A02:2021 Cryptographic Failures",
+    "frameworks": [
+      "ASP.NET WebForms"
+    ],
+    "description": "ASP.NET WebForms serializes page state into a Base64-encoded __VIEWSTATE field. If EnableViewStateMac=false or the machineKey is weak/default, an attacker can forge or deserialize the ViewState, leading to arbitrary server-side object deserialization (RCE) or privilege escalation.",
+    "runtime_discovery": "Crawl all WebForms pages and extract __VIEWSTATE values from hidden inputs. Decode from Base64 and inspect the first bytes for an HMAC suffix. Attempt to submit a tampered ViewState (e.g., flip bits in the payload) and observe whether the server accepts it (200 OK) or rejects it (ViewState validation error / 500).",
+    "detection_signal": "Tampered __VIEWSTATE accepted (200 OK) with no MAC validation error in the response body. Alternatively, ysoserial.net-generated payloads returning an error that differs from a normal MAC failure (timing or error string change) indicates deserialization execution path was reached.",
+    "active_probe": true,
+    "severity": "critical",
+    "prevalence": "occasional",
+    "slice": "aspnet",
+    "uid": "aspnet__aspnet-viewstate-mac-disabled",
+    "class_hint": "bfla"
+  },
+  {
+    "id": "aspnet-debug-pages-yellow-screen",
+    "name": "ASP.NET Yellow Screen of Death / Detailed Error Pages Exposed",
+    "owasp_category": "A05:2021 Security Misconfiguration",
+    "frameworks": [
+      "ASP.NET WebForms",
+      "ASP.NET MVC",
+      "ASP.NET Core"
+    ],
+    "description": "When customErrors mode=Off or the developer exception page is enabled in production, ASP.NET returns full stack traces, SQL query fragments, connection strings, and server-side file paths in the response body on any unhandled exception.",
+    "runtime_discovery": "Trigger exceptions by fuzzing route parameters with unexpected types (e.g., /product/abc instead of /product/123), submitting malformed JSON/form bodies, and sending requests with invalid Content-Type headers. Observe HTTP 500 responses for stack trace content.",
+    "detection_signal": "HTTP 500 response body contains strings like 'Stack Trace:', 'Server Error in', 'System.Web.HttpException', '[SqlException', or a full C# namespace path. Also look for the yellow-bordered ASP.NET error page HTML structure or Developer Exception Page HTML in production.",
+    "active_probe": true,
+    "severity": "medium",
+    "prevalence": "common",
+    "slice": "aspnet",
+    "uid": "aspnet__aspnet-debug-pages-yellow-screen",
+    "class_hint": "debug-endpoint"
+  },
+  {
+    "id": "aspnet-forms-auth-cookie-insecure",
+    "name": "ASP.NET Forms Authentication Ticket in Non-Secure Cookie",
+    "owasp_category": "A02:2021 Cryptographic Failures",
+    "frameworks": [
+      "ASP.NET WebForms",
+      "ASP.NET MVC"
+    ],
+    "description": "The .ASPXAUTH (or custom-named) Forms Authentication ticket cookie is transmitted without the Secure flag, HttpOnly flag, or with a weak timeout, enabling session hijacking over HTTP or via XSS.",
+    "runtime_discovery": "After authentication, inspect all Set-Cookie headers for the .ASPXAUTH cookie. Check for absence of Secure attribute, absence of HttpOnly, SameSite=None or missing, and excessively long expiry times. Also probe for the cookie being sent over plain HTTP by making a forced HTTP redirect to the app.",
+    "detection_signal": "Set-Cookie header for .ASPXAUTH (or .AspNet.ApplicationCookie / .AspNetCore.Cookies) lacks Secure and/or HttpOnly flags. Or the cookie is returned on a plain HTTP (non-TLS) response. Also flag an unusually long Max-Age (e.g., 30+ days) for a session authentication cookie.",
+    "active_probe": false,
+    "severity": "high",
+    "prevalence": "common",
+    "slice": "aspnet",
+    "uid": "aspnet__aspnet-forms-auth-cookie-insecure",
+    "class_hint": "xss"
+  },
+  {
+    "id": "aspnet-open-redirect-returnurl",
+    "name": "ASP.NET Open Redirect via ReturnUrl / ReturnURL Parameter",
+    "owasp_category": "A01:2021 Broken Access Control",
+    "frameworks": [
+      "ASP.NET WebForms",
+      "ASP.NET MVC",
+      "ASP.NET Core"
+    ],
+    "description": "ASP.NET login pages commonly redirect to a ?ReturnUrl= or ?returnURL= query parameter after authentication. If the value is not validated against the application's own origin, attackers can redirect victims to phishing sites post-login.",
+    "runtime_discovery": "Find login forms by crawling for ReturnUrl/ReturnURL/returnUrl query parameters. Submit the login form with ReturnUrl=https://evil.example.com and observe the Location header in the 302 response. Also try ReturnUrl=//evil.example.com and ReturnUrl=/\\evil.example.com to bypass path-prefix checks.",
+    "detection_signal": "HTTP 302 Location header pointing to an external domain (not the app's own origin) after a successful login. Also trigger if the redirect target starts with // or contains a foreign FQDN, even when preceded by /.",
+    "active_probe": true,
+    "severity": "medium",
+    "prevalence": "common",
+    "slice": "aspnet",
+    "uid": "aspnet__aspnet-open-redirect-returnurl",
+    "class_hint": "open-redirect"
+  },
+  {
+    "id": "aspnet-antiforgery-csrf",
+    "name": "ASP.NET Anti-Forgery Token Missing (CSRF)",
+    "owasp_category": "A01:2021 Broken Access Control",
+    "frameworks": [
+      "ASP.NET MVC",
+      "ASP.NET Core",
+      "ASP.NET WebForms"
+    ],
+    "description": "State-changing POST endpoints that lack a validated AntiForgeryToken (or the [ValidateAntiForgeryToken] attribute) are vulnerable to Cross-Site Request Forgery, allowing attacker-controlled pages to trigger actions on behalf of authenticated users.",
+    "runtime_discovery": "Crawl authenticated state-changing forms. For each form, resubmit the POST request with the __RequestVerificationToken field removed or replaced with a random value. Observe whether the server returns 400/403 (token validated) or 200/302 (token ignored).",
+    "detection_signal": "POST to a state-changing endpoint without a __RequestVerificationToken (or with an arbitrary token value) returns HTTP 200 or 302 and the action takes effect (record created/deleted, settings changed). A correctly protected endpoint should return 400 Bad Request or 403 Forbidden.",
+    "active_probe": true,
+    "severity": "high",
+    "prevalence": "common",
+    "slice": "aspnet",
+    "uid": "aspnet__aspnet-antiforgery-csrf",
+    "class_hint": "csrf"
+  },
+  {
+    "id": "aspnet-sql-injection-entity-raw-query",
+    "name": "SQL Injection via Raw Queries in ASP.NET (Entity Framework / ADO.NET)",
+    "owasp_category": "A03:2021 Injection",
+    "frameworks": [
+      "ASP.NET MVC",
+      "ASP.NET Core",
+      "ASP.NET WebForms"
+    ],
+    "description": "Controllers using ADO.NET SqlCommand with string concatenation, or Entity Framework FromSqlRaw/ExecuteSqlRaw with unsanitized user input, are vulnerable to classic SQL injection enabling data exfiltration, authentication bypass, or data manipulation.",
+    "runtime_discovery": "Inject SQL metacharacters (', --, ;, 1=1, WAITFOR DELAY '0:0:5') into all form fields, query parameters, and route segments that are used for data lookup. Observe for database error strings in the response, unexpected data returns, or response-time increases (time-based blind).",
+    "detection_signal": "Response contains strings like 'SqlException', 'Unclosed quotation mark', 'Incorrect syntax near', 'System.Data.SqlClient', or 'ORA-00933'. Alternatively, boolean-based: injecting ' OR '1'='1 returns more rows than a baseline. Time-based: WAITFOR DELAY '0:0:5' increases response time by ~5 seconds.",
+    "active_probe": true,
+    "severity": "critical",
+    "prevalence": "common",
+    "slice": "aspnet",
+    "uid": "aspnet__aspnet-sql-injection-entity-raw-query",
+    "class_hint": "sqli"
+  },
+  {
+    "id": "aspnet-idor-id-enumeration",
+    "name": "Insecure Direct Object Reference via Sequential ID in ASP.NET Routes",
+    "owasp_category": "A01:2021 Broken Access Control",
+    "frameworks": [
+      "ASP.NET MVC",
+      "ASP.NET Core",
+      "ASP.NET WebForms"
+    ],
+    "description": "ASP.NET apps commonly expose sequential integer or GUID identifiers in URLs (/api/orders/1042, /api/users/5). Without per-request authorization checks, any authenticated user can access or modify resources owned by other users by incrementing the ID.",
+    "runtime_discovery": "Authenticate as user A and note resource IDs visible in responses. Then with user B's session (auth-diff) or even unauthenticated, request those same IDs. Also enumerate adjacent IDs (+1, -1). Observe whether the server returns 403/404 or the resource content.",
+    "detection_signal": "HTTP 200 response body containing another user's PII, order data, or account content when the requesting session does not own that resource ID. Auth-diff: resource returned to user B that was created by user A, with matching content.",
+    "active_probe": true,
+    "severity": "high",
+    "prevalence": "ubiquitous",
+    "slice": "aspnet",
+    "uid": "aspnet__aspnet-idor-id-enumeration",
+    "class_hint": "idor-bola"
+  },
+  {
+    "id": "aspnet-x-powered-by-server-header",
+    "name": "ASP.NET Version Disclosure via X-Powered-By / Server Headers",
+    "owasp_category": "A05:2021 Security Misconfiguration",
+    "frameworks": [
+      "ASP.NET WebForms",
+      "ASP.NET MVC",
+      "ASP.NET Core"
+    ],
+    "description": "Default IIS + ASP.NET installations emit 'X-Powered-By: ASP.NET', 'X-AspNet-Version: 4.0.30319', and 'Server: Microsoft-IIS/10.0' response headers, advertising exact framework and server versions that help attackers narrow exploit selection.",
+    "runtime_discovery": "Send any HTTP request to the application root and all crawled paths. Inspect response headers for X-Powered-By, X-AspNet-Version, X-AspNetMvc-Version, and Server header content.",
+    "detection_signal": "Response headers contain any of: X-Powered-By: ASP.NET, X-AspNet-Version (any value), X-AspNetMvc-Version (any value), or Server: Microsoft-IIS/<version>. Presence of specific version numbers (e.g., 4.0.30319) is a higher-severity signal than a generic framework disclosure.",
+    "active_probe": false,
+    "severity": "low",
+    "prevalence": "ubiquitous",
+    "slice": "aspnet",
+    "uid": "aspnet__aspnet-x-powered-by-server-header",
+    "class_hint": "other"
+  },
+  {
+    "id": "aspnet-session-fixation-sessionid",
+    "name": "ASP.NET Session Fixation (ASP.NET_SessionId Not Rotated on Auth)",
+    "owasp_category": "A07:2021 Identification and Authentication Failures",
+    "frameworks": [
+      "ASP.NET WebForms",
+      "ASP.NET MVC",
+      "ASP.NET Core"
+    ],
+    "description": "If the ASP.NET_SessionId cookie is not regenerated upon successful login, an attacker who can set a victim's session cookie (e.g., via a subdomain XSS or network interception) can pre-plant a known session ID and hijack the authenticated session after the victim logs in.",
+    "runtime_discovery": "Record the ASP.NET_SessionId value from a pre-authentication (anonymous) request. Submit valid credentials via the login form. Compare the ASP.NET_SessionId in the post-login Set-Cookie (or Cookie echo) with the pre-login value. If they are identical, session fixation is present.",
+    "detection_signal": "The ASP.NET_SessionId value in the post-authentication response is identical to the pre-authentication session ID. A secure app always issues a new session ID (new Set-Cookie with a different token) immediately after credential verification succeeds.",
+    "active_probe": true,
+    "severity": "high",
+    "prevalence": "occasional",
+    "slice": "aspnet",
+    "uid": "aspnet__aspnet-session-fixation-sessionid",
+    "class_hint": "xss"
+  },
+  {
+    "id": "aspnet-cors-wildcard-credentialed",
+    "name": "ASP.NET CORS Misconfiguration \u2014 Wildcard or Reflected Origin with Credentials",
+    "owasp_category": "A01:2021 Broken Access Control",
+    "frameworks": [
+      "ASP.NET Core",
+      "ASP.NET Web API"
+    ],
+    "description": "ASP.NET Core CORS policies that reflect arbitrary Origin headers or use AllowAnyOrigin combined with AllowCredentials allow attacker-controlled sites to make credentialed cross-origin requests and read protected API responses.",
+    "runtime_discovery": "Send requests with arbitrary Origin headers (e.g., Origin: https://evil.attacker.com) to all API endpoints. Inspect the Access-Control-Allow-Origin response header for reflection of the submitted origin combined with Access-Control-Allow-Credentials: true.",
+    "detection_signal": "Response contains both Access-Control-Allow-Origin: https://evil.attacker.com (exact reflection of probe origin) and Access-Control-Allow-Credentials: true. Or Access-Control-Allow-Origin: * on endpoints that set authentication cookies. Either combination allows cross-origin session data theft.",
+    "active_probe": true,
+    "severity": "high",
+    "prevalence": "common",
+    "slice": "aspnet",
+    "uid": "aspnet__aspnet-cors-wildcard-credentialed",
+    "class_hint": "cors"
+  },
+  {
+    "id": "aspnet-http-verb-tampering",
+    "name": "ASP.NET HTTP Verb Tampering \u2014 Authorization Bypass via Method Override",
+    "owasp_category": "A01:2021 Broken Access Control",
+    "frameworks": [
+      "ASP.NET MVC",
+      "ASP.NET Core"
+    ],
+    "description": "Some ASP.NET route configurations or older middleware honor X-HTTP-Method-Override or _method form fields, allowing attackers to disguise a DELETE or PUT as a POST, potentially bypassing verb-based authorization filters that only restrict certain HTTP methods.",
+    "runtime_discovery": "For protected endpoints (e.g., DELETE /api/resource/1 returns 401/403), retry as POST /api/resource/1 with header X-HTTP-Method-Override: DELETE or form field _method=DELETE. Also try X-HTTP-Method: DELETE and X-METHOD-OVERRIDE: DELETE. Compare response codes and side-effects.",
+    "detection_signal": "A request that returns 401/403 when sent as DELETE/PUT returns 200 or 204 when sent as POST with a method override header or form field. The side effect (record deleted, resource updated) is also present, confirming bypass rather than a response-code-only difference.",
+    "active_probe": true,
+    "severity": "high",
+    "prevalence": "occasional",
+    "slice": "aspnet",
+    "uid": "aspnet__aspnet-http-verb-tampering",
+    "class_hint": "other"
+  },
+  {
+    "id": "aspnet-identity-username-enumeration",
+    "name": "ASP.NET Identity Username Enumeration via Differential Login Responses",
+    "owasp_category": "A07:2021 Identification and Authentication Failures",
+    "frameworks": [
+      "ASP.NET Core Identity",
+      "ASP.NET Membership"
+    ],
+    "description": "ASP.NET Identity login pages often return different error messages or response times depending on whether the submitted username exists in the database, allowing an attacker to enumerate valid accounts.",
+    "runtime_discovery": "Submit login requests with a known-valid username + wrong password vs. a clearly nonexistent username + wrong password. Compare response body text, HTTP status codes, and response timing. Also compare password-reset flow responses for the same two cases.",
+    "detection_signal": "Differential response: body text differs (e.g., 'Invalid password' vs. 'Account not found'), or response time is measurably longer for valid usernames (indicating a bcrypt hash computation was attempted). Also flag if password-reset flow leaks 'If this email exists, we will send...' is absent for invalid emails.",
+    "active_probe": true,
+    "severity": "medium",
+    "prevalence": "common",
+    "slice": "aspnet",
+    "uid": "aspnet__aspnet-identity-username-enumeration",
+    "class_hint": "rate-limit-enum"
+  },
+  {
+    "id": "aspnet-path-traversal-static-files",
+    "name": "ASP.NET Path Traversal via Static File Middleware or Physical File Providers",
+    "owasp_category": "A01:2021 Broken Access Control",
+    "frameworks": [
+      "ASP.NET Core"
+    ],
+    "description": "Misconfigured UseStaticFiles middleware or PhysicalFileProvider with an insufficiently restricted root can be exploited with dot-dot-slash sequences to read files outside the intended web root, including appsettings.json, web.config, or .env files.",
+    "runtime_discovery": "Probe known file paths using traversal sequences: /static/../appsettings.json, /files/..%2F..%2Fweb.config, /assets/%2e%2e%2f%2e%2e%2fappsettings.Production.json. Also try URL-encoded and double-encoded variants. Observe whether the response returns 200 with file content vs. 400/404.",
+    "detection_signal": "HTTP 200 response body containing recognizable configuration file content: JSON with 'ConnectionStrings', 'Logging', or 'JwtSecret' keys (appsettings.json pattern), or XML containing '<connectionStrings>' or '<appSettings>' (web.config pattern). A 404 that suddenly becomes 200 on traversal is the key signal.",
+    "active_probe": true,
+    "severity": "high",
+    "prevalence": "occasional",
+    "slice": "aspnet",
+    "uid": "aspnet__aspnet-path-traversal-static-files",
+    "class_hint": "path-traversal"
+  },
+  {
+    "id": "aspnet-missing-security-headers",
+    "name": "Missing Security Headers on ASP.NET Responses (CSP, HSTS, X-Frame-Options)",
+    "owasp_category": "A05:2021 Security Misconfiguration",
+    "frameworks": [
+      "ASP.NET Core",
+      "ASP.NET MVC",
+      "ASP.NET WebForms"
+    ],
+    "description": "ASP.NET applications without explicit security header middleware (e.g., NWebSec, custom middleware, or UseHsts/UseXContentTypeOptions) omit Content-Security-Policy, Strict-Transport-Security, X-Frame-Options, X-Content-Type-Options, and Referrer-Policy headers, increasing exposure to clickjacking, MIME sniffing, and protocol downgrade attacks.",
+    "runtime_discovery": "Crawl authenticated and unauthenticated pages. For each response, inspect headers for presence of: Content-Security-Policy, Strict-Transport-Security, X-Frame-Options (or CSP frame-ancestors), X-Content-Type-Options: nosniff, Referrer-Policy, and Permissions-Policy. Score absence of each.",
+    "detection_signal": "One or more critical security headers absent from HTTP responses: no Content-Security-Policy on pages rendering user-controlled HTML, no Strict-Transport-Security on HTTPS endpoints, no X-Frame-Options (enabling clickjacking), or no X-Content-Type-Options. Multiple absences in combination elevate severity.",
+    "active_probe": false,
+    "severity": "medium",
+    "prevalence": "common",
+    "slice": "aspnet",
+    "uid": "aspnet__aspnet-missing-security-headers",
+    "class_hint": "security-headers"
+  }
+]

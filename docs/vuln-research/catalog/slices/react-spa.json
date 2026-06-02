@@ -1,0 +1,286 @@
+[
+  {
+    "id": "react-env-vars-in-bundle",
+    "name": "REACT_APP_* / VITE_ Secrets Baked Into JS Bundle",
+    "owasp_category": "A02:2021 Cryptographic Failures",
+    "frameworks": [
+      "React",
+      "Create React App",
+      "Vite",
+      "Next.js"
+    ],
+    "description": "Build tools that prefix environment variables (REACT_APP_*, VITE_*, NEXT_PUBLIC_*) inline them verbatim into the client-side JS bundle at build time. API keys, private endpoint URLs, and third-party service secrets end up shipped to every browser that loads the app.",
+    "runtime_discovery": "Crawl the app and collect all .js chunk URLs from the HTML. Fetch each chunk and scan the response body for high-entropy strings, known key prefixes (sk_, AIza, AKIA, ghp_, etc.), and well-known variable name patterns like REACT_APP_ or VITE_. No authentication required.",
+    "detection_signal": "Regex match of known secret prefixes (sk_live_, AKIA[0-9A-Z]{16}, AIzaSy, ghp_) or high-entropy Base64/hex strings of length 20+ inside a text/javascript response body fetched from a public chunk URL.",
+    "active_probe": false,
+    "severity": "critical",
+    "prevalence": "ubiquitous",
+    "slice": "react-spa",
+    "uid": "react-spa__react-env-vars-in-bundle",
+    "class_hint": "secrets-exposure"
+  },
+  {
+    "id": "react-client-side-authz-ui-only",
+    "name": "Client-Side-Only Authorization (Hidden Route / Conditional Render Bypass)",
+    "owasp_category": "A01:2021 Broken Access Control",
+    "frameworks": [
+      "React",
+      "React Router",
+      "Next.js"
+    ],
+    "description": "React apps frequently hide admin routes or premium features by conditionally rendering components or redirecting in the client router, with no corresponding server-side enforcement. An attacker navigates directly to the hidden route URL or manually calls the backing API.",
+    "runtime_discovery": "Parse the JS bundle for React Router route definitions (Route, createBrowserRouter path values) and collect every path string. Attempt direct navigation to each path as an unauthenticated or low-privilege user. Observe whether the app renders protected content or whether the API calls succeed when made directly.",
+    "detection_signal": "A route path extracted from the bundle (e.g. /admin, /billing, /internal) returns HTTP 200 with meaningful HTML/JSON content when accessed directly by a non-admin session, rather than redirecting (302) or returning 401/403.",
+    "active_probe": true,
+    "severity": "high",
+    "prevalence": "ubiquitous",
+    "slice": "react-spa",
+    "uid": "react-spa__react-client-side-authz-ui-only",
+    "class_hint": "cmd-injection"
+  },
+  {
+    "id": "react-redux-state-exposure",
+    "name": "Redux / Zustand Store Exposed in Window or DevTools",
+    "owasp_category": "A02:2021 Cryptographic Failures",
+    "frameworks": [
+      "React",
+      "Redux",
+      "Zustand",
+      "MobX"
+    ],
+    "description": "Production builds that leave Redux DevTools middleware active, or that attach the store to window.__REDUX_STORE__ / window.__ZUSTAND__, expose the full application state \u2014 including auth tokens, PII, and session data \u2014 to any script running in the page context.",
+    "runtime_discovery": "After logging in, inject a short script via browser console (or via the scanner's injected content script) to read window.__REDUX_DEVTOOLS_EXTENSION__ presence, window.__STORE__, or window.__ZUSTAND__. Serialize and inspect the state tree for sensitive keys (token, accessToken, ssn, dob, email).",
+    "detection_signal": "window.__REDUX_DEVTOOLS_EXTENSION__ is truthy in a production build, OR window[storeKey] resolves to an object with a getState() method that returns fields matching secret/token/credential patterns.",
+    "active_probe": true,
+    "severity": "high",
+    "prevalence": "common",
+    "slice": "react-spa",
+    "uid": "react-spa__react-redux-state-exposure",
+    "class_hint": "secrets-exposure"
+  },
+  {
+    "id": "react-cors-wildcard-api",
+    "name": "Overly Permissive CORS on the Backing REST/GraphQL API",
+    "owasp_category": "A05:2021 Security Misconfiguration",
+    "frameworks": [
+      "React",
+      "agnostic"
+    ],
+    "description": "The React SPA's backing API returns Access-Control-Allow-Origin: * or reflects the request Origin unconditionally, combined with Access-Control-Allow-Credentials: true, allowing any origin to make authenticated cross-site requests on behalf of a logged-in user.",
+    "runtime_discovery": "Send a preflight OPTIONS (and then a credentialed GET/POST) to each discovered API endpoint with an arbitrary Origin: https://evil.example.com header. Inspect the response headers for the reflected or wildcard ACAO value and whether ACAC: true is present simultaneously.",
+    "detection_signal": "Response contains Access-Control-Allow-Origin: https://evil.example.com (reflected) together with Access-Control-Allow-Credentials: true, or ACAO: * with credentials mode allowing reads of sensitive data.",
+    "active_probe": true,
+    "severity": "high",
+    "prevalence": "common",
+    "slice": "react-spa",
+    "uid": "react-spa__react-cors-wildcard-api",
+    "class_hint": "cors"
+  },
+  {
+    "id": "react-jwt-stored-localstorage",
+    "name": "JWT / Bearer Token Stored in localStorage (XSS-Accessible)",
+    "owasp_category": "A02:2021 Cryptographic Failures",
+    "frameworks": [
+      "React",
+      "agnostic"
+    ],
+    "description": "React apps commonly store JWTs in localStorage or sessionStorage for convenience. Unlike HttpOnly cookies, these stores are fully readable by JavaScript, making any XSS vulnerability an instant full-account-takeover: the token can be exfiltrated in a single fetch call.",
+    "runtime_discovery": "After authenticating, read localStorage and sessionStorage keys via injected script. Match key names containing 'token', 'jwt', 'auth', 'access', 'bearer'. Decode the Base64url payload to confirm it is a JWT. Also check for tokens stored in non-HttpOnly cookies.",
+    "detection_signal": "localStorage.getItem(key) or document.cookie returns a value matching the JWT three-part Base64url pattern (eyJ[A-Za-z0-9_-]+\\.eyJ[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+), confirmed by a decodable header with alg field.",
+    "active_probe": true,
+    "severity": "high",
+    "prevalence": "ubiquitous",
+    "slice": "react-spa",
+    "uid": "react-spa__react-jwt-stored-localstorage",
+    "class_hint": "xss"
+  },
+  {
+    "id": "react-dangerouslysetinnerhtml-xss",
+    "name": "dangerouslySetInnerHTML / innerHTML Sink Leading to Stored/Reflected XSS",
+    "owasp_category": "A03:2021 Injection",
+    "frameworks": [
+      "React"
+    ],
+    "description": "When React components pass user-controlled data into dangerouslySetInnerHTML, or downstream DOM manipulation (via refs, jQuery, or third-party rich-text editors) bypasses React's escaping, attacker-supplied HTML/JS executes in other users' browsers.",
+    "runtime_discovery": "Fill text inputs, URL parameters, and profile fields with an XSS canary payload (e.g. <img src=x onerror=window.__xss=1>). Submit and then navigate to any page that would render that content. Check whether window.__xss is set, or intercept network requests for an out-of-band callback.",
+    "detection_signal": "Injected canary string appears unescaped in a subsequent page's DOM (innerHTML contains literal <script> or event handler attributes), OR the onerror/onload callback fires as confirmed by window property set or out-of-band DNS/HTTP ping.",
+    "active_probe": true,
+    "severity": "high",
+    "prevalence": "common",
+    "slice": "react-spa",
+    "uid": "react-spa__react-dangerouslysetinnerhtml-xss",
+    "class_hint": "xss"
+  },
+  {
+    "id": "react-open-redirect-spa-router",
+    "name": "Open Redirect via SPA Router ?redirect= / returnTo= Parameter",
+    "owasp_category": "A01:2021 Broken Access Control",
+    "frameworks": [
+      "React",
+      "React Router",
+      "Next.js"
+    ],
+    "description": "Login and OAuth callback pages in React apps commonly accept a ?redirect= or ?returnTo= query parameter and navigate() there after authentication without validating the host, enabling phishing redirects to attacker-controlled domains.",
+    "runtime_discovery": "Identify login or callback URLs by crawling. Append ?redirect=https://evil.example.com (and variants: //evil.example.com, /\\evil.example.com, %2F%2Fevil.example.com). Trigger the login flow and observe the final navigation target after authentication.",
+    "detection_signal": "After the authentication flow completes, the browser location ends up at a host other than the app's own origin, or the network log shows a 302 Location header pointing to the injected external URL.",
+    "active_probe": true,
+    "severity": "medium",
+    "prevalence": "common",
+    "slice": "react-spa",
+    "uid": "react-spa__react-open-redirect-spa-router",
+    "class_hint": "open-redirect"
+  },
+  {
+    "id": "react-firebase-api-key-exposed",
+    "name": "Firebase / Supabase / BaaS Config Object Exposed in Bundle",
+    "owasp_category": "A02:2021 Cryptographic Failures",
+    "frameworks": [
+      "React",
+      "Firebase",
+      "Supabase",
+      "Amplify"
+    ],
+    "description": "React apps that use Firebase, Supabase, or AWS Amplify embed the full client config (apiKey, authDomain, projectId, anonKey, identityPoolId) in the JS bundle. Without proper Firestore security rules or RLS policies, these credentials allow unauthenticated reads and writes to the entire database.",
+    "runtime_discovery": "Fetch all JS chunk URLs. Search response bodies for known BaaS config object shapes: firebaseConfig = { apiKey:, createClient( with url and anonKey, or Amplify.configure({ with aws_user_pools_id. Extract the key values and attempt unauthenticated Firestore/REST API reads against the project.",
+    "detection_signal": "JS chunk body contains the literal string firebaseConfig or SUPABASE_ANON_KEY alongside a project ID, followed by a successful unauthenticated GET to https://<project>.firebaseio.com/.json or https://<project>.supabase.co/rest/v1/<table> returning non-empty data.",
+    "active_probe": true,
+    "severity": "critical",
+    "prevalence": "common",
+    "slice": "react-spa",
+    "uid": "react-spa__react-firebase-api-key-exposed",
+    "class_hint": "secrets-exposure"
+  },
+  {
+    "id": "react-idor-client-controlled-id",
+    "name": "IDOR via Client-Controlled Object IDs in API Calls",
+    "owasp_category": "A01:2021 Broken Access Control",
+    "frameworks": [
+      "React",
+      "agnostic"
+    ],
+    "description": "React SPAs pass resource IDs (userId, orderId, documentId) directly from client-side state into API request paths or bodies. Without server-side ownership checks, incrementing or substituting another user's ID returns or modifies their data.",
+    "runtime_discovery": "Log in as user A, capture API requests containing numeric or UUID resource identifiers (e.g. GET /api/orders/1234). Log in as user B and replay those requests substituting user A's IDs. Compare the responses: if user B receives user A's data, IDOR is confirmed.",
+    "detection_signal": "Auth-diff: an authenticated request made with user B's session token to a URL containing user A's resource ID returns HTTP 200 with a non-empty body matching user A's data schema, instead of 403 or an empty/error response.",
+    "active_probe": true,
+    "severity": "high",
+    "prevalence": "ubiquitous",
+    "slice": "react-spa",
+    "uid": "react-spa__react-idor-client-controlled-id",
+    "class_hint": "idor-bola"
+  },
+  {
+    "id": "react-source-map-exposed",
+    "name": "Production Source Maps Publicly Accessible",
+    "owasp_category": "A05:2021 Security Misconfiguration",
+    "frameworks": [
+      "React",
+      "Create React App",
+      "Vite",
+      "Webpack"
+    ],
+    "description": "When source maps are deployed alongside production bundles without access restrictions, attackers can reconstruct the full original TypeScript/JavaScript source \u2014 including business logic, hardcoded values, and internal API endpoint paths not visible in the minified bundle.",
+    "runtime_discovery": "Fetch each discovered .js chunk URL and check the final comment for //# sourceMappingURL= pointing to a .map file. Request that .map URL directly. If it returns HTTP 200 with a JSON body containing a sources array, source reconstruction is possible.",
+    "detection_signal": "A .js.map URL returns HTTP 200 Content-Type application/json with a top-level sources array containing recognizable file paths (src/components/, src/api/) and a non-empty sourcesContent array.",
+    "active_probe": true,
+    "severity": "medium",
+    "prevalence": "common",
+    "slice": "react-spa",
+    "uid": "react-spa__react-source-map-exposed",
+    "class_hint": "cmd-injection"
+  },
+  {
+    "id": "react-graphql-introspection-enabled",
+    "name": "GraphQL Introspection Enabled in Production",
+    "owasp_category": "A05:2021 Security Misconfiguration",
+    "frameworks": [
+      "React",
+      "Apollo Client",
+      "Relay",
+      "urql"
+    ],
+    "description": "React apps backed by GraphQL APIs frequently leave introspection enabled in production, exposing the full schema \u2014 all types, queries, mutations, and field names \u2014 to unauthenticated or low-privilege callers, which dramatically accelerates targeted attacks.",
+    "runtime_discovery": "Identify the GraphQL endpoint from network traffic or bundle strings (typically /graphql, /api/graphql). Send a POST with the standard introspection query { __schema { types { name } } }. Parse the response for a full type list.",
+    "detection_signal": "POST to the GraphQL endpoint with Content-Type application/json body {\"query\":\"{__schema{types{name}}}\"} returns HTTP 200 with a data.__schema.types array containing more than 10 entries including built-in scalar types.",
+    "active_probe": true,
+    "severity": "medium",
+    "prevalence": "common",
+    "slice": "react-spa",
+    "uid": "react-spa__react-graphql-introspection-enabled",
+    "class_hint": "graphql"
+  },
+  {
+    "id": "react-sensitive-data-in-url",
+    "name": "Sensitive Data Leaked in URL Query Parameters / Hash Fragment",
+    "owasp_category": "A02:2021 Cryptographic Failures",
+    "frameworks": [
+      "React",
+      "React Router",
+      "Next.js"
+    ],
+    "description": "React apps that pass tokens, session IDs, or PII through URL query strings or hash fragments expose this data to browser history, Referer headers, server access logs, and third-party analytics scripts loaded on the page.",
+    "runtime_discovery": "Crawl the app and capture all navigation URLs (including redirects). Inspect query strings and hash fragments for patterns matching tokens (JWT, UUID, long hex), email addresses, phone numbers, or other PII. Also observe OAuth callback URLs for token fragments.",
+    "detection_signal": "A navigated-to URL contains a query parameter or fragment matching JWT pattern, high-entropy token (32+ hex chars or Base64url), email address regex, or numeric ID combined with PII field name keys (ssn=, dob=, phone=).",
+    "active_probe": false,
+    "severity": "medium",
+    "prevalence": "common",
+    "slice": "react-spa",
+    "uid": "react-spa__react-sensitive-data-in-url",
+    "class_hint": "secrets-exposure"
+  },
+  {
+    "id": "react-postmessage-origin-wildcard",
+    "name": "Insecure postMessage Origin Validation (Wildcard or Missing)",
+    "owasp_category": "A03:2021 Injection",
+    "frameworks": [
+      "React",
+      "agnostic"
+    ],
+    "description": "React apps that use window.postMessage for cross-origin iframe or tab communication and either post with targetOrigin '*' or receive without checking event.origin allow any page to send or receive sensitive messages, enabling token theft or unauthorized action triggering.",
+    "runtime_discovery": "Load the app in an iframe (or open as a child window) from a controlled test page. Dispatch postMessage events with crafted payloads (fake auth tokens, action commands) and observe whether the app processes them. Also listen for outgoing postMessage calls with sensitive data and no origin restriction.",
+    "detection_signal": "A postMessage listener in the app's JS bundle (found via source map or bundle analysis) lacks an event.origin check, OR the scanner's controlled frame receives a postMessage containing token/auth/credential fields when the parent sends a trigger message, OR the app mutates its state in response to an untrusted-origin message.",
+    "active_probe": true,
+    "severity": "high",
+    "prevalence": "occasional",
+    "slice": "react-spa",
+    "uid": "react-spa__react-postmessage-origin-wildcard",
+    "class_hint": "cmd-injection"
+  },
+  {
+    "id": "react-feature-flags-client-bypass",
+    "name": "Client-Side Feature Flag / Role Check Bypass",
+    "owasp_category": "A01:2021 Broken Access Control",
+    "frameworks": [
+      "React",
+      "LaunchDarkly",
+      "Unleash",
+      "agnostic"
+    ],
+    "description": "React apps that gate premium or admin features by evaluating a feature flag, JWT claim, or role value entirely in the browser allow privilege escalation by modifying localStorage, the Redux store, or the decoded JWT payload (when signature is not re-verified) before the conditional render runs.",
+    "runtime_discovery": "Identify feature flag keys or role field names from the bundle or network responses. Modify the stored flag value in localStorage, sessionStorage, or the in-memory store via injected script (e.g. localStorage.setItem('flags', JSON.stringify({adminMode: true}))). Reload and observe whether protected UI and the backing API calls become accessible.",
+    "detection_signal": "After overwriting a flag or role value in client storage, the app renders previously hidden UI elements (confirmed by DOM diff) AND the corresponding API calls succeed with HTTP 200, confirming the server also trusts the client-supplied role.",
+    "active_probe": true,
+    "severity": "high",
+    "prevalence": "common",
+    "slice": "react-spa",
+    "uid": "react-spa__react-feature-flags-client-bypass",
+    "class_hint": "bfla"
+  },
+  {
+    "id": "react-third-party-script-supply-chain",
+    "name": "Third-Party Script Loaded Without SRI / From Uncontrolled CDN",
+    "owasp_category": "A06:2021 Vulnerable and Outdated Components",
+    "frameworks": [
+      "React",
+      "agnostic"
+    ],
+    "description": "React apps that inject third-party analytics, chat widget, or tag manager scripts without Subresource Integrity (SRI) hashes allow a compromised CDN or DNS hijack to deliver malicious JavaScript with full DOM and localStorage access, including auth tokens and form data.",
+    "runtime_discovery": "Crawl the app's HTML responses and collect all <script src=> tags pointing to external origins. For each, check whether the integrity= attribute is present and non-empty. Also inspect dynamically injected scripts by observing the DOM after the page fully loads.",
+    "detection_signal": "A <script src=https://[third-party-domain]/...> tag is present in the live page DOM without an integrity= attribute containing a sha256- or sha384- hash, AND the domain is not the app's own origin or a first-party CDN path.",
+    "active_probe": false,
+    "severity": "medium",
+    "prevalence": "ubiquitous",
+    "slice": "react-spa",
+    "uid": "react-spa__react-third-party-script-supply-chain",
+    "class_hint": "cmd-injection"
+  }
+]

@@ -1,0 +1,287 @@
+[
+  {
+    "id": "express-x-powered-by-disclosure",
+    "name": "Express X-Powered-By Header Technology Disclosure",
+    "owasp_category": "A05:2021 Security Misconfiguration",
+    "frameworks": [
+      "express",
+      "node.js"
+    ],
+    "description": "Express emits `X-Powered-By: Express` by default on every response. This header reveals the backend framework and its version range to attackers, narrowing the vulnerability search space for targeted exploitation. Many Node.js deployments also leak Node version via the `Server` header.",
+    "runtime_discovery": "Crawl any endpoint and inspect response headers. Record the presence and value of `X-Powered-By`, `Server`, and `Via` headers across all observed responses to build a technology fingerprint.",
+    "detection_signal": "Response header `X-Powered-By: Express` present on one or more URLs. Also watch for `Server: node` variants. Signal fires on any 2xx, 3xx, or 4xx response.",
+    "active_probe": false,
+    "severity": "low",
+    "prevalence": "ubiquitous",
+    "slice": "node-express",
+    "uid": "node-express__express-x-powered-by-disclosure",
+    "class_hint": "other"
+  },
+  {
+    "id": "express-cors-wildcard-credentialed",
+    "name": "CORS Wildcard + Credentialed Request Misconfiguration",
+    "owasp_category": "A05:2021 Security Misconfiguration",
+    "frameworks": [
+      "express",
+      "node.js",
+      "cors npm package"
+    ],
+    "description": "When `cors` middleware is configured with `origin: true` (reflect any origin) or an overly permissive regex, combined with `credentials: true`, any cross-origin site can make authenticated API calls on behalf of a logged-in user. This is distinct from a pure wildcard `*`, which browsers block for credentialed requests; the reflect-origin variant is the exploitable path.",
+    "runtime_discovery": "Send OPTIONS preflight and GET/POST requests with an `Origin: https://attacker.example.com` header and a valid session cookie. Compare the `Access-Control-Allow-Origin` and `Access-Control-Allow-Credentials` response headers.",
+    "detection_signal": "`Access-Control-Allow-Origin` echoes back the injected attacker origin AND `Access-Control-Allow-Credentials: true` appears in the same response. Both headers present together on a credentialed request is the exploitable combination.",
+    "active_probe": true,
+    "severity": "high",
+    "prevalence": "common",
+    "slice": "node-express",
+    "uid": "node-express__express-cors-wildcard-credentialed",
+    "class_hint": "cors"
+  },
+  {
+    "id": "express-directory-listing",
+    "name": "serve-static / express.static Directory Listing Enabled",
+    "owasp_category": "A05:2021 Security Misconfiguration",
+    "frameworks": [
+      "express",
+      "serve-static"
+    ],
+    "description": "When `express.static` or the `serve-static` middleware is configured with `{ dotfiles: 'allow' }` or `{ index: false }` without disabling directory listing, browsing to a directory URL returns an HTML listing of all files. This may expose source maps, `.env` backups, private keys, or build artifacts.",
+    "runtime_discovery": "Crawl all static path prefixes (typically `/static`, `/public`, `/assets`, `/dist`). Send GET requests to directory-level URLs (trailing slash). Observe whether the response contains an HTML `<ul>` or `<table>` of file names.",
+    "detection_signal": "HTTP 200 response to a directory URL with `Content-Type: text/html` and body containing repeated `<a href=` file links or a visible folder listing pattern (e.g., `Index of /`).",
+    "active_probe": true,
+    "severity": "medium",
+    "prevalence": "occasional",
+    "slice": "node-express",
+    "uid": "node-express__express-directory-listing",
+    "class_hint": "cmd-injection"
+  },
+  {
+    "id": "express-body-parser-json-prototype-pollution",
+    "name": "JSON Body Prototype Pollution via body-parser",
+    "owasp_category": "A03:2021 Injection",
+    "frameworks": [
+      "express",
+      "body-parser",
+      "node.js"
+    ],
+    "description": "When an Express app accepts JSON bodies without sanitization, crafted payloads containing `__proto__`, `constructor`, or `prototype` keys can pollute the JavaScript Object prototype, causing downstream undefined-behavior bugs, authentication bypasses, or remote code execution depending on the sink.",
+    "runtime_discovery": "Submit POST/PUT/PATCH requests to every JSON-accepting endpoint with a body containing `{\"__proto__\": {\"isAdmin\": true}}` and `{\"constructor\": {\"prototype\": {\"polluted\": \"yes\"}}}`. Then probe a subsequent GET endpoint to check if the injected key appears in server behavior (e.g., elevated privilege, changed response field).",
+    "detection_signal": "Subsequent request to an unpolluted endpoint exhibits changed behavior (different role, 200 instead of 403, new field in response JSON) after the prototype-pollution payload was submitted. Alternatively, a 500 error with a Node.js stack trace containing `Cannot set property` on a null prototype chain.",
+    "active_probe": true,
+    "severity": "critical",
+    "prevalence": "common",
+    "slice": "node-express",
+    "uid": "node-express__express-body-parser-json-prototype-pollution",
+    "class_hint": "cmd-injection"
+  },
+  {
+    "id": "express-mass-assignment-req-body",
+    "name": "Mass Assignment via Unsanitized req.body",
+    "owasp_category": "A08:2021 Software and Data Integrity Failures",
+    "frameworks": [
+      "express",
+      "mongoose",
+      "sequelize",
+      "node.js"
+    ],
+    "description": "Express routes that pass `req.body` directly to ORM `create()` or `update()` calls allow attackers to set fields they should not control (e.g., `isAdmin`, `role`, `balance`). This is the Node.js/Mongoose equivalent of Rails' classic mass-assignment vulnerability.",
+    "runtime_discovery": "Submit registration or profile-update forms with extra JSON fields beyond what the UI exposes (`isAdmin`, `role`, `accountBalance`, `verified`). Compare the resulting resource (via a subsequent GET) to see if the injected field was persisted.",
+    "detection_signal": "A subsequent authenticated GET on the resource (user profile, product) returns the injected field value unchanged, or behavior changes (elevated access) consistent with the field being written. Auth-differential: User A submits `{\"role\":\"admin\"}`, then compare role-restricted endpoint responses between User A and a normal User B.",
+    "active_probe": true,
+    "severity": "high",
+    "prevalence": "common",
+    "slice": "node-express",
+    "uid": "node-express__express-mass-assignment-req-body",
+    "class_hint": "mass-assignment"
+  },
+  {
+    "id": "express-helmet-missing-csp",
+    "name": "Missing or Weak Content-Security-Policy (helmet not applied)",
+    "owasp_category": "A05:2021 Security Misconfiguration",
+    "frameworks": [
+      "express",
+      "helmet",
+      "node.js"
+    ],
+    "description": "Express apps that do not use `helmet` (or configure it with `contentSecurityPolicy: false`) send no `Content-Security-Policy` header, leaving users vulnerable to XSS by allowing inline scripts and arbitrary external sources. The absence of the header is observable from any response.",
+    "runtime_discovery": "Inspect response headers from the application root and a sample of authenticated endpoints. Check for `Content-Security-Policy` and `X-Content-Type-Options` and `X-Frame-Options` headers.",
+    "detection_signal": "`Content-Security-Policy` header absent from HTML responses. Bonus signals: also missing `X-Frame-Options`, `X-Content-Type-Options: nosniff`, or `Strict-Transport-Security`.",
+    "active_probe": false,
+    "severity": "medium",
+    "prevalence": "common",
+    "slice": "node-express",
+    "uid": "node-express__express-helmet-missing-csp",
+    "class_hint": "xss"
+  },
+  {
+    "id": "express-session-insecure-defaults",
+    "name": "express-session Insecure Cookie Defaults (no Secure/HttpOnly/SameSite)",
+    "owasp_category": "A02:2021 Cryptographic Failures",
+    "frameworks": [
+      "express",
+      "express-session",
+      "node.js"
+    ],
+    "description": "The `express-session` middleware defaults to `cookie: { secure: false, httpOnly: true, sameSite: undefined }`. In production over HTTP, the session cookie is transmitted in plaintext. Missing `SameSite=Strict/Lax` opens CSRF vectors. A hardcoded or weak `secret` (e.g., `'keyboard cat'`) enables session forgery.",
+    "runtime_discovery": "Authenticate and inspect the `Set-Cookie` header for the session cookie. Check for `Secure`, `HttpOnly`, and `SameSite` attributes. Also compare the cookie name against known default values (`connect.sid`).",
+    "detection_signal": "`Set-Cookie` header on the login response contains `connect.sid=...` without `Secure` and/or without `SameSite`. Alternatively, the cookie name is the unchanged default `connect.sid`, which fingerprints the exact middleware.",
+    "active_probe": false,
+    "severity": "high",
+    "prevalence": "common",
+    "slice": "node-express",
+    "uid": "node-express__express-session-insecure-defaults",
+    "class_hint": "csrf"
+  },
+  {
+    "id": "express-path-traversal-serve-static",
+    "name": "Path Traversal Through Static File Middleware",
+    "owasp_category": "A01:2021 Broken Access Control",
+    "frameworks": [
+      "express",
+      "serve-static",
+      "node.js"
+    ],
+    "description": "Improperly anchored `express.static` mounts or custom file-serving routes that concatenate user-supplied path segments without normalization allow directory traversal attacks (`../../etc/passwd`, `..%2F..%2F`). Encoded variants (`%2F`, `%5C` on Windows) may bypass naive string checks.",
+    "runtime_discovery": "Fuzz static-file endpoint URL path segments with traversal sequences: `../`, `..%2F`, `..%5C`, `%2e%2e%2f`, `....//`. Target known static prefixes and any URL parameter that maps to a file path. Observe 200 responses and content-type changes.",
+    "detection_signal": "HTTP 200 response to a traversal URL with `Content-Type: text/plain` or `application/octet-stream` and body matching file content of a known server-side file (e.g., `root:` in `/etc/passwd`, or `package.json` contents). A 403 on normal paths but 200 on encoded traversal is also a signal.",
+    "active_probe": true,
+    "severity": "critical",
+    "prevalence": "occasional",
+    "slice": "node-express",
+    "uid": "node-express__express-path-traversal-serve-static",
+    "class_hint": "path-traversal"
+  },
+  {
+    "id": "express-open-redirect",
+    "name": "Open Redirect in res.redirect() with User-Supplied URL",
+    "owasp_category": "A01:2021 Broken Access Control",
+    "frameworks": [
+      "express",
+      "node.js"
+    ],
+    "description": "Express routes that call `res.redirect(req.query.next)` or `res.redirect(req.body.returnUrl)` without validation redirect users to arbitrary external URLs. This enables phishing, credential harvesting via fake login pages, and OAuth redirect-URI bypass chains.",
+    "runtime_discovery": "Enumerate all redirect-triggering endpoints (login, logout, OAuth callbacks). Inject `?next=https://attacker.example.com`, `?redirect_uri=//evil.com`, and URL-encoded variants. Follow or inspect the `Location` header of 3xx responses.",
+    "detection_signal": "HTTP 301/302/303 response with `Location` header containing the injected attacker domain verbatim (e.g., `https://attacker.example.com`). Scanner confirms the reflected URL is not a same-site relative path.",
+    "active_probe": true,
+    "severity": "medium",
+    "prevalence": "common",
+    "slice": "node-express",
+    "uid": "node-express__express-open-redirect",
+    "class_hint": "open-redirect"
+  },
+  {
+    "id": "express-jwt-alg-none",
+    "name": "JWT Algorithm Confusion / 'alg:none' Acceptance",
+    "owasp_category": "A02:2021 Cryptographic Failures",
+    "frameworks": [
+      "express",
+      "jsonwebtoken",
+      "node.js"
+    ],
+    "description": "Libraries such as `jsonwebtoken` prior to fixes (and misconfigured wrappers) that do not pin the accepted algorithm to `RS256`/`HS256` may accept tokens with `alg: none` (unsigned) or allow HS256 when the server expects RS256, enabling an attacker to forge arbitrary claims including admin roles.",
+    "runtime_discovery": "Obtain a valid JWT from the login endpoint. Craft a new token with the header `{\"alg\":\"none\",\"typ\":\"JWT\"}`, sign with an empty string, and send it in the `Authorization` header. Also try switching from RS256 to HS256 signed with the app's public key as the HMAC secret.",
+    "detection_signal": "A 200 response (instead of 401/403) when sending a forged `alg:none` token or an HS256 token signed with the known public key. Auth-differential: the forged token grants the same access level as a legitimately issued token.",
+    "active_probe": true,
+    "severity": "critical",
+    "prevalence": "occasional",
+    "slice": "node-express",
+    "uid": "node-express__express-jwt-alg-none",
+    "class_hint": "jwt"
+  },
+  {
+    "id": "express-nosql-injection-mongodb",
+    "name": "NoSQL Injection via MongoDB Operator Injection",
+    "owasp_category": "A03:2021 Injection",
+    "frameworks": [
+      "express",
+      "mongoose",
+      "mongodb",
+      "node.js"
+    ],
+    "description": "Express apps that pass JSON request body or query parameters directly to Mongoose/MongoDB find queries are vulnerable to operator injection. Replacing a string value with `{\"$gt\": \"\"}` or `{\"$ne\": null}` changes the query semantics, enabling authentication bypass, data extraction, and denial of service.",
+    "runtime_discovery": "For login and search endpoints, replace string fields with JSON operator objects: send `{\"username\": {\"$gt\": \"\"}, \"password\": {\"$gt\": \"\"}}` as the request body. Also test query-string form: `?filter[$ne]=x`. Observe authentication success or unexpected data returned.",
+    "detection_signal": "Login returns a valid session/token (HTTP 200 with auth cookie) when credentials are replaced with `{\"$gt\": \"\"}`, or a search endpoint returns more records than expected with operator-injected parameters. A 500 with a MongoDB error message is also a positive signal revealing the injection point.",
+    "active_probe": true,
+    "severity": "critical",
+    "prevalence": "common",
+    "slice": "node-express",
+    "uid": "node-express__express-nosql-injection-mongodb",
+    "class_hint": "nosqli"
+  },
+  {
+    "id": "express-debug-route-exposed",
+    "name": "Debug / Admin Routes Exposed Without Authentication",
+    "owasp_category": "A05:2021 Security Misconfiguration",
+    "frameworks": [
+      "express",
+      "node.js"
+    ],
+    "description": "Express apps commonly ship debug routes (`/metrics`, `/__health`, `/_debug`, `/admin`, `/api-docs`, `/swagger`, `/graphql`) that expose environment variables, heap snapshots, Prometheus metrics, or full API schemas. Without authentication middleware these are accessible to anyone.",
+    "runtime_discovery": "Enumerate a wordlist of common Express debug/admin path fragments (`/metrics`, `/health`, `/healthz`, `/__status`, `/admin`, `/graphql`, `/api-docs`, `/swagger.json`, `/openapi.json`, `/env`) as unauthenticated requests. Record 200 responses and analyze response bodies.",
+    "detection_signal": "HTTP 200 response to an unauthenticated request to a sensitive path containing Prometheus metric lines (`# HELP`, `# TYPE`), JSON with `process.env`, an OpenAPI schema object (`{\"openapi\":\"3.`), or a GraphQL introspection result (`__schema`).",
+    "active_probe": true,
+    "severity": "high",
+    "prevalence": "common",
+    "slice": "node-express",
+    "uid": "node-express__express-debug-route-exposed",
+    "class_hint": "debug-endpoint"
+  },
+  {
+    "id": "express-idor-sequential-id",
+    "name": "Insecure Direct Object Reference via Sequential / Guessable IDs",
+    "owasp_category": "A01:2021 Broken Access Control",
+    "frameworks": [
+      "express",
+      "node.js",
+      "agnostic"
+    ],
+    "description": "Express REST APIs that expose resources at `/users/:id`, `/orders/:id`, or `/files/:id` with sequential or short numeric IDs allow horizontal privilege escalation when the route handler does not verify that the authenticated user owns the requested ID.",
+    "runtime_discovery": "Auth-differential: Authenticate as User A and record their resource ID (e.g., `/api/users/1042`). Authenticate as User B and attempt to GET/PUT/DELETE User A's resource ID using User B's session token. Compare HTTP status codes and response body contents.",
+    "detection_signal": "User B's authenticated request to User A's resource returns HTTP 200 with User A's data (not a 403). Alternatively, incrementing the numeric ID in a URL returns different users' data with the same session. Response body differs between User A and User B's own resource but is accessible to both.",
+    "active_probe": true,
+    "severity": "high",
+    "prevalence": "ubiquitous",
+    "slice": "node-express",
+    "uid": "node-express__express-idor-sequential-id",
+    "class_hint": "idor-bola"
+  },
+  {
+    "id": "express-rate-limit-bypass",
+    "name": "Rate Limiting Absent or Bypassable on Sensitive Endpoints",
+    "owasp_category": "A04:2021 Insecure Design",
+    "frameworks": [
+      "express",
+      "express-rate-limit",
+      "node.js"
+    ],
+    "description": "Express apps that omit `express-rate-limit` (or similar) on authentication, password-reset, and OTP endpoints allow unlimited brute-force attempts. Even when rate-limiting is applied, misconfigured `keyGenerator` functions using `X-Forwarded-For` as the key allow trivial bypass by spoofing that header.",
+    "runtime_discovery": "Send 50-200 rapid POST requests to `/login`, `/forgot-password`, and `/verify-otp` endpoints. Also send the same burst with varying `X-Forwarded-For: 1.2.3.x` headers to test key-generator bypass. Measure response status codes and time-to-first-429.",
+    "detection_signal": "No HTTP 429 after 50+ rapid identical login attempts, or: a 429 is triggered on the real IP but disappears when `X-Forwarded-For` is rotated. Timing uniformity (no delay increase) across 100 requests also confirms absent rate limiting.",
+    "active_probe": true,
+    "severity": "high",
+    "prevalence": "common",
+    "slice": "node-express",
+    "uid": "node-express__express-rate-limit-bypass",
+    "class_hint": "cmd-injection"
+  },
+  {
+    "id": "express-ssrf-axios-got",
+    "name": "Server-Side Request Forgery via User-Controlled URL in axios / got",
+    "owasp_category": "A10:2021 Server-Side Request Forgery",
+    "frameworks": [
+      "express",
+      "axios",
+      "got",
+      "node-fetch",
+      "node.js"
+    ],
+    "description": "Express routes that accept a URL parameter and pass it to `axios.get(req.query.url)` or `fetch(req.body.endpoint)` without allowlist validation allow SSRF. Attackers can reach internal metadata services (169.254.169.254), Redis, internal APIs, and localhost services not exposed to the internet.",
+    "runtime_discovery": "Identify endpoints that fetch external content (webhook testers, URL preview/screenshot features, import-from-URL flows). Inject internal targets: `http://169.254.169.254/latest/meta-data/`, `http://localhost:6379/`, `http://127.0.0.1:8080/admin`, and a known collaborator URL to confirm out-of-band requests.",
+    "detection_signal": "Response body contains AWS/GCP/Azure cloud metadata content (e.g., `ami-id`, `instance-id`, `iam/security-credentials`). Alternatively, a collaborator server receives an inbound HTTP request from the app's IP after the probe. Or a 200 response with Redis inline protocol text (`+OK`, `-ERR`).",
+    "active_probe": true,
+    "severity": "critical",
+    "prevalence": "common",
+    "slice": "node-express",
+    "uid": "node-express__express-ssrf-axios-got",
+    "class_hint": "ssrf"
+  }
+]

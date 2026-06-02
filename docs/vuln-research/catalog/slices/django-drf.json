@@ -1,0 +1,259 @@
+[
+  {
+    "id": "django-admin-exposed",
+    "name": "Django Admin Interface Publicly Accessible",
+    "owasp_category": "A01:2021 Broken Access Control",
+    "frameworks": [
+      "Django"
+    ],
+    "description": "The Django admin interface (/admin/) is left exposed to the internet without additional access controls such as IP allowlisting or a separate auth layer. An attacker who discovers it can brute-force credentials or exploit any admin-side vulnerabilities.",
+    "runtime_discovery": "Crawl the application for /admin/, /admin/login/, /django-admin/, /staff/. Issue GET requests and observe whether a Django admin login page (HTML containing 'Django administration' or 'django-admin' CSS class) is returned with HTTP 200.",
+    "detection_signal": "HTTP 200 response to GET /admin/login/ with response body containing the string 'Django administration' or a <form> with action='/admin/login/'. Absence of IP-restriction redirect (302 to a deny page) confirms exposure.",
+    "active_probe": true,
+    "severity": "high",
+    "prevalence": "common",
+    "slice": "django-drf",
+    "uid": "django-drf__django-admin-exposed",
+    "class_hint": "cmd-injection"
+  },
+  {
+    "id": "drf-browsable-api-exposed",
+    "name": "DRF Browsable API Exposed in Production",
+    "owasp_category": "A05:2021 Security Misconfiguration",
+    "frameworks": [
+      "Django",
+      "Django REST Framework"
+    ],
+    "description": "Django REST Framework's browsable API renderer is left enabled in production. It exposes full schema discovery, endpoint enumeration, and interactive form-submission UI to any authenticated or unauthenticated visitor.",
+    "runtime_discovery": "Issue GET requests to known API endpoints (e.g. /api/, /api/v1/) with Accept: text/html. If DRF Browsable API is active, the response is a full HTML page with a 'Django REST framework' heading, navigation links, and form inputs for every listed endpoint.",
+    "detection_signal": "HTTP 200 HTML response containing the string 'Django REST framework' in the <title> or <h1> tag, plus a <nav> element listing API routes. Can be triggered just by visiting any DRF endpoint in a browser (Accept: text/html).",
+    "active_probe": true,
+    "severity": "medium",
+    "prevalence": "common",
+    "slice": "django-drf",
+    "uid": "django-drf__drf-browsable-api-exposed",
+    "class_hint": "rate-limit-enum"
+  },
+  {
+    "id": "drf-object-level-authz-bypass",
+    "name": "DRF Missing Object-Level Permission (IDOR via API)",
+    "owasp_category": "A01:2021 Broken Access Control",
+    "frameworks": [
+      "Django REST Framework"
+    ],
+    "description": "DRF views apply view-level permissions (IsAuthenticated) but omit per-object permission checks (get_object() without check_object_permissions()). User A can read or modify objects belonging to User B by substituting the object ID in the URL.",
+    "runtime_discovery": "Authenticate as User A, record object URLs returned from list endpoints (e.g. /api/orders/42/). Re-issue GET/PATCH/DELETE to those URLs while authenticated as User B. Compare HTTP status codes and body content between the two auth contexts.",
+    "detection_signal": "Auth-diff probe: User B (unrelated tenant) receives HTTP 200 with identical body to User A's response for /api/<resource>/<id>/ \u2014 or HTTP 200/204 on PATCH/DELETE that should have been 403. SequenceMatcher similarity > 0.9 between the two bodies flags the finding.",
+    "active_probe": true,
+    "severity": "critical",
+    "prevalence": "ubiquitous",
+    "slice": "django-drf",
+    "uid": "django-drf__drf-object-level-authz-bypass",
+    "class_hint": "idor-bola"
+  },
+  {
+    "id": "django-debug-mode-on",
+    "name": "Django DEBUG=True Enabled in Production",
+    "owasp_category": "A05:2021 Security Misconfiguration",
+    "frameworks": [
+      "Django"
+    ],
+    "description": "Running Django with DEBUG=True in production exposes detailed tracebacks \u2014 including local variable values, settings keys, and installed file paths \u2014 in the HTTP response whenever an unhandled exception occurs.",
+    "runtime_discovery": "Trigger a 500-class error by submitting malformed input (e.g. a non-integer where an integer is expected on any detail URL), appending invalid query parameters, or requesting a non-existent object ID. Observe the response body for a Django yellow debug page.",
+    "detection_signal": "HTTP 500 response body containing 'Django Version', 'Traceback (most recent call last)', 'Request Method', 'Request URL', and 'Settings' sections rendered as HTML. The string 'You're seeing this error because you have DEBUG = True' is a definitive signal.",
+    "active_probe": true,
+    "severity": "high",
+    "prevalence": "common",
+    "slice": "django-drf",
+    "uid": "django-drf__django-debug-mode-on",
+    "class_hint": "debug-endpoint"
+  },
+  {
+    "id": "django-csrf-exempt-api",
+    "name": "Django CSRF Exemption on State-Changing Endpoints",
+    "owasp_category": "A01:2021 Broken Access Control",
+    "frameworks": [
+      "Django",
+      "Django REST Framework"
+    ],
+    "description": "Django views or DRF APIViews decorated with @csrf_exempt (or using SessionAuthentication without enforcing CSRF checks) are vulnerable to Cross-Site Request Forgery. An attacker can forge state-changing requests from a third-party origin.",
+    "runtime_discovery": "Submit a state-changing POST/PUT/DELETE request to a session-authenticated endpoint without a CSRF token (omit X-CSRFToken header and csrfmiddlewaretoken field). If the server returns 200/201/204 instead of 403 Forbidden, CSRF protection is absent.",
+    "detection_signal": "POST request without X-CSRFToken header and without csrfmiddlewaretoken body param returns HTTP 200/201/204 on a session-cookie-authenticated request. A 403 with body 'CSRF verification failed' would indicate protection is active.",
+    "active_probe": true,
+    "severity": "high",
+    "prevalence": "common",
+    "slice": "django-drf",
+    "uid": "django-drf__django-csrf-exempt-api",
+    "class_hint": "csrf"
+  },
+  {
+    "id": "drf-jwt-none-algorithm",
+    "name": "DRF JWT Accepts 'none' Algorithm or Weak Secret",
+    "owasp_category": "A02:2021 Cryptographic Failures",
+    "frameworks": [
+      "Django REST Framework"
+    ],
+    "description": "JWT libraries integrated with DRF (djangorestframework-simplejwt, PyJWT <2.x) may accept tokens signed with the 'none' algorithm or use a weak/default secret, allowing an attacker to forge arbitrary tokens and impersonate any user.",
+    "runtime_discovery": "Obtain a valid JWT from the login endpoint. Decode the payload (base64), modify the 'sub'/'user_id' to another user's ID, re-sign with algorithm='none' (empty signature), and replay to an authenticated endpoint. Alternatively, attempt HMAC brute-force with common secrets ('secret', 'django-insecure-*').",
+    "detection_signal": "An API endpoint returns HTTP 200 with a valid resource belonging to a different user_id when presented with a token whose header specifies 'alg':'none' and has an empty signature segment. Or a token signed with a guessable secret validates successfully.",
+    "active_probe": true,
+    "severity": "critical",
+    "prevalence": "occasional",
+    "slice": "django-drf",
+    "uid": "django-drf__drf-jwt-none-algorithm",
+    "class_hint": "jwt"
+  },
+  {
+    "id": "django-orm-mass-assignment",
+    "name": "DRF Serializer Mass Assignment (Missing read_only / extra_kwargs)",
+    "owasp_category": "A04:2021 Insecure Design",
+    "frameworks": [
+      "Django REST Framework"
+    ],
+    "description": "DRF serializers that do not declare read_only or use fields='__all__' allow clients to write privileged fields (is_staff, role, balance, owner_id) by including them in the POST/PATCH body. The ORM blindly persists whatever the serializer validates.",
+    "runtime_discovery": "Capture a POST/PATCH request to a resource creation/update endpoint. Inject extra fields in the JSON body (e.g. 'is_staff': true, 'role': 'admin', 'owner': <another user id>). Observe the response body or fetch the object afterwards to see if the injected value was persisted.",
+    "detection_signal": "POST/PATCH response body echoes back the injected privileged field with the attacker-supplied value, or a subsequent GET of the resource reflects it. HTTP 201/200 with the submitted value present in the JSON response confirms the finding.",
+    "active_probe": true,
+    "severity": "high",
+    "prevalence": "common",
+    "slice": "django-drf",
+    "uid": "django-drf__django-orm-mass-assignment",
+    "class_hint": "mass-assignment"
+  },
+  {
+    "id": "django-user-enumeration-login",
+    "name": "Django User Enumeration via Login/Password-Reset Timing or Message",
+    "owasp_category": "A07:2021 Identification and Authentication Failures",
+    "frameworks": [
+      "Django"
+    ],
+    "description": "Django's built-in authentication views or custom views often return distinct error messages ('No account found with that email' vs 'Incorrect password') or exhibit measurable response-time differences that allow an attacker to enumerate valid usernames or email addresses.",
+    "runtime_discovery": "Submit login POST requests with a known-valid username and a known-invalid username, comparing response bodies and measuring response times. Repeat for /accounts/password_reset/ with a known email vs a random one and compare redirects or response text.",
+    "detection_signal": "Distinct response bodies between valid and invalid username/email submissions (e.g. 'Enter a correct username' vs 'Please enter a correct username and password'), or a statistically significant timing difference (>100 ms) between responses for existing vs non-existing accounts on repeated measurements.",
+    "active_probe": true,
+    "severity": "medium",
+    "prevalence": "common",
+    "slice": "django-drf",
+    "uid": "django-drf__django-user-enumeration-login",
+    "class_hint": "rate-limit-enum"
+  },
+  {
+    "id": "django-secret-key-exposed",
+    "name": "Django SECRET_KEY Leaked in Response or Headers",
+    "owasp_category": "A02:2021 Cryptographic Failures",
+    "frameworks": [
+      "Django"
+    ],
+    "description": "The Django SECRET_KEY is used to sign sessions, CSRF tokens, and password-reset links. If it is accidentally echoed in a debug traceback, a verbose error JSON, a config-dump endpoint, or an /api/settings/ endpoint, an attacker can forge any session cookie or CSRF token.",
+    "runtime_discovery": "Crawl the application for config-dump or settings-exposure endpoints (/api/settings/, /debug/, /env/). Trigger 500 errors via malformed input and inspect tracebacks. Search all observed responses for patterns matching Django's insecure key format or high-entropy 50-character strings.",
+    "detection_signal": "Response body containing a string matching the regex `django-insecure-[a-z0-9!@#$%^&*()]{40,}` or a JSON key named 'SECRET_KEY' with a high-entropy value. Also fires when the Django debug page HTML includes 'SECRET_KEY' in the Settings table.",
+    "active_probe": true,
+    "severity": "critical",
+    "prevalence": "occasional",
+    "slice": "django-drf",
+    "uid": "django-drf__django-secret-key-exposed",
+    "class_hint": "csrf"
+  },
+  {
+    "id": "drf-pagination-off-bola",
+    "name": "DRF List Endpoint Returns All Objects Across Tenants (Missing Queryset Scoping)",
+    "owasp_category": "A01:2021 Broken Access Control",
+    "frameworks": [
+      "Django REST Framework"
+    ],
+    "description": "DRF list views that call Model.objects.all() without filtering by the authenticated user's tenant/ownership return every object in the database to any authenticated user. This is a data-leak variant of BOLA often missed because no ID manipulation is needed.",
+    "runtime_discovery": "Authenticate as User A and call a list endpoint (GET /api/users/, /api/orders/). Note object IDs returned. Authenticate as User B (different tenant) and call the same endpoint. Compare the two response bodies for cross-tenant objects appearing in both lists.",
+    "detection_signal": "Auth-diff: response bodies for User A and User B on the same list endpoint share one or more object IDs or contain objects whose owner/tenant field belongs to the other user. Body similarity > 0.5 with cross-tenant objects present is a strong signal.",
+    "active_probe": true,
+    "severity": "critical",
+    "prevalence": "common",
+    "slice": "django-drf",
+    "uid": "django-drf__drf-pagination-off-bola",
+    "class_hint": "idor-bola"
+  },
+  {
+    "id": "django-cors-wildcard-credentials",
+    "name": "Django CORS Wildcard with credentials=true (django-cors-headers Misconfiguration)",
+    "owasp_category": "A05:2021 Security Misconfiguration",
+    "frameworks": [
+      "Django"
+    ],
+    "description": "django-cors-headers misconfigured with CORS_ALLOW_ALL_ORIGINS=True alongside CORS_ALLOW_CREDENTIALS=True violates the CORS spec expectation, but some browsers/proxies still honour it, and it indicates that the server will issue Access-Control-Allow-Origin: <reflected origin> with credentials allowed, enabling cross-origin cookie theft.",
+    "runtime_discovery": "Issue a preflight OPTIONS request to an API endpoint with an arbitrary Origin header (e.g. Origin: https://evil.example.com). Inspect the response headers for Access-Control-Allow-Origin and Access-Control-Allow-Credentials values.",
+    "detection_signal": "OPTIONS response includes both Access-Control-Allow-Origin: https://evil.example.com (origin reflected or wildcard *) AND Access-Control-Allow-Credentials: true. Wildcard with credentials is the highest-severity variant; reflected arbitrary origin with credentials also flags.",
+    "active_probe": true,
+    "severity": "high",
+    "prevalence": "common",
+    "slice": "django-drf",
+    "uid": "django-drf__django-cors-wildcard-credentials",
+    "class_hint": "cors"
+  },
+  {
+    "id": "django-admin-custom-actions-unauth",
+    "name": "Django Admin Custom Action Without Superuser Check",
+    "owasp_category": "A01:2021 Broken Access Control",
+    "frameworks": [
+      "Django"
+    ],
+    "description": "Django admin custom actions registered via ModelAdmin.actions do not inherit superuser-only constraints by default. A staff user with limited permissions can invoke bulk-action endpoints directly if the action handler does not call has_permission().",
+    "runtime_discovery": "Log in to /admin/ as a non-superuser staff account. Discover custom action names from the admin changelist HTML (they appear in the <select name='action'> dropdown). POST to the changelist URL with action=<action_name>&_selected_action[]=<id> to invoke the action directly.",
+    "detection_signal": "POST to /admin/<app>/<model>/ with action=<custom_action> and a selected object ID returns HTTP 302 (success redirect) rather than 403 when submitted under a staff-but-not-superuser session. The resulting database state change (observable via GET afterwards) confirms execution.",
+    "active_probe": true,
+    "severity": "high",
+    "prevalence": "occasional",
+    "slice": "django-drf",
+    "uid": "django-drf__django-admin-custom-actions-unauth",
+    "class_hint": "other"
+  },
+  {
+    "id": "drf-host-header-injection",
+    "name": "Django Password-Reset Poisoning via Host Header Injection",
+    "owasp_category": "A01:2021 Broken Access Control",
+    "frameworks": [
+      "Django"
+    ],
+    "description": "Django's password-reset flow uses the Host header to construct the reset link URL. If ALLOWED_HOSTS is misconfigured or the load balancer passes an attacker-controlled Host header, the emailed link points to an attacker domain, allowing token theft.",
+    "runtime_discovery": "Submit a POST to /accounts/password_reset/ (or equivalent) with a spoofed Host header (Host: evil.example.com) and an email address you control. Examine the received password-reset email to see if the link domain matches the injected Host value.",
+    "detection_signal": "The application accepts the POST and returns HTTP 200/302 without rejecting the spoofed Host value (no 400 Bad Request or SuspiciousOperation response). Confirmation requires observing the emailed link, but the absence of host validation in the HTTP response is the runtime-observable signal.",
+    "active_probe": true,
+    "severity": "high",
+    "prevalence": "common",
+    "slice": "django-drf",
+    "uid": "django-drf__drf-host-header-injection",
+    "class_hint": "cmd-injection"
+  },
+  {
+    "id": "drf-verbose-400-orm-field-leak",
+    "name": "DRF 400 Validation Errors Leaking ORM Field Names and Choices",
+    "owasp_category": "A05:2021 Security Misconfiguration",
+    "frameworks": [
+      "Django REST Framework"
+    ],
+    "description": "DRF serializer validation errors returned verbatim to clients expose internal model field names, ForeignKey targets, and choice labels that were never intended to be part of the public API contract, aiding attacker enumeration and mass-assignment attacks.",
+    "runtime_discovery": "Submit a POST/PATCH request with intentionally invalid or missing required fields and observe the 400 response JSON. Look for field names, choice lists, or relational identifiers (e.g. 'user_id', 'tenant_uuid') in the error detail keys that are not documented in the public API spec.",
+    "detection_signal": "HTTP 400 JSON response body with a top-level key structure mirroring the serializer's field names. Error messages like 'Invalid pk \\\"X\\\" - object does not exist' reveal FK field names and table existence. Presence of undocumented field names in error keys compared to the published OpenAPI schema is the flag.",
+    "active_probe": true,
+    "severity": "low",
+    "prevalence": "ubiquitous",
+    "slice": "django-drf",
+    "uid": "django-drf__drf-verbose-400-orm-field-leak",
+    "class_hint": "mass-assignment"
+  },
+  {
+    "id": "django-session-fixation-no-rotation",
+    "name": "Django Session ID Not Rotated After Login",
+    "owasp_category": "A07:2021 Identification and Authentication Failures",
+    "frameworks": [
+      "Django"
+    ],
+    "description": "If Django's login view does not call request.session.cycle_key() (or uses a custom auth flow that skips session rotation), a pre-authentication session ID remains valid post-login, enabling session fixation attacks.",
+    "runtime_discovery": "Capture the session cookie value from a GET to the login page (unauthenticated). Submit valid credentials via POST /login/. Compare the Set-Cookie session value in the POST response to the pre-login session value. If they are identical, session fixation is present.",
+    "detection_signal": "The sessionid cookie value in the POST /login/ response Set-Cookie header matches the sessionid cookie that was issued on the unauthenticated GET to /login/. Session rotation would produce a different sessionid value after successful authentication.",
+    "active_probe": true,
+    "severity": "medium",
+    "prevalence": "occasional",
+    "slice": "django-drf",
+    "uid": "django-drf__django-session-fixation-no-rotation",
+    "class_hint": "session"
+  }
+]

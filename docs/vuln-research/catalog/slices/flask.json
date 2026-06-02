@@ -1,0 +1,267 @@
+[
+  {
+    "id": "flask-jinja2-ssti",
+    "name": "Jinja2 Server-Side Template Injection (SSTI)",
+    "owasp_category": "A03:2021 Injection",
+    "frameworks": [
+      "Flask",
+      "Jinja2"
+    ],
+    "description": "User-controlled input is rendered directly through Jinja2's template engine, allowing an attacker to execute arbitrary Python expressions. A payload like {{7*7}} evaluates to 49 in the response body, and escalation payloads can reach os.popen() for RCE.",
+    "runtime_discovery": "Inject SSTI probe strings ({{7*7}}, ${7*7}, #{7*7}) into every text input, query parameter, URL path segment, HTTP header, and cookie value. Observe response body for evaluated arithmetic. Follow up with class-chain payloads for RCE confirmation.",
+    "detection_signal": "Response body contains the literal evaluated result of the arithmetic probe (e.g., '49' when '{{7*7}}' was submitted). Distinct from XSS because the evaluation happens server-side before HTML rendering.",
+    "active_probe": true,
+    "severity": "critical",
+    "prevalence": "common",
+    "slice": "flask",
+    "uid": "flask__flask-jinja2-ssti",
+    "class_hint": "ssti"
+  },
+  {
+    "id": "flask-debug-mode-exposed",
+    "name": "Flask Werkzeug Debugger Exposed in Production",
+    "owasp_category": "A05:2021 Security Misconfiguration",
+    "frameworks": [
+      "Flask",
+      "Werkzeug"
+    ],
+    "description": "When Flask runs with DEBUG=True, the Werkzeug interactive debugger is accessible at any unhandled exception URL and at /__debugger__. It exposes a Python REPL protected only by a PIN that can be bruteforced or read from server logs, enabling full RCE.",
+    "runtime_discovery": "Trigger a 500 error by sending malformed input or accessing a nonexistent route. Observe whether the response contains the Werkzeug interactive traceback UI (HTML with 'Werkzeug Debugger' heading or the console icon). Also probe GET /__debugger__ and /console.",
+    "detection_signal": "HTTP 500 response body contains 'Werkzeug Debugger', 'Traceback (most recent call last)', interactive console iframe, or the response contains 'X-Werkzeug-Debugger' header. The /__debugger__ endpoint returns 200.",
+    "active_probe": true,
+    "severity": "critical",
+    "prevalence": "occasional",
+    "slice": "flask",
+    "uid": "flask__flask-debug-mode-exposed",
+    "class_hint": "cmd-injection"
+  },
+  {
+    "id": "flask-session-cookie-unsigned",
+    "name": "Flask Session Cookie Signed with Weak or Default SECRET_KEY",
+    "owasp_category": "A02:2021 Cryptographic Failures",
+    "frameworks": [
+      "Flask"
+    ],
+    "description": "Flask signs session cookies with HMAC-SHA1 using SECRET_KEY. If SECRET_KEY is a common default ('dev', 'secret', 'flask', empty string) or short, an attacker can forge arbitrary session payloads\u2014escalating privileges, impersonating other users, or bypassing authentication.",
+    "runtime_discovery": "Capture the session cookie (format: base64.base64.signature). Decode the header+payload (base64 with URL-safe alphabet, no padding). Attempt to re-sign with a wordlist of known weak keys using flask-unsign or manual HMAC. Submit the forged cookie and observe whether the application accepts the modified session data.",
+    "detection_signal": "A re-signed cookie containing {'role':'admin'} or an elevated user ID is accepted by the server with HTTP 200 and admin-level response content, rather than HTTP 401/403 or a session error page.",
+    "active_probe": true,
+    "severity": "critical",
+    "prevalence": "common",
+    "slice": "flask",
+    "uid": "flask__flask-session-cookie-unsigned",
+    "class_hint": "session"
+  },
+  {
+    "id": "flask-session-cookie-none-algo",
+    "name": "Flask itsdangerous Algorithm Confusion (alg:none / RS\u2192HS)",
+    "owasp_category": "A02:2021 Cryptographic Failures",
+    "frameworks": [
+      "Flask",
+      "itsdangerous"
+    ],
+    "description": "Older versions of itsdangerous and misconfigured JWT libraries used alongside Flask are susceptible to algorithm confusion: setting the algorithm to 'none' or switching from RS256 to HS256 (using the public key as the HMAC secret) can allow unsigned tokens to be accepted.",
+    "runtime_discovery": "Decode the session cookie or JWT. Craft a variant with the algorithm header changed to 'none' and the signature stripped. Submit to all authenticated endpoints and observe whether the server accepts the unsigned token.",
+    "detection_signal": "An unsigned (alg:none) or algorithm-swapped token is accepted by the server (HTTP 200 with user-specific content, no redirect to login), indicating the server does not enforce algorithm validation.",
+    "active_probe": true,
+    "severity": "high",
+    "prevalence": "occasional",
+    "slice": "flask",
+    "uid": "flask__flask-session-cookie-none-algo",
+    "class_hint": "jwt"
+  },
+  {
+    "id": "flask-open-redirect",
+    "name": "Open Redirect via next / redirect_to Parameter",
+    "owasp_category": "A01:2021 Broken Access Control",
+    "frameworks": [
+      "Flask"
+    ],
+    "description": "Flask login views commonly read a 'next' or 'redirect_to' query parameter to redirect after authentication. Without validation that the target is an internal path, an attacker can craft a login URL that redirects users to a phishing site after successful login.",
+    "runtime_discovery": "Submit GET /login?next=https://evil.example.com and complete authentication (or observe the redirect even unauthenticated). Check Location header in HTTP 302 response for the external host. Fuzz variations: //evil.example.com, /\\evil.example.com, %0d%0ahttps://evil.example.com.",
+    "detection_signal": "HTTP 302 response with Location header pointing to the attacker-supplied external domain (not just the path). Response does not normalize or reject absolute URLs with external hostnames.",
+    "active_probe": true,
+    "severity": "medium",
+    "prevalence": "common",
+    "slice": "flask",
+    "uid": "flask__flask-open-redirect",
+    "class_hint": "open-redirect"
+  },
+  {
+    "id": "flask-idor-numeric-id",
+    "name": "Insecure Direct Object Reference on Flask Route Parameters",
+    "owasp_category": "A01:2021 Broken Access Control",
+    "frameworks": [
+      "Flask"
+    ],
+    "description": "Flask REST routes like /api/users/<int:id>/profile expose numeric or UUID resource identifiers directly. Without ownership checks, any authenticated user can read or modify another user's resource by incrementing or guessing the ID.",
+    "runtime_discovery": "Authenticate as user A, record the ID used in API calls (e.g., /api/orders/1042). Authenticate as user B in a parallel session. From user B's session, request user A's resource URL. Compare response bodies: if user B receives user A's private data with HTTP 200, IDOR is confirmed.",
+    "detection_signal": "Auth-differential check: user B's session retrieves user A's resource with HTTP 200 and identical private data fields (email, address, order details). Expected behavior: HTTP 403 or sanitized/empty response.",
+    "active_probe": true,
+    "severity": "high",
+    "prevalence": "ubiquitous",
+    "slice": "flask",
+    "uid": "flask__flask-idor-numeric-id",
+    "class_hint": "idor-bola"
+  },
+  {
+    "id": "flask-missing-csrf-protection",
+    "name": "Missing CSRF Protection on State-Changing Flask Endpoints",
+    "owasp_category": "A01:2021 Broken Access Control",
+    "frameworks": [
+      "Flask",
+      "Flask-WTF"
+    ],
+    "description": "Flask views that handle POST/PUT/DELETE without Flask-WTF CSRF tokens or custom header checks are vulnerable to cross-site request forgery. An attacker can trick authenticated users into submitting malicious forms.",
+    "runtime_discovery": "For each state-changing form or AJAX endpoint, submit the POST request without the CSRF token field (or with a tampered token). Observe whether the server accepts the request (HTTP 200/302) or rejects it (HTTP 400/403). Also check for missing SameSite cookie attribute.",
+    "detection_signal": "POST request without csrf_token field (or with token set to empty string) returns HTTP 200 or 302 with a success response body, instead of HTTP 400/403 with a CSRF validation error.",
+    "active_probe": true,
+    "severity": "high",
+    "prevalence": "common",
+    "slice": "flask",
+    "uid": "flask__flask-missing-csrf-protection",
+    "class_hint": "csrf"
+  },
+  {
+    "id": "flask-jinja2-xss-autoescape-off",
+    "name": "Reflected XSS via Jinja2 Autoescape Disabled",
+    "owasp_category": "A03:2021 Injection",
+    "frameworks": [
+      "Flask",
+      "Jinja2"
+    ],
+    "description": "Flask/Jinja2 disables autoescaping by default for non-.html templates and for any template where the developer calls render_template_string() with |safe or autoescape=False. User input echoed in such templates is reflected without HTML encoding, enabling XSS.",
+    "runtime_discovery": "Inject standard XSS probe strings (<script>alert(1)</script>, <img src=x onerror=alert(1)>) into all input vectors (form fields, query params, URL path, headers that get echoed). Check whether the probe is reflected in the response body without encoding.",
+    "detection_signal": "Response body contains the unencoded probe string (literal < and > characters not converted to &lt;/&gt;), and the Content-Type is text/html. Script tag or event handler appears verbatim in the DOM.",
+    "active_probe": true,
+    "severity": "high",
+    "prevalence": "common",
+    "slice": "flask",
+    "uid": "flask__flask-jinja2-xss-autoescape-off",
+    "class_hint": "ssti"
+  },
+  {
+    "id": "flask-debug-pin-bruteforce",
+    "name": "Werkzeug Debug PIN Derivable from Exposed System Info",
+    "owasp_category": "A05:2021 Security Misconfiguration",
+    "frameworks": [
+      "Flask",
+      "Werkzeug"
+    ],
+    "description": "The Werkzeug debug PIN is deterministically computed from the machine's MAC address, /etc/machine-id, and Python module path. When any of these are exposed (e.g., through LFI, /proc endpoint, error traces, or SSRF), the PIN can be computed offline and used to unlock the interactive console.",
+    "runtime_discovery": "After confirming debug mode is active, probe for LFI or path traversal to read /proc/net/arp, /proc/self/cgroup, /etc/machine-id, /sys/class/net/eth0/address. Also check whether error tracebacks expose the Flask app's filesystem path. Combine gathered values to compute the PIN formula offline.",
+    "detection_signal": "HTTP 500 traceback response exposes absolute filesystem path of the Flask app (e.g., '/home/app/app.py'). Additional LFI or SSRF probe returns /etc/machine-id or MAC address content, providing all ingredients for PIN derivation.",
+    "active_probe": true,
+    "severity": "critical",
+    "prevalence": "occasional",
+    "slice": "flask",
+    "uid": "flask__flask-debug-pin-bruteforce",
+    "class_hint": "ssrf"
+  },
+  {
+    "id": "flask-path-traversal",
+    "name": "Path Traversal via Flask send_file / Custom File Serving",
+    "owasp_category": "A01:2021 Broken Access Control",
+    "frameworks": [
+      "Flask"
+    ],
+    "description": "Flask endpoints that construct file paths from user input and pass them to send_file() or open() without normalization are vulnerable to directory traversal. An attacker can read arbitrary files by supplying ../../etc/passwd as the filename parameter.",
+    "runtime_discovery": "Locate file-download or static-serving endpoints (e.g., /download?file=report.pdf, /static/user-files/<name>). Submit path traversal payloads: ../../../etc/passwd, ..%2F..%2F..%2Fetc%2Fpasswd, and URL-double-encoded variants. Observe whether the response contains file content from outside the intended directory.",
+    "detection_signal": "Response body contains root: or /bin/bash (from /etc/passwd), or known sensitive file content (application.cfg, .env). HTTP status is 200 and Content-Type matches the served file type.",
+    "active_probe": true,
+    "severity": "high",
+    "prevalence": "common",
+    "slice": "flask",
+    "uid": "flask__flask-path-traversal",
+    "class_hint": "path-traversal"
+  },
+  {
+    "id": "flask-sqli-via-raw-query",
+    "name": "SQL Injection in Flask/SQLAlchemy Raw Query",
+    "owasp_category": "A03:2021 Injection",
+    "frameworks": [
+      "Flask",
+      "SQLAlchemy",
+      "Flask-SQLAlchemy"
+    ],
+    "description": "Flask apps using db.engine.execute() or text() with f-strings or % formatting instead of bound parameters are vulnerable to SQL injection. This commonly appears in search endpoints and filter parameters.",
+    "runtime_discovery": "Inject SQL probe payloads into search/filter query parameters and form fields: single quote ('), OR 1=1--, UNION SELECT NULL--, sleep(5). Observe for HTTP 500 database errors, response content changes, or response timing anomalies (for blind SQLi).",
+    "detection_signal": "HTTP 500 response containing SQLAlchemy stack trace or database error message (e.g., 'sqlalchemy.exc.OperationalError', 'ProgrammingError', 'syntax error near'); OR boolean-based response body differs between ' OR '1'='1 and ' OR '1'='2; OR timing-based probe (sleep/pg_sleep) causes measurable response delay.",
+    "active_probe": true,
+    "severity": "critical",
+    "prevalence": "common",
+    "slice": "flask",
+    "uid": "flask__flask-sqli-via-raw-query",
+    "class_hint": "sqli"
+  },
+  {
+    "id": "flask-cors-misconfiguration",
+    "name": "Flask-CORS Wildcard or Credential-Permissive Misconfiguration",
+    "owasp_category": "A05:2021 Security Misconfiguration",
+    "frameworks": [
+      "Flask",
+      "Flask-CORS"
+    ],
+    "description": "Flask apps using Flask-CORS with CORS(app, origins='*', supports_credentials=True) or dynamically reflecting the Origin header allow any website to make credentialed cross-origin requests, enabling CSRF-like attacks against authenticated API endpoints.",
+    "runtime_discovery": "Send requests to API endpoints with a crafted Origin: https://evil.example.com header. Inspect the response for Access-Control-Allow-Origin: https://evil.example.com and Access-Control-Allow-Credentials: true together. Also check for * on the allow-origin header.",
+    "detection_signal": "Response headers contain both Access-Control-Allow-Origin matching the supplied attacker origin (not *) AND Access-Control-Allow-Credentials: true simultaneously, or Access-Control-Allow-Origin: * on endpoints that set authentication cookies.",
+    "active_probe": true,
+    "severity": "high",
+    "prevalence": "common",
+    "slice": "flask",
+    "uid": "flask__flask-cors-misconfiguration",
+    "class_hint": "cors"
+  },
+  {
+    "id": "flask-session-fixation",
+    "name": "Session Fixation \u2014 Session Not Rotated After Login",
+    "owasp_category": "A07:2021 Identification and Authentication Failures",
+    "frameworks": [
+      "Flask",
+      "Flask-Login"
+    ],
+    "description": "Flask apps that do not call login_user() with a fresh session (or manually issue session.clear() before setting user data) retain the pre-login session ID after authentication. An attacker who plants a session cookie on a victim can hijack the session after the victim logs in.",
+    "runtime_discovery": "Record the session cookie value before login. Submit valid credentials. Record the session cookie value after login. Compare the two values: if they are identical, the session was not rotated and the app is vulnerable to fixation.",
+    "detection_signal": "The Set-Cookie header value for the session cookie is identical in the pre-authentication response and the post-authentication redirect response. No new session identifier is issued upon successful login.",
+    "active_probe": true,
+    "severity": "medium",
+    "prevalence": "occasional",
+    "slice": "flask",
+    "uid": "flask__flask-session-fixation",
+    "class_hint": "session"
+  },
+  {
+    "id": "flask-exposed-config-endpoint",
+    "name": "Flask Configuration / Environment Disclosure via Debug Endpoints",
+    "owasp_category": "A05:2021 Security Misconfiguration",
+    "frameworks": [
+      "Flask"
+    ],
+    "description": "Flask apps in debug mode or with flask-debugtoolbar/flask-admin carelessly mounted expose routes that leak the full application config (SECRET_KEY, DATABASE_URI, API keys) via JSON or HTML responses at well-known paths.",
+    "runtime_discovery": "Enumerate common Flask debug/admin paths: /_flask_debug, /admin, /config, /_debug_toolbar, /api/config, /env, /debug. Also check for Flask-Admin at /admin/ and flask-debugtoolbar JavaScript asset inclusion in page source which indicates the toolbar is active.",
+    "detection_signal": "HTTP 200 response body contains 'SECRET_KEY', 'DATABASE_URL', 'SQLALCHEMY_DATABASE_URI', or other uppercase Flask config keys in JSON or HTML. Flask-Admin panel loads without authentication requirement.",
+    "active_probe": true,
+    "severity": "critical",
+    "prevalence": "occasional",
+    "slice": "flask",
+    "uid": "flask__flask-exposed-config-endpoint",
+    "class_hint": "debug-endpoint"
+  },
+  {
+    "id": "flask-insecure-cookie-flags",
+    "name": "Flask Session Cookie Missing Secure / HttpOnly / SameSite Flags",
+    "owasp_category": "A02:2021 Cryptographic Failures",
+    "frameworks": [
+      "Flask"
+    ],
+    "description": "Flask's default session cookie configuration omits the Secure flag (allowing transmission over HTTP), HttpOnly flag (allowing JavaScript access), and SameSite=Strict/Lax (allowing cross-site submission). Misconfigured cookies enable session theft via network sniffing, XSS, or CSRF.",
+    "runtime_discovery": "Observe Set-Cookie headers in login and any authenticated response. Parse cookie attributes: check for absence of 'Secure', 'HttpOnly', or 'SameSite' directives. Also check that session cookies are not flagged with SameSite=None without Secure.",
+    "detection_signal": "Set-Cookie header for the session cookie is missing one or more of: Secure attribute (cookie transmitted over HTTP); HttpOnly attribute (not present in the header string); SameSite=Lax or Strict (absent or set to None without Secure). Observable purely from response header inspection with no active probing needed.",
+    "active_probe": false,
+    "severity": "medium",
+    "prevalence": "common",
+    "slice": "flask",
+    "uid": "flask__flask-insecure-cookie-flags",
+    "class_hint": "xss"
+  }
+]

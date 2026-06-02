@@ -1,0 +1,259 @@
+[
+  {
+    "id": "nextjs-api-route-missing-method-check",
+    "name": "Next.js API Route Missing HTTP Method Guard",
+    "owasp_category": "A01:2021 Broken Access Control",
+    "frameworks": [
+      "Next.js"
+    ],
+    "description": "Next.js API route handlers (`pages/api/*.js` or `app/api/*/route.ts`) that do not check `req.method` accept every HTTP verb. A DELETE or PUT sent where only GET was intended can trigger unintended mutations, data deletion, or privilege escalation without any authentication bypass.",
+    "runtime_discovery": "For each discovered API endpoint (crawled from HTML, JS bundles, or sitemap), replay the request with all HTTP verbs (GET, POST, PUT, PATCH, DELETE, HEAD, OPTIONS). Compare status codes and response bodies across verbs. A 200 or 201 on a destructive verb that should return 405 is a confirmed finding.",
+    "detection_signal": "HTTP 200/201/204 on DELETE, PUT, or PATCH to an endpoint where only GET/POST was observed in normal app traffic; response body indicates state change (e.g., `{\"deleted\":true}`, `{\"updated\":true}`).",
+    "active_probe": true,
+    "severity": "high",
+    "prevalence": "common",
+    "slice": "nextjs",
+    "uid": "nextjs__nextjs-api-route-missing-method-check",
+    "class_hint": "bfla"
+  },
+  {
+    "id": "nextjs-api-route-unprotected-auth",
+    "name": "Next.js API Route Unauthenticated Access (Missing Session Check)",
+    "owasp_category": "A01:2021 Broken Access Control",
+    "frameworks": [
+      "Next.js"
+    ],
+    "description": "API routes under `pages/api/` or `app/api/` that forget to validate the session/JWT before reading or writing data are fully accessible anonymously. This is extremely common in Next.js apps where auth is handled ad-hoc per route rather than via middleware.",
+    "runtime_discovery": "Replay every API request observed during an authenticated crawl session, but strip the session cookie / Authorization header. Compare response: if the unauthenticated replay returns the same 200 with data as the authenticated version, the route is unprotected. Enumerate additional routes by fuzzing common Next.js patterns (`/api/user`, `/api/me`, `/api/admin/users`, `/api/dashboard`).",
+    "detection_signal": "HTTP 200 with non-empty JSON body on an API route when the Authorization / Cookie header is absent or replaced with an invalid token; auth-diff between user-A session and no-session returns identical payload.",
+    "active_probe": true,
+    "severity": "critical",
+    "prevalence": "common",
+    "slice": "nextjs",
+    "uid": "nextjs__nextjs-api-route-unprotected-auth",
+    "class_hint": "jwt"
+  },
+  {
+    "id": "nextjs-middleware-bypass-x-middleware-subrequest",
+    "name": "Next.js Middleware Auth Bypass via `x-middleware-subrequest` Header (CVE-2025-29927)",
+    "owasp_category": "A01:2021 Broken Access Control",
+    "frameworks": [
+      "Next.js"
+    ],
+    "description": "Next.js versions before 15.2.3 / 14.2.25 trust the internal `x-middleware-subrequest` header to skip middleware re-execution. An external attacker who sends this header can bypass all `middleware.ts` auth/redirect logic \u2014 including JWT validation and role checks \u2014 and reach protected routes directly.",
+    "runtime_discovery": "For every route that redirects unauthenticated requests (observed as 302/307 during an anonymous crawl), replay the request adding the header `x-middleware-subrequest: middleware` (or `pages/_middleware`). If the response changes from a redirect to a 200 with protected content, the middleware is bypassed.",
+    "detection_signal": "Route previously returning HTTP 302/307 redirect to `/login` now returns HTTP 200 with protected page content when `x-middleware-subrequest: middleware` header is present; `x-powered-by: Next.js` header confirms Next.js stack.",
+    "active_probe": true,
+    "severity": "critical",
+    "prevalence": "common",
+    "slice": "nextjs",
+    "uid": "nextjs__nextjs-middleware-bypass-x-middleware-subrequest",
+    "class_hint": "jwt"
+  },
+  {
+    "id": "nextjs-server-action-idor",
+    "name": "Next.js Server Action IDOR / Missing Ownership Check",
+    "owasp_category": "A01:2021 Broken Access Control",
+    "frameworks": [
+      "Next.js"
+    ],
+    "description": "Next.js Server Actions (App Router `'use server'` functions) are exposed as POST endpoints to `/__nextjs_original-stack-frames` or as bound action IDs. When the action accepts a resource ID from the request body without verifying ownership, any authenticated user can manipulate another user's data by replaying the action with a different ID.",
+    "runtime_discovery": "Intercept form submissions that trigger server actions (identified by `Next-Action` request header or form `action` attribute pointing to the same URL with a POST). Replay the same POST as a second authenticated user (auth-diff), or enumerate adjacent integer/UUID IDs in the action payload. Compare responses for data leakage or modification success.",
+    "detection_signal": "POST to page URL with `Next-Action: <action-id>` header; substituting a resource ID belonging to another user returns HTTP 200 with that user's data or a success confirmation instead of a 403/404.",
+    "active_probe": true,
+    "severity": "high",
+    "prevalence": "common",
+    "slice": "nextjs",
+    "uid": "nextjs__nextjs-server-action-idor",
+    "class_hint": "idor-bola"
+  },
+  {
+    "id": "nextjs-rsc-sensitive-data-in-client-component",
+    "name": "Next.js RSC Sensitive Props Leaked to Client Bundle",
+    "owasp_category": "A02:2021 Cryptographic Failures",
+    "frameworks": [
+      "Next.js"
+    ],
+    "description": "React Server Components that pass sensitive data (API keys, user PII, internal config) as props to Client Components cause that data to be serialized into the RSC payload and embedded in the HTML or a `__NEXT_DATA__` script tag, making it visible to any browser user.",
+    "runtime_discovery": "Crawl pages and inspect inline `<script id='__NEXT_DATA__'>` JSON and `__RSC_MANIFEST__` blocks in the HTML source. Also fetch `/_next/static/chunks/*.js` and search for high-entropy strings, email patterns, internal URLs, or secret-shaped tokens. No authentication needed for publicly accessible pages.",
+    "detection_signal": "Regex match for API key patterns (e.g., `sk-`, `AKIA`, `ghp_`), internal hostnames, or PII inside `__NEXT_DATA__` JSON blob or `_next/static` JS chunks; or RSC flight payload (`text/x-component`) containing credential-shaped strings.",
+    "active_probe": false,
+    "severity": "high",
+    "prevalence": "occasional",
+    "slice": "nextjs",
+    "uid": "nextjs__nextjs-rsc-sensitive-data-in-client-component",
+    "class_hint": "secrets-exposure"
+  },
+  {
+    "id": "nextjs-open-redirect-redirect-api",
+    "name": "Next.js Open Redirect in API Route or `next.config.js` Redirects",
+    "owasp_category": "A01:2021 Broken Access Control",
+    "frameworks": [
+      "Next.js"
+    ],
+    "description": "API routes that call `res.redirect(req.query.returnUrl)` without validating the destination, or `next.config.js` redirect rules with insufficiently anchored `source` patterns, can be abused to redirect users to attacker-controlled domains for phishing.",
+    "runtime_discovery": "Enumerate query parameters named `redirect`, `return`, `returnUrl`, `next`, `url`, `continue`, `goto` across all API routes and pages. Inject `https://evil.com` and observe the Location header in the response. Also fuzz the `destination` parameter on any observed `/api/auth/*` (e.g., NextAuth callback URLs).",
+    "detection_signal": "HTTP 302/307/308 response with `Location: https://evil.com` (or any external domain not in the app's allowlist) after injecting an external URL into a redirect-shaped query parameter.",
+    "active_probe": true,
+    "severity": "medium",
+    "prevalence": "common",
+    "slice": "nextjs",
+    "uid": "nextjs__nextjs-open-redirect-redirect-api",
+    "class_hint": "cmd-injection"
+  },
+  {
+    "id": "nextjs-ssrf-via-server-side-fetch",
+    "name": "Next.js SSR/API Route SSRF via User-Controlled URL",
+    "owasp_category": "A10:2021 Server-Side Request Forgery",
+    "frameworks": [
+      "Next.js"
+    ],
+    "description": "SSR pages and API routes that use `fetch()`, `axios`, or `node:http` with a URL derived from query parameters or request body without allowlist validation can be coerced into making requests to internal services (metadata endpoints, Redis, Postgres, internal dashboards).",
+    "runtime_discovery": "Identify parameters that appear to control upstream URLs (e.g., `?url=`, `?src=`, `?endpoint=`, `?host=`, `?proxy=`). Inject `http://169.254.169.254/latest/meta-data/` (AWS IMDSv1), `http://localhost:6379` (Redis), and `http://169.254.169.254/computeMetadata/v1/` (GCP). Measure response time difference vs. a known-unreachable host for blind SSRF. Observe response body for internal data.",
+    "detection_signal": "Response body contains AWS instance metadata structure, Redis RESP protocol bytes, or internal JSON not matching public API contracts; OR >2 s response time delta compared to baseline when injecting non-routable IPs (blind SSRF timing signal).",
+    "active_probe": true,
+    "severity": "critical",
+    "prevalence": "occasional",
+    "slice": "nextjs",
+    "uid": "nextjs__nextjs-ssrf-via-server-side-fetch",
+    "class_hint": "ssrf"
+  },
+  {
+    "id": "nextjs-cors-wildcard-api-routes",
+    "name": "Next.js API Route Overly Permissive CORS",
+    "owasp_category": "A05:2021 Security Misconfiguration",
+    "frameworks": [
+      "Next.js"
+    ],
+    "description": "API routes that set `Access-Control-Allow-Origin: *` or reflect the `Origin` header unconditionally (including `Access-Control-Allow-Credentials: true`) allow cross-site requests from any origin, enabling cross-origin data theft when combined with session cookies.",
+    "runtime_discovery": "Send an OPTIONS preflight and a credentialed cross-origin GET/POST to each API route with `Origin: https://evil.example.com`. Inspect response headers. If `Access-Control-Allow-Origin` echoes back the injected origin AND `Access-Control-Allow-Credentials: true` is present, the route is exploitable for cross-origin data theft.",
+    "detection_signal": "`Access-Control-Allow-Origin: https://evil.example.com` mirrors back the injected Origin header AND `Access-Control-Allow-Credentials: true` is set in the same response.",
+    "active_probe": true,
+    "severity": "high",
+    "prevalence": "common",
+    "slice": "nextjs",
+    "uid": "nextjs__nextjs-cors-wildcard-api-routes",
+    "class_hint": "cors"
+  },
+  {
+    "id": "nextjs-path-traversal-static-file-serving",
+    "name": "Next.js Path Traversal in Custom Static File / Image Serving Routes",
+    "owasp_category": "A01:2021 Broken Access Control",
+    "frameworks": [
+      "Next.js"
+    ],
+    "description": "Custom API routes that serve files from disk using `req.query.file` or `req.query.path` combined with `fs.readFile` without path normalization can be exploited with `../` sequences to read arbitrary server-side files such as `.env`, `next.config.js`, or `package.json`.",
+    "runtime_discovery": "Enumerate API routes or Next.js Image Optimization proxy endpoints that accept a filename or path query parameter. Inject `../../../../etc/passwd`, `..%2F..%2F..%2Fetc%2Fpasswd`, and `....//....//etc/passwd`. Also try `../../../.env` and `../../../next.config.js`. Compare response content to baseline.",
+    "detection_signal": "Response body contains Unix `/etc/passwd` format lines, `.env` `KEY=VALUE` pairs, or `next.config.js` JavaScript source; HTTP 200 with `Content-Type: text/plain` or `application/octet-stream` for a path-parameter-driven endpoint.",
+    "active_probe": true,
+    "severity": "critical",
+    "prevalence": "occasional",
+    "slice": "nextjs",
+    "uid": "nextjs__nextjs-path-traversal-static-file-serving",
+    "class_hint": "path-traversal"
+  },
+  {
+    "id": "nextjs-env-var-leak-client-side",
+    "name": "Next.js `NEXT_PUBLIC_` Secret Leakage in Client Bundle",
+    "owasp_category": "A02:2021 Cryptographic Failures",
+    "frameworks": [
+      "Next.js"
+    ],
+    "description": "Environment variables prefixed with `NEXT_PUBLIC_` are inlined verbatim into the client-side JavaScript bundle at build time. Developers who mistakenly prefix secret keys (Stripe, AWS, database DSNs) with `NEXT_PUBLIC_` expose them to any browser visitor.",
+    "runtime_discovery": "Fetch all `/_next/static/chunks/*.js` files discovered from the app's HTML. Apply regex patterns for known secret formats (Stripe `sk_live_`, AWS `AKIA`, SendGrid `SG.`, etc.) and also search for the literal string `NEXT_PUBLIC_`. No authentication needed.",
+    "detection_signal": "String match for `NEXT_PUBLIC_` followed by a secret-shaped value (high-entropy string, API key prefix) inside `/_next/static/chunks/` JavaScript files; or direct match for known secret prefixes (`sk_live_`, `AKIA`, `SG.`) in bundle source.",
+    "active_probe": false,
+    "severity": "critical",
+    "prevalence": "common",
+    "slice": "nextjs",
+    "uid": "nextjs__nextjs-env-var-leak-client-side",
+    "class_hint": "secrets-exposure"
+  },
+  {
+    "id": "nextjs-debug-error-overlay-in-prod",
+    "name": "Next.js Error Overlay / Stack Trace Exposure in Production",
+    "owasp_category": "A05:2021 Security Misconfiguration",
+    "frameworks": [
+      "Next.js"
+    ],
+    "description": "Next.js apps misconfigured with `NODE_ENV=development` in production, or with custom error pages that re-render the full Next.js error overlay, leak full stack traces, file system paths, environment variable names, and source code snippets to end users.",
+    "runtime_discovery": "Trigger server errors by sending malformed JSON bodies, invalid query parameter types, or non-existent route parameters to SSR pages and API routes. Observe the HTML response body for stack trace patterns (`Error:`, `at Object.<anonymous>`, file system paths `/home/`, `/app/`, `node_modules/`). Also check the `x-nextjs-cache` and `x-powered-by` headers for version disclosure.",
+    "detection_signal": "HTTP 500 response body contains a JavaScript stack trace string with absolute file paths (e.g., `/app/pages/api/`, `/home/node/`) or the Next.js development error overlay HTML (`__NEXT_ERROR__`, `_next/static/development/`); or `x-powered-by: Next.js` combined with version number in error body.",
+    "active_probe": true,
+    "severity": "medium",
+    "prevalence": "occasional",
+    "slice": "nextjs",
+    "uid": "nextjs__nextjs-debug-error-overlay-in-prod",
+    "class_hint": "cmd-injection"
+  },
+  {
+    "id": "nextjs-server-action-csrf",
+    "name": "Next.js Server Action Cross-Site Request Forgery",
+    "owasp_category": "A01:2021 Broken Access Control",
+    "frameworks": [
+      "Next.js"
+    ],
+    "description": "Next.js Server Actions before version 14.1.1 lacked proper origin checking. Apps on older versions (or those that disabled the built-in CSRF protection by misusing the `headers()` API) can be triggered cross-site. A malicious page can craft a form that POSTs to a victim's Next.js app and invokes state-mutating server actions using the victim's session cookie.",
+    "runtime_discovery": "Identify server action endpoints (POST to page URL with `Next-Action` header). Replay the POST from a different origin by setting `Origin: https://evil.example.com` and omitting the Referer header. If the action executes successfully (HTTP 200 with mutation result rather than 403), CSRF protection is absent or bypassed.",
+    "detection_signal": "Server action POST with `Origin: https://evil.example.com` returns HTTP 200 with action result JSON (not a CSRF rejection); response body matches expected mutation output (e.g., `{\"status\":\"ok\"}`); `Next-Action` header is accepted cross-origin.",
+    "active_probe": true,
+    "severity": "high",
+    "prevalence": "occasional",
+    "slice": "nextjs",
+    "uid": "nextjs__nextjs-server-action-csrf",
+    "class_hint": "csrf"
+  },
+  {
+    "id": "nextjs-prototype-pollution-query-parser",
+    "name": "Next.js / Node.js Prototype Pollution via Query String Parsing",
+    "owasp_category": "A03:2021 Injection",
+    "frameworks": [
+      "Next.js",
+      "Express",
+      "Node.js"
+    ],
+    "description": "Next.js API routes using `qs` or `body-parser` with default settings, or older versions of Next.js itself, can be vulnerable to prototype pollution through query parameters like `?__proto__[admin]=true` or `?constructor.prototype.isAdmin=true`. This can bypass authorization checks that read properties from plain objects.",
+    "runtime_discovery": "Inject prototype-polluting payloads into query strings and JSON request bodies: `?__proto__[isAdmin]=true`, `?constructor[prototype][role]=admin`, and `{\"__proto__\":{\"isAdmin\":true}}` in POST bodies. Then issue a follow-up request that exercises the affected auth check. Observe if the response indicates elevated privilege or different behavior.",
+    "detection_signal": "Follow-up request after prototype-pollution probe returns a response body or HTTP status (200 vs 403) consistent with elevated privilege; or the app returns a 500 error with a stack trace referencing `Object.prototype` when the pollution payload causes a type error downstream.",
+    "active_probe": true,
+    "severity": "high",
+    "prevalence": "occasional",
+    "slice": "nextjs",
+    "uid": "nextjs__nextjs-prototype-pollution-query-parser",
+    "class_hint": "cmd-injection"
+  },
+  {
+    "id": "nextjs-i18n-route-auth-bypass",
+    "name": "Next.js i18n Locale Prefix Middleware Auth Bypass",
+    "owasp_category": "A01:2021 Broken Access Control",
+    "frameworks": [
+      "Next.js"
+    ],
+    "description": "When `next.config.js` defines `i18n` locales and middleware guards specific path prefixes (e.g., `/dashboard`), accessing the same route with a locale prefix (e.g., `/en/dashboard`, `/fr/dashboard`) may bypass the middleware matcher if the matcher pattern is not locale-aware, exposing protected SSR pages without authentication.",
+    "runtime_discovery": "For every path that redirects unauthenticated requests to login (observed as 302 during anonymous crawl), prefix it with each configured locale slug (`/en/`, `/fr/`, `/de/`) and any arbitrary locale slug. Compare responses. If the locale-prefixed path returns 200 with protected content instead of a redirect, middleware matching is incomplete.",
+    "detection_signal": "HTTP 200 response with protected page HTML content at `/en/<protected-path>` where `/protected-path>` returns HTTP 302; locale-prefixed URL bypasses session check; `set-cookie` header is absent on the 200 response confirming no auth was enforced.",
+    "active_probe": true,
+    "severity": "high",
+    "prevalence": "occasional",
+    "slice": "nextjs",
+    "uid": "nextjs__nextjs-i18n-route-auth-bypass",
+    "class_hint": "other"
+  },
+  {
+    "id": "nextjs-rewrite-internal-api-exposure",
+    "name": "Next.js `rewrites()` Exposing Internal / Admin API Routes",
+    "owasp_category": "A05:2021 Security Misconfiguration",
+    "frameworks": [
+      "Next.js"
+    ],
+    "description": "The `rewrites()` function in `next.config.js` can map public-facing paths to internal API routes intended to be backend-only. If an internal route like `/api/internal/admin` is rewritten from `/api/v2/users` without auth, or if the rewrite configuration accidentally makes internal routes reachable under a predictable public alias, attackers can call admin endpoints directly.",
+    "runtime_discovery": "Crawl the app and enumerate all observed API route patterns. Fuzz common admin/internal path aliases (`/api/internal/*`, `/api/admin/*`, `/_internal/*`, `/api/v1/admin/*`). Also probe `/_next/` subpaths beyond static assets. Look for mismatched access control between the canonical route and any rewrite aliases discovered.",
+    "detection_signal": "A fuzzed path returns HTTP 200 with admin-shaped JSON (user lists, config data, internal metrics) where the canonical protected route would return 401/403; or the response body is identical to a known admin endpoint but accessible without an admin session cookie.",
+    "active_probe": true,
+    "severity": "high",
+    "prevalence": "occasional",
+    "slice": "nextjs",
+    "uid": "nextjs__nextjs-rewrite-internal-api-exposure",
+    "class_hint": "other"
+  }
+]

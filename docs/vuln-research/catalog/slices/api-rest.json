@@ -1,0 +1,262 @@
+[
+  {
+    "id": "api-excessive-data-exposure",
+    "name": "Excessive Data Exposure in API Responses",
+    "owasp_category": "A01:2021 Broken Access Control",
+    "frameworks": [
+      "agnostic"
+    ],
+    "description": "API endpoints return more fields than the client UI displays, exposing sensitive attributes (e.g., password hashes, internal IDs, PII, role flags) that the frontend silently discards. An attacker reading raw responses obtains data never intended for that user.",
+    "runtime_discovery": "Crawl authenticated endpoints and compare the full JSON response body against what the UI renders. Flag any response field containing patterns matching password, hash, secret, ssn, dob, internal_id, is_admin, role, token, credit_card. Diff responses for two users of different privilege levels to identify fields visible to both that should be role-gated.",
+    "detection_signal": "Response JSON contains field names matching a sensitive-keyword regex (e.g., `password`, `hash`, `secret`, `token`, `ssn`, `dob`, `is_admin`) not present in the rendered DOM; or low-privilege user response contains fields identical to high-privilege user response for the same resource.",
+    "active_probe": false,
+    "severity": "high",
+    "prevalence": "ubiquitous",
+    "slice": "api-rest",
+    "uid": "api-rest__api-excessive-data-exposure",
+    "class_hint": "excessive-data"
+  },
+  {
+    "id": "broken-object-property-level-authz",
+    "name": "Broken Object Property Level Authorization (Mass Assignment / BOPLA)",
+    "owasp_category": "A01:2021 Broken Access Control",
+    "frameworks": [
+      "agnostic"
+    ],
+    "description": "API accepts write operations (PUT/PATCH) on object properties the caller should not be able to modify, such as role, is_admin, balance, or plan. Attackers inject extra properties in request bodies that the server silently accepts and persists.",
+    "runtime_discovery": "For every PATCH/PUT endpoint discovered during crawl, replay the request with injected extra properties (role, is_admin, plan, credits, verified, locked) appended to the JSON body. Then GET the same resource and check whether the injected property was accepted and reflected in the response.",
+    "detection_signal": "After sending a PATCH/PUT body containing injected properties, a subsequent GET response reflects the injected field value (e.g., `is_admin: true`, `role: admin`, `balance: 99999`). HTTP 200 on the write plus changed value on the read confirms acceptance.",
+    "active_probe": true,
+    "severity": "critical",
+    "prevalence": "common",
+    "slice": "api-rest",
+    "uid": "api-rest__broken-object-property-level-authz",
+    "class_hint": "idor-bola"
+  },
+  {
+    "id": "broken-object-level-authz-idor",
+    "name": "Broken Object Level Authorization (IDOR) via API Resource Enumeration",
+    "owasp_category": "A01:2021 Broken Access Control",
+    "frameworks": [
+      "agnostic"
+    ],
+    "description": "REST endpoints use predictable resource identifiers (sequential integers, short UUIDs) in paths or query parameters. An authenticated user can iterate IDs to access other users' resources without receiving a 403 or 404.",
+    "runtime_discovery": "After authenticating as User A, collect all resource IDs seen in crawled responses. As User B (different account), request those same IDs. Compare HTTP status and response body. Also fuzz ID parameters by incrementing/decrementing numeric IDs and substituting known-foreign UUIDs. A 200 with another user's data is a confirmed finding.",
+    "detection_signal": "User B receives HTTP 200 with a response body whose owner/user_id field differs from User B's own ID; or a resource fetched by User B matches data created exclusively under User A's session. Any non-403/404 response to a foreign-ID request is flagged.",
+    "active_probe": true,
+    "severity": "critical",
+    "prevalence": "ubiquitous",
+    "slice": "api-rest",
+    "uid": "api-rest__broken-object-level-authz-idor",
+    "class_hint": "idor-bola"
+  },
+  {
+    "id": "missing-rate-limiting-auth",
+    "name": "Missing Rate Limiting on Authentication / Credential Endpoints",
+    "owasp_category": "A04:2021 Insecure Design",
+    "frameworks": [
+      "agnostic"
+    ],
+    "description": "Login, password-reset, OTP verification, and token-refresh endpoints accept unlimited requests without throttling, lockout, or CAPTCHA. This enables credential stuffing, brute-force, and OTP enumeration at machine speed.",
+    "runtime_discovery": "Send 50-100 rapid POST requests to the login/auth endpoint with varying passwords for a known username. Observe response codes, headers (X-RateLimit-*, Retry-After), and body messages. Absence of 429 responses, account lockout messages, or any rate-limit header after sustained bursting confirms the gap.",
+    "detection_signal": "After N rapid sequential requests (e.g., 50) to `/api/auth/login` or `/api/v1/password-reset`, no HTTP 429 is observed, no `Retry-After` or `X-RateLimit-Remaining` header appears, and responses remain structurally identical (no lockout body). Timing between responses stays consistently low (<200ms).",
+    "active_probe": true,
+    "severity": "high",
+    "prevalence": "common",
+    "slice": "api-rest",
+    "uid": "api-rest__missing-rate-limiting-auth",
+    "class_hint": "cmd-injection"
+  },
+  {
+    "id": "missing-rate-limiting-business",
+    "name": "Missing Rate Limiting on Business-Logic API Endpoints",
+    "owasp_category": "A04:2021 Insecure Design",
+    "frameworks": [
+      "agnostic"
+    ],
+    "description": "Endpoints performing expensive or financially impactful operations (search, export, coupon redemption, referral credit) lack per-user or per-IP rate limits, enabling resource exhaustion, discount abuse, or data harvesting at scale.",
+    "runtime_discovery": "Identify high-cost endpoints from crawled traffic (search, export, bulk-fetch). Send 100 rapid identical authenticated requests and measure: response codes, any rate-limit headers, server response time degradation, and whether the operation succeeds on all 100 requests. No 429 and consistent success across all requests is the finding.",
+    "detection_signal": "100 rapid authenticated GET/POST requests to a search or export endpoint all return HTTP 200 with no `X-RateLimit-*` headers and no response-time increase above 2x baseline. Cumulative data volume retrievable in under 10 seconds exceeds what a human interaction would produce.",
+    "active_probe": true,
+    "severity": "medium",
+    "prevalence": "common",
+    "slice": "api-rest",
+    "uid": "api-rest__missing-rate-limiting-business",
+    "class_hint": "cmd-injection"
+  },
+  {
+    "id": "user-enumeration-api",
+    "name": "User Enumeration via API Response Differences",
+    "owasp_category": "A07:2021 Identification and Authentication Failures",
+    "frameworks": [
+      "agnostic"
+    ],
+    "description": "Registration, login, and password-reset endpoints return distinct error messages or status codes depending on whether the queried username or email exists, allowing attackers to build a validated list of live accounts.",
+    "runtime_discovery": "Submit registration or password-reset requests with a known-existing email and a known-nonexistent email (or random UUID). Compare HTTP status codes, response body strings (e.g., 'email not found' vs 'reset link sent'), and response times. Any observable difference (textual, status, or timing >100ms) confirms enumeration.",
+    "detection_signal": "Two requests to `/api/auth/forgot-password`: one with a seeded valid email, one with a random nonexistent email. Observable diff in status code (200 vs 404), body text ('user not found' vs 'check your email'), or response time delta >150ms. Automated diff of trimmed response bodies flags the divergence.",
+    "active_probe": true,
+    "severity": "medium",
+    "prevalence": "ubiquitous",
+    "slice": "api-rest",
+    "uid": "api-rest__user-enumeration-api",
+    "class_hint": "rate-limit-enum"
+  },
+  {
+    "id": "resource-id-enumeration",
+    "name": "Resource/Object Enumeration via Predictable API Identifiers",
+    "owasp_category": "A01:2021 Broken Access Control",
+    "frameworks": [
+      "agnostic"
+    ],
+    "description": "API paths use sequential integer IDs or short alphanumeric slugs that can be iterated. Even if individual objects are access-controlled, response timing or error text differences confirm existence, leaking a count and structure of the dataset.",
+    "runtime_discovery": "Extract all numeric and short-slug IDs from crawled responses. Probe a range of adjacent IDs (current-50 to current+50) as an unauthenticated or low-privilege user. Compare HTTP 200/403/404 distribution. A 403 confirms existence while 404 denies it \u2014 any 403 for a foreign-user resource is an enumeration signal.",
+    "detection_signal": "Sequential ID probing yields mixed 200/403 vs uniform 404 responses. A 403 on `/api/orders/1042` while the authenticated user only owns order 2991 indicates the object exists and the server leaks existence via status code rather than returning a consistent 404 for all unauthorized resources.",
+    "active_probe": true,
+    "severity": "medium",
+    "prevalence": "ubiquitous",
+    "slice": "api-rest",
+    "uid": "api-rest__resource-id-enumeration",
+    "class_hint": "cmd-injection"
+  },
+  {
+    "id": "improper-api-inventory-old-versions",
+    "name": "Improper API Inventory \u2014 Unretired Legacy API Versions",
+    "owasp_category": "A09:2021 Security Logging and Monitoring Failures",
+    "frameworks": [
+      "agnostic"
+    ],
+    "description": "Old API versions (v1, v2, beta, legacy) remain reachable after a newer version is released. They often bypass security controls (auth enforcement, input validation, rate limiting) added in later versions, giving attackers a bypass path.",
+    "runtime_discovery": "After discovering the current API version prefix from crawled traffic (e.g., `/api/v3/`), probe earlier version prefixes (`/api/v1/`, `/api/v2/`, `/api/beta/`, `/api/legacy/`, `/v1/`) on every endpoint discovered. Compare authentication requirements, response schemas, and rate-limit behavior between versions.",
+    "detection_signal": "An endpoint at `/api/v1/users` returns HTTP 200 with a full user list while the same path at `/api/v3/users` returns 403 for the same unauthenticated or low-privilege request. Or the v1 path accepts requests without a required Authorization header that v3 enforces. Version-path fuzzing confirms reachability.",
+    "active_probe": true,
+    "severity": "high",
+    "prevalence": "common",
+    "slice": "api-rest",
+    "uid": "api-rest__improper-api-inventory-old-versions",
+    "class_hint": "cmd-injection"
+  },
+  {
+    "id": "verbose-api-errors",
+    "name": "Verbose API Error Responses Leaking Stack Traces / Internal Details",
+    "owasp_category": "A05:2021 Security Misconfiguration",
+    "frameworks": [
+      "Express",
+      "Django",
+      "Rails",
+      "Spring",
+      "Laravel",
+      "agnostic"
+    ],
+    "description": "API endpoints return full stack traces, ORM query strings, internal file paths, framework version strings, or database error messages in error responses. This provides attackers with reconnaissance data to tailor further attacks.",
+    "runtime_discovery": "Submit malformed inputs to all discovered endpoints: invalid types (string where integer expected), boundary values (negative IDs, extremely long strings, null bytes), malformed JSON bodies, and unknown fields. Inspect every non-2xx response body for stack trace markers, file path strings, SQL fragments, or framework/library name strings.",
+    "detection_signal": "Response body contains any of: multi-line stack trace with file paths (`at /app/src/...`), SQL error text (`PG::UndefinedColumn`, `SQLite3::Exception`, `ORA-00942`), internal hostnames or IP addresses, ORM model class names, or framework-specific debug keys (`debug`, `traceback`, `exception`, `stack`). Regex scan on all error responses.",
+    "active_probe": true,
+    "severity": "medium",
+    "prevalence": "common",
+    "slice": "api-rest",
+    "uid": "api-rest__verbose-api-errors",
+    "class_hint": "debug-endpoint"
+  },
+  {
+    "id": "graphql-introspection-enabled",
+    "name": "GraphQL Introspection Enabled in Production",
+    "owasp_category": "A05:2021 Security Misconfiguration",
+    "frameworks": [
+      "GraphQL"
+    ],
+    "description": "GraphQL introspection queries are left enabled in production, exposing the full schema including all types, mutations, queries, and field names. This gives attackers a complete map of the API attack surface without needing source code.",
+    "runtime_discovery": "Send a POST request to the GraphQL endpoint with the standard introspection query body (`{__schema{types{name fields{name type{name}}}}}` and `{__typename}`). A successful response with schema data confirms introspection is enabled. Also probe common GraphQL paths: `/graphql`, `/api/graphql`, `/query`, `/gql`.",
+    "detection_signal": "POST to `/graphql` with `{\"query\":\"{__schema{queryType{name}}}\"}` returns HTTP 200 with a JSON body containing `__schema` data rather than an error or disabled-introspection message. Response body size is typically >1KB and contains type definitions.",
+    "active_probe": true,
+    "severity": "medium",
+    "prevalence": "common",
+    "slice": "api-rest",
+    "uid": "api-rest__graphql-introspection-enabled",
+    "class_hint": "cmd-injection"
+  },
+  {
+    "id": "graphql-field-suggestion-enumeration",
+    "name": "GraphQL Field Suggestion / Did-You-Mean Enumeration",
+    "owasp_category": "A05:2021 Security Misconfiguration",
+    "frameworks": [
+      "GraphQL"
+    ],
+    "description": "Many GraphQL servers (Apollo, Graphene) return 'Did you mean X?' suggestions in error messages when an unknown field or type name is queried. Even when introspection is disabled, attackers can enumerate the schema by probing with close-guess names and reading suggestions.",
+    "runtime_discovery": "With introspection disabled, send GraphQL queries containing deliberately misspelled field and type names (e.g., `{usr{id}}`, `{userz{email}}`). Parse error messages from the response for suggestion strings. Iterate systematically with common word variations to walk the schema tree via suggestions.",
+    "detection_signal": "GraphQL error response body contains a string matching `Did you mean` or `Suggestions:` followed by a valid field name. This occurs even without introspection enabled. The presence of any suggestion string in an error response on a production endpoint is the flag.",
+    "active_probe": true,
+    "severity": "low",
+    "prevalence": "common",
+    "slice": "api-rest",
+    "uid": "api-rest__graphql-field-suggestion-enumeration",
+    "class_hint": "rate-limit-enum"
+  },
+  {
+    "id": "api-function-level-authz-bypass",
+    "name": "Broken Function Level Authorization \u2014 Admin API Endpoint Accessible to Regular Users",
+    "owasp_category": "A01:2021 Broken Access Control",
+    "frameworks": [
+      "agnostic"
+    ],
+    "description": "Administrative or privileged API endpoints (user management, billing overrides, bulk exports, config changes) lack server-side role enforcement and return data or accept writes when called by a non-admin authenticated user.",
+    "runtime_discovery": "Crawl the application as an admin user and catalog all API endpoints. Replay those same requests using a non-admin user's session token. Compare response status codes and body content. Probe common admin path patterns (`/api/admin/`, `/api/internal/`, `/api/management/`, `/api/v1/admin`) using the non-admin session.",
+    "detection_signal": "A request to `/api/admin/users` or `/api/internal/config` using a regular-user JWT or session cookie returns HTTP 200 with data, rather than 401 or 403. Auth-diff comparison shows admin-session response and regular-user-session response are identical (same status, same structure, same data volume).",
+    "active_probe": true,
+    "severity": "critical",
+    "prevalence": "common",
+    "slice": "api-rest",
+    "uid": "api-rest__api-function-level-authz-bypass",
+    "class_hint": "bfla"
+  },
+  {
+    "id": "api-unauthenticated-endpoint-shadow",
+    "name": "Shadow / Undocumented API Endpoints Accessible Without Authentication",
+    "owasp_category": "A09:2021 Security Logging and Monitoring Failures",
+    "frameworks": [
+      "agnostic"
+    ],
+    "description": "Endpoints created for internal tooling, debugging, testing, or migration are never formally documented and lack authentication checks. They are discoverable via path fuzzing and can expose bulk data exports, health data with sensitive details, or destructive operations.",
+    "runtime_discovery": "Fuzz common unauthenticated paths against the API base: `/api/health`, `/api/debug`, `/api/status`, `/api/metrics`, `/api/ping`, `/api/version`, `/api/env`, `/api/config`, `/api/test`, `/api/swagger`, `/api/openapi.json`, `/api/docs`. Send requests with no Authorization header and flag any 200 response that returns structured data beyond a simple status string.",
+    "detection_signal": "GET request to `/api/debug`, `/api/env`, or `/api/internal/metrics` without any Authorization header returns HTTP 200 with a JSON body containing application internals, dependency versions, environment variable names, or database connection strings. Any non-401/403 response to a credential-free request on a non-public path.",
+    "active_probe": true,
+    "severity": "high",
+    "prevalence": "occasional",
+    "slice": "api-rest",
+    "uid": "api-rest__api-unauthenticated-endpoint-shadow",
+    "class_hint": "debug-endpoint"
+  },
+  {
+    "id": "api-missing-auth-on-write",
+    "name": "Missing Authentication on State-Mutating API Endpoints",
+    "owasp_category": "A01:2021 Broken Access Control",
+    "frameworks": [
+      "agnostic"
+    ],
+    "description": "POST, PUT, PATCH, or DELETE endpoints that mutate application state do not enforce authentication, or accept requests after the session token is removed. This allows unauthenticated actors to create, modify, or delete records.",
+    "runtime_discovery": "For every mutating endpoint captured during authenticated crawl, replay the request stripped of all authentication material (remove Authorization header, session cookie, and X-API-Key). Compare the response: a 200 or 201 without credentials confirms the finding. Also test with an expired or invalidated token.",
+    "detection_signal": "POST to `/api/orders` or DELETE to `/api/users/42` with the Authorization header entirely absent (or replaced with an expired JWT) returns HTTP 200, 201, or 204 rather than 401. Response body confirms the mutation was accepted (e.g., `id` in creation response, empty body on delete with 204).",
+    "active_probe": true,
+    "severity": "critical",
+    "prevalence": "occasional",
+    "slice": "api-rest",
+    "uid": "api-rest__api-missing-auth-on-write",
+    "class_hint": "cmd-injection"
+  },
+  {
+    "id": "graphql-batching-dos",
+    "name": "GraphQL Query Batching / Alias Amplification Without Rate Limiting",
+    "owasp_category": "A04:2021 Insecure Design",
+    "frameworks": [
+      "GraphQL"
+    ],
+    "description": "GraphQL endpoints accept batched requests (array of operations) or aliased queries that execute the same resolver dozens of times in a single HTTP request. With no query depth/complexity limit, this enables resource exhaustion and brute-force (e.g., batched login attempts) via a single request.",
+    "runtime_discovery": "Send a POST to the GraphQL endpoint with a JSON array body containing 50 identical login mutation operations (batching) or a single query with 50 aliases for the same field. Measure response time vs a single-operation baseline. Also attempt 50 batched login mutations with different passwords to test brute-force potential per HTTP request.",
+    "detection_signal": "A POST body containing a JSON array of 50 operations returns HTTP 200 with an array of 50 results, response time under 5x the single-request baseline (indicating parallel execution), and no 429 or complexity-limit error. For aliased queries, a single request returns 50 separate resolver results under the alias keys.",
+    "active_probe": true,
+    "severity": "high",
+    "prevalence": "common",
+    "slice": "api-rest",
+    "uid": "api-rest__graphql-batching-dos",
+    "class_hint": "cmd-injection"
+  }
+]

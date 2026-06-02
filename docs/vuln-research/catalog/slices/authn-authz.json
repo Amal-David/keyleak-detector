@@ -1,0 +1,257 @@
+[
+  {
+    "id": "idor-bola-numeric-id",
+    "name": "IDOR / BOLA via Numeric Object ID",
+    "owasp_category": "A01:2021 Broken Access Control",
+    "frameworks": [
+      "agnostic"
+    ],
+    "description": "An authenticated user can access or modify another user's object by substituting a predictable numeric or UUID identifier in the URL, request body, or query parameter. The server performs no ownership check against the session.",
+    "runtime_discovery": "Crawl authenticated as User A, collect all URLs/API calls containing an ID parameter. Re-issue each request incrementing or decrementing the ID value by 1, and also replay using User B's object IDs observed during a parallel User B session. Compare response body size, status code, and presence of PII fields.",
+    "detection_signal": "HTTP 200 with non-empty response body (matching schema of the original object) when the substitute ID belongs to a different user; or successful 200/204 on a PUT/DELETE that was only initiated with User A's session against User B's resource ID.",
+    "active_probe": true,
+    "severity": "high",
+    "prevalence": "ubiquitous",
+    "slice": "authn-authz",
+    "uid": "authn-authz__idor-bola-numeric-id",
+    "class_hint": "idor-bola"
+  },
+  {
+    "id": "bola-uuid-indirect",
+    "name": "BOLA via Non-Sequential (UUID) Object Reference",
+    "owasp_category": "A01:2021 Broken Access Control",
+    "frameworks": [
+      "agnostic"
+    ],
+    "description": "APIs that use UUIDs instead of sequential integers are still vulnerable to BOLA when the UUID is disclosed in one endpoint (e.g., an admin list or email link) and can be replayed by a lower-privileged session. Developers often skip authorization checks assuming UUIDs are unguessable.",
+    "runtime_discovery": "Authenticate as a high-privilege user (admin), enumerate object UUIDs from listing endpoints. Then switch to a low-privilege session and replay GET/PUT/DELETE requests using those UUIDs. Also check Referer, Location, and Link headers, JavaScript source bundles loaded by the browser, and email notification URLs for leaked UUIDs.",
+    "detection_signal": "Low-privilege session receives HTTP 200 with full object payload (matching admin-visible schema), or 204 on a mutating request, when using a UUID harvested from an admin session.",
+    "active_probe": true,
+    "severity": "high",
+    "prevalence": "common",
+    "slice": "authn-authz",
+    "uid": "authn-authz__bola-uuid-indirect",
+    "class_hint": "idor-bola"
+  },
+  {
+    "id": "bfla-admin-function-unauthenticated",
+    "name": "Broken Function-Level Authorization (BFLA) \u2014 Admin Endpoint Reachable by Regular User",
+    "owasp_category": "A01:2021 Broken Access Control",
+    "frameworks": [
+      "agnostic"
+    ],
+    "description": "Administrative or privileged functions (user deletion, role assignment, bulk export, config change) are accessible via undocumented or obscured endpoints that the UI hides but the server does not gate. A regular authenticated session can call them directly.",
+    "runtime_discovery": "Crawl the app as an admin to collect the full URL inventory. Replay each admin-only API call (especially POST/PUT/DELETE to paths containing /admin/, /internal/, /manage/, /v*/admin) using a session authenticated as a regular user. Check for HTTP verb variations: if the UI uses GET, try POST/PUT/DELETE to the same path.",
+    "detection_signal": "Regular-user session receives 200/201/204 (not 401/403) on a request to a function that returned 200 for the admin session; response body or side-effect (e.g., resource deleted, role changed) confirms execution.",
+    "active_probe": true,
+    "severity": "critical",
+    "prevalence": "common",
+    "slice": "authn-authz",
+    "uid": "authn-authz__bfla-admin-function-unauthenticated",
+    "class_hint": "bfla"
+  },
+  {
+    "id": "jwt-alg-none",
+    "name": "JWT Algorithm Confusion \u2014 'none' Algorithm Accepted",
+    "owasp_category": "A02:2021 Cryptographic Failures",
+    "frameworks": [
+      "agnostic"
+    ],
+    "description": "Some JWT libraries accept tokens with `alg: none` or `alg: NONE`, treating them as valid without verifying the signature. An attacker can forge arbitrary claims (e.g., elevated role, different user ID) by crafting an unsigned token.",
+    "runtime_discovery": "Capture a valid JWT from the Authorization header or cookie. Decode the header and payload, modify the payload (e.g., set `role: admin` or change `sub` to another user's ID), set the header to `{\"alg\":\"none\",\"typ\":\"JWT\"}`, and reconstruct the token with an empty signature segment. Replay the modified token against protected endpoints.",
+    "detection_signal": "Server returns 200 with privileged content (or acts on the forged claim) instead of 401/403/signature-error when presented a token with `alg: none` and a tampered payload.",
+    "active_probe": true,
+    "severity": "critical",
+    "prevalence": "occasional",
+    "slice": "authn-authz",
+    "uid": "authn-authz__jwt-alg-none",
+    "class_hint": "jwt"
+  },
+  {
+    "id": "jwt-alg-confusion-rs256-hs256",
+    "name": "JWT Algorithm Confusion \u2014 RS256 Public Key Used as HS256 Secret",
+    "owasp_category": "A02:2021 Cryptographic Failures",
+    "frameworks": [
+      "agnostic"
+    ],
+    "description": "When a server uses RS256, the public key may be published at a JWKS endpoint. If the library accepts HS256, an attacker can sign a forged token with HS256 using the server's public key as the HMAC secret, bypassing signature verification.",
+    "runtime_discovery": "Fetch the server's JWKS endpoint (/.well-known/jwks.json or observed in JS source). Extract the public key (PEM). Craft a JWT with `alg: HS256` signed using that public key as the HMAC-SHA256 secret, modifying claims as desired. Present the forged token to authenticated endpoints.",
+    "detection_signal": "Protected endpoint returns 200 with valid user data (or elevated-privilege response) when presented an HS256-signed token that was forged using the server's RSA public key.",
+    "active_probe": true,
+    "severity": "critical",
+    "prevalence": "occasional",
+    "slice": "authn-authz",
+    "uid": "authn-authz__jwt-alg-confusion-rs256-hs256",
+    "class_hint": "jwt"
+  },
+  {
+    "id": "jwt-secret-weak",
+    "name": "JWT Weak HMAC Secret (Brute-Forceable)",
+    "owasp_category": "A02:2021 Cryptographic Failures",
+    "frameworks": [
+      "agnostic"
+    ],
+    "description": "HS256/HS384/HS512 tokens signed with short, common, or default secrets (e.g., 'secret', 'password', app name) can be cracked offline in seconds, allowing an attacker to forge arbitrary tokens.",
+    "runtime_discovery": "Capture a JWT from any authenticated response (Authorization header, Set-Cookie, or JSON body). Run the token through a wordlist attack (hashcat mode 16500 or jwt_tool). If the secret is recovered, forge a token with a modified sub/role claim and replay it.",
+    "detection_signal": "hashcat or jwt_tool recovers the signing secret from the captured token within a wordlist run; subsequently, a forged token is accepted by the server (HTTP 200 on a protected endpoint).",
+    "active_probe": true,
+    "severity": "high",
+    "prevalence": "common",
+    "slice": "authn-authz",
+    "uid": "authn-authz__jwt-secret-weak",
+    "class_hint": "cmd-injection"
+  },
+  {
+    "id": "oauth-open-redirect-code-leak",
+    "name": "OAuth Authorization Code Leaked via Open Redirect",
+    "owasp_category": "A01:2021 Broken Access Control",
+    "frameworks": [
+      "agnostic"
+    ],
+    "description": "If the OAuth authorization server allows redirect_uri values that can be manipulated (loose prefix matching, missing exact match), or if the client app has an open redirect, the authorization code can be sent to an attacker-controlled URI.",
+    "runtime_discovery": "Initiate an OAuth flow and intercept the authorization request. Modify redirect_uri to a variant of the registered URI (subdomain swap, path traversal, appended path, URL-encoded characters). Observe whether the authorization server redirects the code to the modified URI instead of rejecting with an invalid_redirect_uri error.",
+    "detection_signal": "Authorization server issues a redirect to the attacker-controlled redirect_uri (HTTP 302 Location header contains the manipulated URI with `code=` parameter present), rather than returning an error response.",
+    "active_probe": true,
+    "severity": "high",
+    "prevalence": "common",
+    "slice": "authn-authz",
+    "uid": "authn-authz__oauth-open-redirect-code-leak",
+    "class_hint": "open-redirect"
+  },
+  {
+    "id": "oauth-state-csrf-missing",
+    "name": "OAuth CSRF \u2014 Missing or Unvalidated State Parameter",
+    "owasp_category": "A01:2021 Broken Access Control",
+    "frameworks": [
+      "agnostic"
+    ],
+    "description": "OAuth flows that omit the `state` parameter or accept any value without binding it to the user's session are vulnerable to CSRF. An attacker can trick a victim into completing an OAuth flow that links the attacker's external account to the victim's app account.",
+    "runtime_discovery": "Initiate an OAuth flow, capture the authorization URL, and inspect it for the `state` parameter. If absent, attempt a CSRF attack by forwarding a crafted callback URL with a known `code` to the victim. If state is present, replay the callback omitting state or with a substituted static value and observe whether the server accepts it.",
+    "detection_signal": "Callback endpoint processes the authorization code (HTTP 200/302 redirect to authenticated area) when state parameter is absent or does not match the session-bound nonce, indicating no CSRF validation.",
+    "active_probe": true,
+    "severity": "high",
+    "prevalence": "common",
+    "slice": "authn-authz",
+    "uid": "authn-authz__oauth-state-csrf-missing",
+    "class_hint": "csrf"
+  },
+  {
+    "id": "session-fixation",
+    "name": "Session Fixation",
+    "owasp_category": "A07:2021 Identification and Authentication Failures",
+    "frameworks": [
+      "agnostic"
+    ],
+    "description": "The application fails to issue a new session token upon successful authentication, allowing an attacker who pre-plants a known session ID (via URL parameter, cookie injection, or a pre-auth session) to hijack the authenticated session.",
+    "runtime_discovery": "Obtain a pre-authentication session token (visit the login page without authenticating). Record the session ID. Complete the login flow. Inspect the post-login Set-Cookie header: if the session ID is identical to the pre-auth value, the app is vulnerable. Additionally, test whether the app accepts a session ID supplied in a URL parameter and promotes it to a cookie.",
+    "detection_signal": "The session cookie value in the post-login Set-Cookie response is identical to the session cookie value present before authentication (diff of pre-auth vs post-auth session token shows no change).",
+    "active_probe": true,
+    "severity": "high",
+    "prevalence": "occasional",
+    "slice": "authn-authz",
+    "uid": "authn-authz__session-fixation",
+    "class_hint": "cmd-injection"
+  },
+  {
+    "id": "password-reset-token-predictable",
+    "name": "Predictable or Short-Lived Password Reset Token Brute-Force",
+    "owasp_category": "A07:2021 Identification and Authentication Failures",
+    "frameworks": [
+      "agnostic"
+    ],
+    "description": "Password reset tokens derived from timestamps, MD5(email), or low-entropy RNG can be guessed or brute-forced. Tokens that are long-lived further extend the attack window.",
+    "runtime_discovery": "Trigger password resets for a controlled email address multiple times in quick succession. Examine the reset tokens received: check length, character set, and whether tokens share a common prefix or are sequential. Attempt to decode as Base64/hex and look for recognizable fields (timestamp, username hash). Test if an expired token is still accepted after use.",
+    "detection_signal": "Reset tokens are fewer than 128 bits of entropy; or tokens show sequential/predictable patterns across multiple requests; or a previously used/expired token still returns 200 on the reset confirmation endpoint instead of an error.",
+    "active_probe": true,
+    "severity": "high",
+    "prevalence": "common",
+    "slice": "authn-authz",
+    "uid": "authn-authz__password-reset-token-predictable",
+    "class_hint": "cmd-injection"
+  },
+  {
+    "id": "password-reset-host-header-injection",
+    "name": "Password Reset Poisoning via Host Header Injection",
+    "owasp_category": "A01:2021 Broken Access Control",
+    "frameworks": [
+      "agnostic"
+    ],
+    "description": "The password reset email contains a link whose domain is built from the HTTP Host (or X-Forwarded-Host) header rather than a configured base URL. An attacker who sends the reset request with a spoofed Host header receives the victim's reset token at their own domain.",
+    "runtime_discovery": "Trigger a password reset for a target account. Intercept the request and inject a modified Host header (or add X-Forwarded-Host) pointing to a controlled domain. Observe whether the resulting reset email contains a link to that injected domain, or use the Burp Collaborator / out-of-band DNS callback to detect the token being fetched.",
+    "detection_signal": "Out-of-band DNS/HTTP callback to the injected host receives a GET request with the victim's reset token as a query parameter; or the reset email (checked via test account) contains a link with the injected domain instead of the app's canonical domain.",
+    "active_probe": true,
+    "severity": "high",
+    "prevalence": "common",
+    "slice": "authn-authz",
+    "uid": "authn-authz__password-reset-host-header-injection",
+    "class_hint": "cmd-injection"
+  },
+  {
+    "id": "otp-in-response",
+    "name": "OTP / 2FA Code Returned in API Response",
+    "owasp_category": "A07:2021 Identification and Authentication Failures",
+    "frameworks": [
+      "agnostic"
+    ],
+    "description": "The server sends the one-time password or SMS verification code directly in the HTTP response body (e.g., in a JSON field like `otp`, `code`, or `debug_token`), making 2FA trivially bypassable without access to the user's phone.",
+    "runtime_discovery": "Trigger an OTP send action (login with valid credentials, registration, phone verification). Inspect the raw HTTP response body and headers for numeric strings matching the OTP length (4-8 digits), or JSON keys named `otp`, `code`, `token`, `pin`, `verification_code`, `debug`. Also check Location headers and cookies set at this step.",
+    "detection_signal": "HTTP response body or header contains a field whose value matches the exact OTP that completes the 2FA challenge (confirmed by using the extracted value to pass the 2FA step without receiving an SMS).",
+    "active_probe": false,
+    "severity": "critical",
+    "prevalence": "occasional",
+    "slice": "authn-authz",
+    "uid": "authn-authz__otp-in-response",
+    "class_hint": "otp-2fa"
+  },
+  {
+    "id": "2fa-bypass-direct-endpoint",
+    "name": "2FA Bypass by Directly Accessing Post-Auth Endpoint",
+    "owasp_category": "A07:2021 Identification and Authentication Failures",
+    "frameworks": [
+      "agnostic"
+    ],
+    "description": "After supplying valid credentials but before completing the 2FA step, the server may issue a partially-authenticated session token. If post-authentication endpoints do not verify that the 2FA step was completed, the attacker can skip the 2FA page and directly navigate to protected pages.",
+    "runtime_discovery": "Complete step 1 of login (credentials accepted, 2FA prompt shown). Capture the session cookie issued at this point. Without completing 2FA, replay requests to authenticated-only endpoints (dashboard, profile, API) using that partial session. Observe whether the server grants full access or enforces 2FA completion.",
+    "detection_signal": "Requests to authenticated-only endpoints using the partial (pre-2FA) session token return HTTP 200 with full user data instead of redirecting to the 2FA prompt or returning 401/403.",
+    "active_probe": true,
+    "severity": "high",
+    "prevalence": "common",
+    "slice": "authn-authz",
+    "uid": "authn-authz__2fa-bypass-direct-endpoint",
+    "class_hint": "otp-2fa"
+  },
+  {
+    "id": "2fa-otp-no-rate-limit",
+    "name": "2FA OTP Brute-Force \u2014 No Rate Limiting or Lockout",
+    "owasp_category": "A07:2021 Identification and Authentication Failures",
+    "frameworks": [
+      "agnostic"
+    ],
+    "description": "The OTP verification endpoint accepts unlimited guesses without rate limiting, account lockout, or CAPTCHA, allowing an attacker to brute-force a 4\u20136 digit numeric OTP in seconds to minutes.",
+    "runtime_discovery": "After reaching the 2FA OTP entry screen with a valid partial session, send automated POST requests to the OTP submission endpoint cycling through all possible values (0000\u20139999 for 4-digit, or a subset for 6-digit). Measure whether the server returns 429 Too Many Requests, locks the session, or continues returning 401/400 without restriction.",
+    "detection_signal": "Server returns consistent 401/400 (wrong OTP) responses across 100+ sequential attempts without a 429, redirect to lockout page, or increasing delay; confirms absence of rate limiting.",
+    "active_probe": true,
+    "severity": "high",
+    "prevalence": "common",
+    "slice": "authn-authz",
+    "uid": "authn-authz__2fa-otp-no-rate-limit",
+    "class_hint": "cmd-injection"
+  },
+  {
+    "id": "oidc-id-token-email-claim-trust",
+    "name": "OIDC Account Takeover via Unverified email_verified Claim",
+    "owasp_category": "A07:2021 Identification and Authentication Failures",
+    "frameworks": [
+      "agnostic"
+    ],
+    "description": "Applications that match OIDC identities to local accounts using only the `email` claim without checking `email_verified: true` can be exploited by attackers who register an unverified IdP account with a victim's email address, obtaining a valid ID token that grants access to the victim's app account.",
+    "runtime_discovery": "Register an account at the OAuth/OIDC Identity Provider using the target email without verifying it (some providers allow this). Complete the OIDC flow with the app. Inspect the ID token JWT claims for `email_verified` field. Observe whether the app accepts the login and maps to the victim's existing account.",
+    "detection_signal": "App completes login and opens the victim's account session when presented with an OIDC ID token containing `email_verified: false` (or missing the field) for an email address that corresponds to an existing app account.",
+    "active_probe": true,
+    "severity": "critical",
+    "prevalence": "occasional",
+    "slice": "authn-authz",
+    "uid": "authn-authz__oidc-id-token-email-claim-trust",
+    "class_hint": "oauth-oidc"
+  }
+]
