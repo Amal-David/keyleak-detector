@@ -1,13 +1,14 @@
 {
   "manifest_version": 3,
   "name": "KeyLeak Detector",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Passively monitors web traffic for exposed API keys, secrets, and sensitive data leaks as you browse.",
   "permissions": [
     "webRequest",
     "storage",
     "activeTab",
-    "tabs"
+    "tabs",
+    "clipboardWrite"
   ],
   "host_permissions": [
     "<all_urls>"

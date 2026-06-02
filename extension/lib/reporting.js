@@ -234,6 +234,7 @@ export function coverageForStats(stats = {}) {
   if (stats.dataAttrs) covered.push('data attributes');
   if (stats.metaTags) covered.push('meta tags');
   if (stats.storage) covered.push('browser storage');
+  if (stats.libraries) covered.push('JS library versions');
   if (stats.websockets) covered.push('WebSocket messages');
   if (stats.eventStreams) covered.push('EventSource/SSE messages');
   if (stats.devtoolsBodies) covered.push('DevTools network bodies');

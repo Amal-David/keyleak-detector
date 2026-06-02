@@ -15,91 +15,90 @@
       border-bottom: 1px solid #1e293b;
       display: flex;
       align-items: center;
-      gap: 12px;
+      gap: 10px;
       background: #0f172a;
       position: sticky;
       top: 0;
       z-index: 10;
     }
-    .toolbar h1 {
-      font-size: 13px;
-      color: #34d399;
-      font-weight: 700;
-    }
-    .toolbar .stats {
-      display: flex;
-      gap: 8px;
-      font-size: 11px;
-    }
-    .stat {
-      padding: 2px 8px;
-      border-radius: 4px;
-      font-weight: 600;
-    }
-    .stat-high { background: #7f1d1d; color: #fca5a5; }
-    .stat-medium { background: #78350f; color: #fcd34d; }
-    .stat-low { background: #1e3a5f; color: #93c5fd; }
-    .stat-total { background: #064e3b; color: #34d399; }
-    .clear-btn {
-      margin-left: auto;
+    h1 { font-size: 13px; color: #34d399; font-weight: 700; }
+    button {
       background: none;
       border: 1px solid #334155;
-      color: #64748b;
-      padding: 3px 10px;
+      color: #94a3b8;
+      padding: 3px 9px;
       border-radius: 4px;
       cursor: pointer;
       font-family: inherit;
       font-size: 10px;
     }
-    .clear-btn:hover { border-color: #64748b; color: #94a3b8; }
-
+    button:hover { border-color: #64748b; color: #e2e8f0; }
+    .clear-btn { margin-left: auto; }
+    .stats { display: flex; gap: 6px; flex-wrap: wrap; }
+    .stat {
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-weight: 600;
+    }
+    .stat-critical, .stat-high { background: #7f1d1d; color: #fca5a5; }
+    .stat-medium { background: #78350f; color: #fcd34d; }
+    .stat-low { background: #1e3a5f; color: #93c5fd; }
+    .stat-total { background: #064e3b; color: #34d399; }
+    .summary {
+      padding: 10px 12px;
+      border-bottom: 1px solid #1e293b;
+      display: grid;
+      gap: 8px;
+    }
+    .verdict {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      color: #cbd5e1;
+    }
+    .verdict-badge {
+      padding: 3px 8px;
+      border-radius: 999px;
+      border: 1px solid #334155;
+      font-size: 10px;
+      font-weight: 700;
+    }
+    .verdict-safe { background: #064e3b; color: #6ee7b7; border-color: #059669; }
+    .verdict-review { background: #78350f; color: #fcd34d; border-color: #d97706; }
+    .verdict-block { background: #7f1d1d; color: #fca5a5; border-color: #dc2626; }
+    .coverage { color: #64748b; font-size: 11px; line-height: 1.5; }
+    .status { color: #64748b; font-size: 11px; }
     .filters {
       padding: 6px 12px;
       display: flex;
       gap: 6px;
       border-bottom: 1px solid #1e293b;
     }
-    .filter-btn {
-      font-family: inherit;
-      font-size: 9px;
-      padding: 2px 8px;
-      border-radius: 3px;
-      border: 1px solid #334155;
-      background: none;
-      cursor: pointer;
-      font-weight: 600;
-    }
     .filter-btn.active { opacity: 1; }
     .filter-btn.inactive { opacity: 0.3; }
-    .filter-high { color: #fca5a5; border-color: #7f1d1d; }
-    .filter-medium { color: #fcd34d; border-color: #78350f; }
-    .filter-low { color: #93c5fd; border-color: #1e3a5f; }
-
     table {
       width: 100%;
       border-collapse: collapse;
     }
     th {
       text-align: left;
-      padding: 6px 12px;
+      padding: 7px 12px;
       font-size: 10px;
       font-weight: 700;
       color: #475569;
       text-transform: uppercase;
-      letter-spacing: 0.5px;
       border-bottom: 1px solid #1e293b;
       background: #0f172a;
       position: sticky;
-      top: 72px;
+      top: 118px;
       z-index: 5;
     }
     td {
-      padding: 6px 12px;
+      padding: 8px 12px;
       border-bottom: 1px solid #1e293b;
       vertical-align: top;
     }
     tr:hover td { background: #1e293b; }
-    .sev-cell { width: 60px; }
     .severity-badge {
       font-size: 9px;
       font-weight: 700;
@@ -107,46 +106,93 @@
       border-radius: 3px;
       text-transform: uppercase;
     }
-    .sev-high { background: #7f1d1d; color: #fca5a5; }
+    .sev-critical, .sev-high { background: #7f1d1d; color: #fca5a5; }
     .sev-medium { background: #78350f; color: #fcd34d; }
     .sev-low { background: #1e3a5f; color: #93c5fd; }
     .type-cell { font-weight: 600; color: #e2e8f0; white-space: nowrap; }
-    .value-cell {
-      color: #34d399;
-      max-width: 400px;
-      word-break: break-all;
-      font-size: 11px;
+    .value-cell { color: #34d399; max-width: 320px; word-break: break-all; font-size: 11px; }
+    .source-cell { color: #64748b; font-size: 11px; max-width: 260px; word-break: break-all; }
+    .context-cell { color: #94a3b8; font-size: 11px; max-width: 520px; line-height: 1.45; }
+    .empty { padding: 40px; text-align: center; color: #475569; }
+    .tabstrip {
+      display: flex;
+      padding: 0 12px;
+      gap: 4px;
+      border-bottom: 1px solid #1e293b;
+      background: #0f172a;
     }
-    .source-cell { color: #64748b; font-size: 11px; max-width: 200px; }
-    .context-cell {
-      color: #475569;
+    .tab-btn {
+      border: none;
+      border-bottom: 2px solid transparent;
+      background: none;
+      color: #64748b;
+      padding: 8px 4px;
+      font-family: inherit;
       font-size: 10px;
-      max-width: 300px;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      cursor: pointer;
     }
-    .empty {
-      padding: 40px;
-      text-align: center;
-      color: #475569;
+    .tab-btn:hover { color: #cbd5e1; }
+    .tab-btn.active { color: #34d399; border-bottom-color: #34d399; }
+    .learn-row td { background: #0b1326; padding: 6px 12px; }
+    .row-learn-btn {
+      margin-right: 6px;
+      padding: 1px 6px;
+      font-size: 9px;
+      letter-spacing: 0.5px;
+      color: #93c5fd;
+      border: 1px solid #1e3a5f;
+      border-radius: 3px;
+      background: none;
+      cursor: pointer;
+      font-family: inherit;
     }
+    .row-learn-btn:hover { color: #cbd5e1; border-color: #64748b; }
+    .ref-empty-status { padding: 40px; text-align: center; color: #475569; font-size: 11px; }
   </style>
 </head>
 <body>
   <div class="toolbar">
-    <h1>KeyLeak Secrets</h1>
+    <h1>KeyLeak Launch Gate</h1>
     <div class="stats" id="stats"></div>
-    <button class="clear-btn" id="clearBtn">CLEAR</button>
+    <button id="copyJsonBtn">COPY JSON</button>
+    <button id="copyMarkdownBtn">COPY MD</button>
+    <button id="clearBtn" class="clear-btn">CLEAR</button>
   </div>
-  <div class="filters" id="filters">
-    <button class="filter-btn filter-high active" data-severity="high">HIGH</button>
-    <button class="filter-btn filter-medium active" data-severity="medium">MEDIUM</button>
-    <button class="filter-btn filter-low active" data-severity="low">LOW</button>
+
+  <div class="summary">
+    <div class="verdict">
+      <span id="verdictBadge" class="verdict-badge verdict-safe">SAFE TO SHIP</span>
+      <span id="verdictReason">Monitoring covered browser surfaces.</span>
+    </div>
+    <div id="coverage" class="coverage"></div>
+    <div id="status" class="status">DevTools network body capture is active while this panel is open.</div>
   </div>
-  <div id="content">
-    <div class="empty">Monitoring... Browse a page to see findings.</div>
+
+  <div class="tabstrip" id="tabstrip">
+    <button class="tab-btn active" data-view="findings">Findings</button>
+    <button class="tab-btn" data-view="reference">Reference</button>
   </div>
-  <script src="panel.js"></script>
+
+  <section id="findingsView">
+    <div class="filters" id="filters">
+      <button class="filter-btn active" data-severity="critical">CRIT</button>
+      <button class="filter-btn active" data-severity="high">HIGH</button>
+      <button class="filter-btn active" data-severity="medium">MEDIUM</button>
+      <button class="filter-btn active" data-severity="low">LOW</button>
+    </div>
+
+    <div id="content">
+      <div class="empty">Monitoring... browse a page to see launch-gate findings.</div>
+    </div>
+  </section>
+
+  <section id="referenceView" style="display: none;">
+    <div class="ref-empty-status">Loading detector reference...</div>
+  </section>
+
+  <script type="module" src="panel.js"></script>
 </body>
 </html>
