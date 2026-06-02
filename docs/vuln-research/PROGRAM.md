@@ -99,6 +99,33 @@ Proof, not assertion: code must show passing tests; designs must cite real
   detectors, scan bundles, correlation engine + ruleset, deep-scan wiring.
 - **P8 Prepare PR** for human review.
 
+## Status snapshot (for resume)
+
+**Branch:** `feat/runtime-vuln-program` (worktree `/Users/amal/experiments/keyleak-vuln-program`).
+**Tests:** all green (`PYTHONPATH=. python3 -m unittest tests.test_bundles tests.test_cli_bundles tests.test_baas_validator tests.test_core_reporting`).
+
+| Phase / Milestone | State |
+|---|---|
+| P1 research (269 vulns, 18 slices) | ✅ done |
+| P2 normalize + per-slice | ✅ done |
+| P3 rank → dedupe → adversarial panel → Top 51 + 7 additions + extended | ✅ done (`master.json`, `RANKED.md`) |
+| Designs D5–D8 (arch map, bundles, integration plan, RLS deep-dive, correlation engine) | ✅ done + R1/R2-corrected |
+| Review gate R1 (62–74) → fixes → R2 (88/90/90/86) | ✅ cleared |
+| **M1** bundles core (`bundles.py`, `--bundle`/`bundles` CLI) | ✅ shipped + reviewed |
+| BaaS write-probe safety gate (read-only default) | ✅ shipped (R1 finding) |
+| **M5** OpenAPI-root table enumeration (CBSE case) | ✅ shipped; R3 in review |
+| M2 passive detectors (13) | ⬜ next |
+| M3 active-check registry + recon probes (24) | ⬜ |
+| M4 auth-diff BFLA/BOPLA (5) | ⬜ |
+| M5 remainder (RLS-disabled-vs-permissive, per-table matrix UI, GraphQL probe) | ⬜ |
+| M6 correlation engine (`attack_chains.py`) | ⬜ |
+| M7 fuzz/forms + MITM (opt-in) | ⬜ |
+
+**How to resume:** pick the next ⬜ milestone from `design/integration-plan.md` §6;
+each Top-51 item's shape+pack+milestone is in `catalog/catalog-detector-mapping.md`.
+Run every step through the Adversarial Review Gate (see above) before marking done.
+Open question for the human: confirm my goal interpretation at the top of this file.
+
 ## Progress log
 
 - 2026-06-02: Program set up. Worktree + research dirs created. Architecture
@@ -115,3 +142,7 @@ Proof, not assertion: code must show passing tests; designs must cite real
   Milestone load: M2=13, M3=24, M4=5, M5=4, M7=12.
   Adversarial Review Gate R1 running over designs + M1 (gates M2).
   - Next: apply R1 fixes → M2 (passive detectors) under the gate → M3..M7.
+- 2026-06-02 (cont.): Review gate R1→fixes→R2 CLEARED (88/90/90/86). Fixed a real
+  safety bug (BaaS write-probe POSTed rows; now read-only by default + opt-in).
+  Shipped M1 (bundles + CLI) and M5 flagship (OpenAPI-root table enumeration —
+  catches the CBSE case). R3 reviewing M5. All tests green. Handoff snapshot above.
