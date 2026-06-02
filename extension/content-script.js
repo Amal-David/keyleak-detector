@@ -53,6 +53,17 @@ window.addEventListener('message', (event) => {
     return;
   }
 
+  if (event.data.captureType === 'libraries') {
+    safeSendMessage({
+      action: 'analyze_libraries',
+      data: {
+        libraries: event.data.libraries || [],
+        pageUrl: window.location.href,
+      },
+    });
+    return;
+  }
+
   safeSendMessage({
     action: 'analyze_intercepted',
     data: {

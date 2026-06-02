@@ -12,6 +12,7 @@ import {
   severityRank,
 } from './lib/reporting.js';
 import { detectBaaSRequest, BaaSTabState } from './lib/baas-detector.js';
+import { buildLibraryFindings } from './lib/library-cves.js';
 import { testKey } from './lib/key-tester.js';
 
 const STORAGE_PREFIX = 'keyleak_tab_';
@@ -37,6 +38,7 @@ const EMPTY_STATS = {
   eventStreams: 0,
   devtoolsBodies: 0,
   fullScans: 0,
+  libraries: 0,
 };
 
 const tabCache = new Map();
@@ -394,6 +396,21 @@ async function handleAnalyzeContent(tabId, data = {}) {
   return { ok: true, findings: findings.length };
 }
 
+async function handleAnalyzeLibraries(tabId, data = {}) {
+  const { libraries, pageUrl } = data;
+  if (!Array.isArray(libraries) || libraries.length === 0) {
+    return { ok: true, findings: 0 };
+  }
+  const findings = buildLibraryFindings(libraries, pageUrl);
+  if (findings.length > 0) {
+    const tabData = await readTabData(tabId, pageUrl);
+    tabData.stats.libraries += 1;
+    await persistTabData(tabId, tabData);
+  }
+  await addFindings(tabId, findings, pageUrl);
+  return { ok: true, findings: findings.length };
+}
+
 async function handleMessage(message, sender) {
   const senderTabId = sender.tab?.id;
   const targetTabId = Number.isInteger(message.tabId) ? message.tabId : senderTabId;
@@ -446,6 +463,10 @@ async function handleMessage(message, sender) {
 
   if (message.action === 'analyze_content') {
     return handleAnalyzeContent(analysisTabId, message.data);
+  }
+
+  if (message.action === 'analyze_libraries') {
+    return handleAnalyzeLibraries(analysisTabId, message.data);
   }
 
   if (message.action === 'analyze_remote_url') {

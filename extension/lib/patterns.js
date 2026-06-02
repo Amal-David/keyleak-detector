@@ -561,6 +561,34 @@ const PATTERN_DEFINITIONS = [
       "env",
       "ci",
       "docker",
+      "config",
+      "code",
+      "sourcemaps",
+      "logs"
+    ],
+    "category": "leak",
+    "description": "ADO.NET / ODBC / JDBC database connection string with an embedded password.",
+    "detector_id": "leak.dotnet_sql_connection_string",
+    "finding_type": "dotnet_sql_connection_string",
+    "flags": "gim",
+    "id": "dotnet_sql_connection_string",
+    "min_match_length": 8,
+    "pack": "leak",
+    "pattern": "(?:(?:Server|Data Source)\\s*=\\s*[^;'\\\"]+;[\\s\\S]{0,200}?(?:Password|Pwd)\\s*=\\s*[^;'\\\"\\s]{3,}|jdbc:(?:sqlserver|postgresql|mysql|oracle:thin)://[^\\s'\\\"]+[?;&](?:password|pwd)\\s*=\\s*[^\\s'\\\"&;]{3,})",
+    "references": [
+      "https://cwe.mitre.org/data/definitions/798.html",
+      "https://cheatsheetseries.owasp.org/cheatsheets/Secrets_Management_Cheat_Sheet.html"
+    ],
+    "remediation": "Rotate the database password, move connection strings to a server-side secret store, and never ship them in client bundles, config files, or logs.",
+    "severity": "critical",
+    "validation_status": "validated"
+  },
+  {
+    "capture_group": 0,
+    "categories": [
+      "env",
+      "ci",
+      "docker",
       "mcp",
       "logs"
     ],

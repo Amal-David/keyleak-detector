@@ -326,6 +326,30 @@ export const DETECTOR_INFO = {
     "severity": "critical",
     "validation_status": "validated"
   },
+  "dotnet_sql_connection_string": {
+    "attack_scenario": "A connection string with a high-privilege account (e.g. the SQL Server `sa` login) hands an attacker direct read/write to every database on that instance. On shared/multi-tenant hosting, one exposed string compromises every co-located tenant's data at once.",
+    "categories": [
+      "env",
+      "ci",
+      "docker",
+      "config",
+      "code",
+      "sourcemaps",
+      "logs"
+    ],
+    "description": "ADO.NET / ODBC / JDBC database connection string with an embedded password.",
+    "detector_id": "leak.dotnet_sql_connection_string",
+    "finding_type": "dotnet_sql_connection_string",
+    "id": "dotnet_sql_connection_string",
+    "pack": "leak",
+    "references": [
+      "https://cwe.mitre.org/data/definitions/798.html",
+      "https://cheatsheetseries.owasp.org/cheatsheets/Secrets_Management_Cheat_Sheet.html"
+    ],
+    "remediation": "Rotate the database password, move connection strings to a server-side secret store, and never ship them in client bundles, config files, or logs.",
+    "severity": "critical",
+    "validation_status": "validated"
+  },
   "firebase_client_config": {
     "attack_scenario": "Firebase config grants access to Firestore, Realtime Database, and Storage. Without security rules, an attacker can read all documents, write arbitrary data, and access every file in Cloud Storage.",
     "categories": [
