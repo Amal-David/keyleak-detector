@@ -1,0 +1,1766 @@
+[
+  {
+    "rank": 1,
+    "tier": "top51",
+    "merge_key": "idor-bola",
+    "name": "idor-bola",
+    "canonical_class": "idor-bola",
+    "pack": "access-control",
+    "severity": "critical",
+    "frameworks": [
+      "agnostic",
+      "express",
+      "React",
+      "Django REST Framework",
+      "Ruby on Rails",
+      "FastAPI",
+      "Laravel",
+      "ASP.NET",
+      "net/http",
+      "gin",
+      "echo",
+      "Spring",
+      "Flask",
+      "Angular",
+      "Vue",
+      "Next.js",
+      "Supabase",
+      "GraphQL",
+      "Hasura"
+    ],
+    "why": "Highest-impact, highest-prevalence runtime class (22 members, comp=100, #1 OWASP API). All three lenses keep it top. Genuinely confirmed-active via the 2-user diff path in access_control.py (compare_access_control_urls) \u2014 promote that path; the single-user passive heuristic in app.py is FP-prone and must stay a lead, not a confirmation.",
+    "runtime_discovery": "After authenticating as User A, collect all resource IDs seen in crawled responses. As User B (different account), request those same IDs. Compare HTTP status and response body. Also fuzz ID parameters by incrementing/decrementing numeric IDs and substituting known-foreign UUIDs. A 200 with another user's data is a confirmed finding.",
+    "detection_signal": "User B receives HTTP 200 with a response body whose owner/user_id field differs from User B's own ID; or a resource fetched by User B matches data created exclusively under User A's session. Any non-403/404 response to a foreign-ID request is flagged.",
+    "active_probe": true,
+    "member_count": 25,
+    "references": [
+      "https://owasp.org/API-Security/editions/2023/en/0xa1-broken-object-level-authorization/",
+      "https://portswigger.net/web-security/access-control/idor"
+    ]
+  },
+  {
+    "rank": 2,
+    "tier": "top51",
+    "merge_key": "exposed-env-file",
+    "name": "exposed-env-file",
+    "canonical_class": "secrets-exposure",
+    "pack": "leak",
+    "severity": "critical",
+    "frameworks": [
+      "agnostic",
+      "Laravel",
+      "Django",
+      "Node.js/Express",
+      "Next.js",
+      "Rails",
+      "PHP"
+    ],
+    "why": "Pure HTTP GET, zero-FP, live secrets. Promoted by both realist and runtime lenses. Note: /.git/ specifically out-pays generic .env on acceptance and is currently NOT enumerated as a probe (verified) \u2014 see additions exposed-git-directory.",
+    "runtime_discovery": "Request /.env, /.env.local, /.env.production, /.env.backup, /.env.example in sequence. Check for KEY=VALUE patterns in the response body.",
+    "detection_signal": "HTTP 200 with response body containing lines matching the pattern VARIABLE=value, APP_KEY=, DB_PASSWORD=, SECRET_KEY=, or DATABASE_URL=.",
+    "active_probe": true,
+    "member_count": 4,
+    "references": [
+      "https://owasp.org/Top10/A05_2021-Security_Misconfiguration/",
+      "https://www.shodan.io/search?query=http.html%3A%22APP_KEY%3D%22"
+    ]
+  },
+  {
+    "rank": 3,
+    "tier": "top51",
+    "merge_key": "supabase-rls-open-table",
+    "name": "supabase-rls-open-table",
+    "canonical_class": "baas-rls",
+    "pack": "baas",
+    "severity": "critical",
+    "frameworks": [
+      "Supabase",
+      "Firebase",
+      "PocketBase",
+      "Appwrite"
+    ],
+    "why": "The single confirmed-active validation engine KeyLeak actually has (baas_validator.py: anon read + write-probe with Prefer tx=rollback, validation_status=confirmed). Promoted by both realist and runtime lenses; fastest-growing source of high-severity, low-dedup payouts. This is KeyLeak's defensible core, so it rises above the static-lead injection tier.",
+    "runtime_discovery": "Extract the Supabase URL and anon key from the app's JavaScript bundle or network traffic. Issue GET /rest/v1/<table>?select=*&limit=10 with headers `apikey: <anon_key>` and `Authorization: Bearer <anon_key>`. A 200 response containing rows confirms the table is unprotected. Enumerate table names from JS bundle, network requests, or the PostgREST schema endpoint (GET /rest/v1/ returns the OpenAPI spec listing all tables).",
+    "detection_signal": "HTTP 200 with a JSON array body from GET /rest/v1/<table>?select=*; row count > 0; column names visible in response body. The OpenAPI spec at /rest/v1/ enumerates all exposed table names.",
+    "active_probe": true,
+    "member_count": 8,
+    "references": [
+      "https://supabase.com/docs/guides/auth/row-level-security",
+      "https://owasp.org/www-project-top-ten/",
+      "https://www.cve.org/CVERecord?id=CVE-2023-27492"
+    ]
+  },
+  {
+    "rank": 4,
+    "tier": "top51",
+    "merge_key": "env-secrets-in-js-bundle",
+    "name": "env-secrets-in-js-bundle",
+    "canonical_class": "secrets-exposure",
+    "pack": "leak",
+    "severity": "critical",
+    "frameworks": [
+      "React",
+      "Create React App",
+      "Vite",
+      "Next.js",
+      "Vue",
+      "Angular",
+      "agnostic"
+    ],
+    "why": "comp=100 critical, KeyLeak core competency (regex/entropy mining over fetched bundles \u2014 real, implemented). Promoted by both realist and runtime lenses. Huge SPA prevalence.",
+    "runtime_discovery": "Crawl the app and collect all .js chunk URLs from the HTML. Fetch each chunk and scan the response body for high-entropy strings, known key prefixes (sk_, AIza, AKIA, ghp_, etc.), and well-known variable name patterns like REACT_APP_ or VITE_. No authentication required.",
+    "detection_signal": "Regex match of known secret prefixes (sk_live_, AKIA[0-9A-Z]{16}, AIzaSy, ghp_) or high-entropy Base64/hex strings of length 20+ inside a text/javascript response body fetched from a public chunk URL.",
+    "active_probe": false,
+    "member_count": 4,
+    "references": [
+      "https://portswigger.net/web-security/information-disclosure",
+      "https://cheatsheetseries.owasp.org/cheatsheets/Secrets_Management_Cheat_Sheet.html"
+    ]
+  },
+  {
+    "rank": 5,
+    "tier": "top51",
+    "merge_key": "supabase-service-role-key-exposed",
+    "name": "supabase-service-role-key-exposed",
+    "canonical_class": "secrets-exposure",
+    "pack": "leak",
+    "severity": "critical",
+    "frameworks": [
+      "Supabase",
+      "Hasura"
+    ],
+    "why": "Leaked service_role/admin secret = full-DB compromise; detected directly in bundles/responses AND its JWT claims decoded in baas_validator (confirmed). Promoted by both realist and runtime lenses; deserves to sit alongside top secrets findings.",
+    "runtime_discovery": "Intercept network traffic or inspect JavaScript bundles for long JWT strings (eyJ...). Base64-decode the JWT payload (second `.`-separated segment) and read the `role` claim. A value of `service_role` confirms the critical exposure. Also check `Authorization` headers in requests captured by a proxy.",
+    "detection_signal": "JWT payload decoded from a string found in JS bundle or network request contains `\"role\": \"service_role\"`. The token is distinguishable from the anon key because the anon key contains `\"role\": \"anon\"`.",
+    "active_probe": false,
+    "member_count": 2,
+    "references": [
+      "https://supabase.com/docs/guides/api/api-keys",
+      "https://cwe.mitre.org/data/definitions/798.html"
+    ]
+  },
+  {
+    "rank": 6,
+    "tier": "top51",
+    "merge_key": "baas-config-exposed",
+    "name": "baas-config-exposed",
+    "canonical_class": "baas-config-exposed",
+    "pack": "baas",
+    "severity": "critical",
+    "frameworks": [
+      "React",
+      "Firebase",
+      "Supabase",
+      "Amplify"
+    ],
+    "why": "Canonical BaaS entry probe (comp=96) that pivots to RLS testing; trivially extracted from bundle and feeds the confirmed-active prober. Promoted by both realist and runtime lenses.",
+    "runtime_discovery": "Fetch all JS chunk URLs. Search response bodies for known BaaS config object shapes: firebaseConfig = { apiKey:, createClient( with url and anonKey, or Amplify.configure({ with aws_user_pools_id. Extract the key values and attempt unauthenticated Firestore/REST API reads against the project.",
+    "detection_signal": "JS chunk body contains the literal string firebaseConfig or SUPABASE_ANON_KEY alongside a project ID, followed by a successful unauthenticated GET to https://<project>.firebaseio.com/.json or https://<project>.supabase.co/rest/v1/<table> returning non-empty data.",
+    "active_probe": true,
+    "member_count": 1,
+    "references": [
+      "https://owasp.org/Top10/A02_2021-Cryptographic_Failures/",
+      "https://portswigger.net/research/hunting-asynchronous-vulnerabilities"
+    ]
+  },
+  {
+    "rank": 7,
+    "tier": "top51",
+    "merge_key": "unauthenticated-api-access",
+    "name": "unauthenticated-api-access",
+    "canonical_class": "broken-access-control",
+    "pack": "access-control",
+    "severity": "critical",
+    "frameworks": [
+      "Next.js",
+      "gin",
+      "echo",
+      "FastAPI",
+      "agnostic"
+    ],
+    "why": "Missing-auth route, comp=100 critical, trivially confirmed by an unauthenticated GET (a probe the scanner can genuinely make). Maps to OWASP API2/A01. Kept high; one of the few access-control classes confirmable without an injection engine.",
+    "runtime_discovery": "Replay every API request observed during an authenticated crawl session, but strip the session cookie / Authorization header. Compare response: if the unauthenticated replay returns the same 200 with data as the authenticated version, the route is unprotected. Enumerate additional routes by fuzzing common Next.js patterns (`/api/user`, `/api/me`, `/api/admin/users`, `/api/dashboard`).",
+    "detection_signal": "HTTP 200 with non-empty JSON body on an API route when the Authorization / Cookie header is absent or replaced with an invalid token; auth-diff between user-A session and no-session returns identical payload.",
+    "active_probe": true,
+    "member_count": 4,
+    "references": [
+      "https://nextjs.org/docs/pages/building-your-application/routing/api-routes#middlewares",
+      "https://owasp.org/Top10/A07_2021-Identification_and_Authentication_Failures/"
+    ]
+  },
+  {
+    "rank": 8,
+    "tier": "top51",
+    "merge_key": "exposed-source-maps",
+    "name": "exposed-source-maps",
+    "canonical_class": "exposed-source-maps",
+    "pack": "leak",
+    "severity": "high",
+    "frameworks": [
+      "agnostic",
+      "React",
+      "Vue",
+      "Angular",
+      "Webpack",
+      "Vite"
+    ],
+    "why": "GET of sourceMappingURL leaks full source incl. secrets; real and implemented (browser_scanner + sourcemaps.py). Promoted by both realist and runtime lenses. Strong follow-on secret-mining fit.",
+    "runtime_discovery": "Crawl all JS bundle URLs loaded by each page. For each bundle, extract the sourceMappingURL comment. Fetch the referenced .map file (same-origin check). Parse the source map and run credential-pattern detectors against each reconstructed source file. Also probe for .map by appending .map to every bundle URL even if no directive is present.",
+    "detection_signal": "HTTP 200 response for <bundle>.js.map with a valid JSON source map body (version:3, sources array, sourcesContent). Credential detector patterns (API keys, tokens, DB URLs) match inside reconstructed sourcesContent entries. The sourceMappingURL is present in the bundle but the .map endpoint is unprotected.",
+    "active_probe": true,
+    "member_count": 3,
+    "references": [
+      "https://owasp.org/www-project-web-security-testing-guide/v42/4-Web_Application_Security_Testing/05-Authorization_Testing/",
+      "https://portswigger.net/research/detecting-server-side-prototype-pollution",
+      "https://cwe.mitre.org/data/definitions/540.html"
+    ]
+  },
+  {
+    "rank": 9,
+    "tier": "top51",
+    "merge_key": "subdomain-takeover",
+    "name": "subdomain-takeover",
+    "canonical_class": "subdomain-takeover",
+    "pack": "recon",
+    "severity": "high",
+    "frameworks": [
+      "agnostic"
+    ],
+    "why": "Realist's strongest single correction: dramatically under-ranked at score 58. Dangling-CNAME takeovers are high-volume, cleanly-accepted, well-paid, dedup-resistant (unique infra) and cleanly black-box detectable (resolve CNAME -> fingerprint unclaimed-service page). site_scanner already enumerates subdomains (discover_subdomains/crt.sh), so the detection scaffolding exists. Promoted into the top tier.",
+    "runtime_discovery": "Enumerate subdomains via certificate transparency (crt.sh), DNS brute-force, and permutation scanning. For each live CNAME, resolve the final target and send an HTTP request. Check for service-specific 'unclaimed' fingerprints in the response body.",
+    "detection_signal": "HTTP response body matching known dangling-service fingerprints: 'There is no app here yet' (Heroku), 'NoSuchBucket' (AWS S3), '404 \u2014 There is nothing here' (GitHub Pages), 'Repository not found' (Bitbucket), 'The site you were looking for couldn\\'t be found' (Netlify), or NXDOMAIN on a CNAME chain target while the apex subdomain still resolves.",
+    "active_probe": true,
+    "member_count": 1,
+    "references": [
+      "https://owasp.org/www-community/attacks/Subdomain_takeover",
+      "https://github.com/EdOverflow/can-i-take-over-xyz",
+      "https://cwe.mitre.org/data/definitions/350.html"
+    ]
+  },
+  {
+    "rank": 10,
+    "tier": "top51",
+    "merge_key": "default-credentials",
+    "name": "default-credentials",
+    "canonical_class": "default-credentials",
+    "pack": "authn",
+    "severity": "critical",
+    "frameworks": [
+      "WordPress",
+      "Jenkins",
+      "Grafana",
+      "Adminer",
+      "phpMyAdmin",
+      "agnostic"
+    ],
+    "why": "Was not even in the prior Top 51. Promoted by both realist and coverage-gaps: critical-ATO, reliably accepted, low-FP, framework-bound, with a clean known-cred login-matrix oracle. Belongs in the Top 51.",
+    "runtime_discovery": "Locate any admin login form (discovered via path enumeration or crawl). Submit a short list of known default credential pairs: admin/admin, admin/password, admin/123456, root/root, user/user. For WordPress, also try admin/<domain-name>. Observe whether the authentication succeeds.",
+    "detection_signal": "HTTP 302 redirect to a dashboard URL (e.g., /wp-admin/index.php, /dashboard, /home) after POST to login endpoint, or HTTP 200 with a page title containing 'Dashboard', 'Welcome', or the application name without an error message. Absence of CAPTCHA or lockout on first attempt also signals weak auth hygiene.",
+    "active_probe": true,
+    "member_count": 1,
+    "references": [
+      "https://owasp.org/Top10/A07_2021-Identification_and_Authentication_Failures/",
+      "https://cwe.mitre.org/data/definitions/1392.html",
+      "https://portswigger.net/web-security/authentication"
+    ]
+  },
+  {
+    "rank": 11,
+    "tier": "top51",
+    "merge_key": "token-in-webstorage",
+    "name": "token-in-webstorage",
+    "canonical_class": "token-in-webstorage",
+    "pack": "client",
+    "severity": "high",
+    "frameworks": [
+      "agnostic",
+      "React",
+      "Angular",
+      "Vue"
+    ],
+    "why": "Runtime lens promotes (genuinely implemented: passive localStorage/sessionStorage/IndexedDB read in browser_scanner, zero-FP). Realist demotes (informational unless chained to XSS). Net: keep but down-rank from #19-of-old-comp=96 to mid-tier \u2014 high detectability, moderate standalone payout.",
+    "runtime_discovery": "After authenticating and loading each crawled page, execute page.evaluate to enumerate all localStorage and sessionStorage keys and values. Run credential-pattern detectors (JWT regex, API key patterns, email/SSN patterns) against every key-value pair. Also check IndexedDB stores and Cache Storage for the same patterns.",
+    "detection_signal": "localStorage or sessionStorage contains a value matching a known token pattern (JWT: eyJ..., Bearer token, API key prefix like sk-, AIza, AKIA). Scanner's browser_scanner.py already enumerates storage and runs detector patterns \u2014 the finding source will be localStorage:<key> or sessionStorage:<key>.",
+    "active_probe": false,
+    "member_count": 3,
+    "references": [
+      "https://owasp.org/www-community/vulnerabilities/Insufficient_Session-ID_Length",
+      "https://cheatsheetseries.owasp.org/cheatsheets/HTML5_Security_Cheat_Sheet.html#local-storage",
+      "https://cwe.mitre.org/data/definitions/312.html"
+    ]
+  },
+  {
+    "rank": 12,
+    "tier": "top51",
+    "merge_key": "secret-in-dom",
+    "name": "secret-in-dom",
+    "canonical_class": "secret-in-dom",
+    "pack": "leak",
+    "severity": "high",
+    "frameworks": [
+      "agnostic",
+      "React",
+      "Redux",
+      "Zustand",
+      "MobX",
+      "Vue"
+    ],
+    "why": "Runtime lens promotes (real passive DOM/Redux/Vuex store mining, KeyLeak strength). Realist tempers payout. Kept adjacent to token-in-webstorage as a confirmed-implemented browser-secret detector.",
+    "runtime_discovery": "Crawl and render each page, then scan the full document.documentElement.outerHTML (and all inline script text) against credential and PII detector patterns. Pay particular attention to <script>window.__INITIAL_STATE__=...</script>, <input type=hidden>, data-token=, and meta[name=csrf-token] attributes. Run as both unauthenticated and authenticated users to compare exposure.",
+    "detection_signal": "Credential-pattern match (API key, JWT, private key PEM, SSN, credit card number) found in the raw DOM string at a source prefixed 'document'. Finding type source_map_reference or xss_sink_lead does not cover this \u2014 it is a distinct leak:dom_secret finding class. Inline JSON blobs containing keys like apiKey, accessToken, secretKey trigger the match.",
+    "active_probe": false,
+    "member_count": 3,
+    "references": [
+      "https://owasp.org/www-project-web-security-testing-guide/v42/4-Web_Application_Security_Testing/06-Session_Management_Testing/",
+      "https://cheatsheetseries.owasp.org/cheatsheets/HTML5_Security_Cheat_Sheet.html",
+      "https://cwe.mitre.org/data/definitions/312.html"
+    ]
+  },
+  {
+    "rank": 13,
+    "tier": "top51",
+    "merge_key": "debug-endpoint-exposure",
+    "name": "debug-endpoint-exposure",
+    "canonical_class": "debug-endpoint-exposure",
+    "pack": "recon",
+    "severity": "critical",
+    "frameworks": [
+      "agnostic",
+      "express",
+      "Django",
+      "Flask",
+      "Laravel",
+      "FastAPI",
+      "Ruby on Rails",
+      "ASP.NET",
+      "Next.js",
+      "Spring Boot",
+      "go"
+    ],
+    "why": "Broadest recon-grade HTTP-probe class (20 members, comp=95). Same trivial GET+marker shape the scanner already supports. Note FP flag from runtime lens: the current /admin,/login,/dashboard probe flags any 200/301/302/401/403 as a finding \u2014 gate that to reduce noise.",
+    "runtime_discovery": "Enumerate a wordlist of common Express debug/admin path fragments (`/metrics`, `/health`, `/healthz`, `/__status`, `/admin`, `/graphql`, `/api-docs`, `/swagger.json`, `/openapi.json`, `/env`) as unauthenticated requests. Record 200 responses and analyze response bodies.",
+    "detection_signal": "HTTP 200 response to an unauthenticated request to a sensitive path containing Prometheus metric lines (`# HELP`, `# TYPE`), JSON with `process.env`, an OpenAPI schema object (`{\"openapi\":\"3.`), or a GraphQL introspection result (`__schema`).",
+    "active_probe": true,
+    "member_count": 20,
+    "references": [
+      "https://cheatsheetseries.owasp.org/cheatsheets/NodeJS_Security_Cheat_Sheet.html",
+      "https://owasp.org/www-project-api-security/",
+      "https://cwe.mitre.org/data/definitions/200.html"
+    ]
+  },
+  {
+    "rank": 14,
+    "tier": "top51",
+    "merge_key": "spring-actuator-exposed",
+    "name": "spring-actuator-exposed",
+    "canonical_class": "debug-endpoint-exposure",
+    "pack": "recon",
+    "severity": "critical",
+    "frameworks": [
+      "Spring Boot",
+      "Spring Actuator"
+    ],
+    "why": "Framework-bound, low-FP, reliably accepted (promoted by realist). /actuator/{env,heapdump,loggers} leaks secrets/enables RCE. Runtime lens flags it as a high-ROI easy add (single-path GET + body marker) \u2014 currently NOT in the probe list, so detection is aspirational until built.",
+    "runtime_discovery": "Crawl the running app for /actuator and its children (/actuator/env, /actuator/health, /actuator/heapdump, /actuator/mappings, /actuator/beans, /actuator/loggers, /actuator/trace, /actuator/httptrace). Enumerate both /actuator/* and legacy /management/* paths. Probe each without auth tokens.",
+    "detection_signal": "HTTP 200 with JSON body containing keys like 'propertySources', 'contexts', 'beans', 'mappings', or a binary response (heapdump) from /actuator/heapdump. A 404 on /actuator but 200 on /actuator/health (partial exposure) is also flagged.",
+    "active_probe": true,
+    "member_count": 3,
+    "references": [
+      "https://owasp.org/www-project-top-ten/2017/A6_2017-Security_Misconfiguration",
+      "https://docs.spring.io/spring-boot/docs/current/reference/html/actuator.html",
+      "https://portswigger.net/web-security/information-disclosure"
+    ]
+  },
+  {
+    "rank": 15,
+    "tier": "top51",
+    "merge_key": "sqli",
+    "name": "sqli",
+    "canonical_class": "sql-injection",
+    "pack": "injection",
+    "severity": "critical",
+    "frameworks": [
+      "agnostic",
+      "Flask",
+      "PHP",
+      "Laravel",
+      "ASP.NET",
+      "Ruby on Rails",
+      "FastAPI",
+      "SQLAlchemy",
+      "Spring",
+      "Hibernate"
+    ],
+    "why": "Highest-impact injection primitive and a class any appsec scanner must enumerate. BUT runtime lens demotes hard: there is NO active SQLi engine \u2014 current detection is validation_status=lead regex over fetched static content, not error/boolean/time-blind probes. Kept in Top 51 by impact but tiered below the confirmed-active strengths; rationale must say 'lead', not 'confirmed at runtime'.",
+    "runtime_discovery": "Fuzz every user-supplied input (GET/POST params, path segments, JSON keys, cookie values, HTTP headers that land in queries) with single-quote, double-quote, comment sequences (--,--, #), and stacked-query delimiters. Compare HTTP response body, status code, and content-length against the benign baseline.",
+    "detection_signal": "Response body contains DB-engine error strings: 'you have an error in your SQL syntax', 'ORA-00907', 'pg_query()', 'Unclosed quotation mark', 'SQLSTATE[42000]', 'Microsoft OLE DB Provider for SQL Server', or an HTTP 500 with a stack trace that names a DB library. Response content-length diverges meaningfully from the baseline.",
+    "active_probe": true,
+    "member_count": 9,
+    "references": [
+      "https://owasp.org/www-community/attacks/SQL_Injection",
+      "https://portswigger.net/web-security/sql-injection",
+      "https://cwe.mitre.org/data/definitions/89.html"
+    ]
+  },
+  {
+    "rank": 16,
+    "tier": "top51",
+    "merge_key": "ssrf",
+    "name": "ssrf",
+    "canonical_class": "ssrf",
+    "pack": "injection",
+    "severity": "critical",
+    "frameworks": [
+      "agnostic",
+      "express",
+      "FastAPI",
+      "net/http",
+      "gin",
+      "echo",
+      "AWS",
+      "GCP",
+      "Azure",
+      "Angular",
+      "Next.js"
+    ],
+    "why": "Highest single-class EV once landed (cloud-metadata -> IAM creds); realist even calls it under-ranked. Runtime lens demotes: no OOB/metadata-callback engine exists, current hits are static leads. Net: kept top-of-injection-tier on impact, flagged as lead-only until an OOB probe ships.",
+    "runtime_discovery": "Identify endpoints that fetch external content (webhook testers, URL preview/screenshot features, import-from-URL flows). Inject internal targets: `http://169.254.169.254/latest/meta-data/`, `http://localhost:6379/`, `http://127.0.0.1:8080/admin`, and a known collaborator URL to confirm out-of-band requests.",
+    "detection_signal": "Response body contains AWS/GCP/Azure cloud metadata content (e.g., `ami-id`, `instance-id`, `iam/security-credentials`). Alternatively, a collaborator server receives an inbound HTTP request from the app's IP after the probe. Or a 200 response with Redis inline protocol text (`+OK`, `-ERR`).",
+    "active_probe": true,
+    "member_count": 7,
+    "references": [
+      "https://portswigger.net/web-security/ssrf",
+      "https://cheatsheetseries.owasp.org/cheatsheets/Server_Side_Request_Forgery_Prevention_Cheat_Sheet.html",
+      "https://cwe.mitre.org/data/definitions/918.html"
+    ]
+  },
+  {
+    "rank": 17,
+    "tier": "top51",
+    "merge_key": "nosql-injection",
+    "name": "nosql-injection",
+    "canonical_class": "nosql-injection",
+    "pack": "injection",
+    "severity": "critical",
+    "frameworks": [
+      "express",
+      "mongoose",
+      "mongodb",
+      "Node.js",
+      "Meteor",
+      "Django",
+      "Flask"
+    ],
+    "why": "Highly prevalent in Node stacks, comp=96. Runtime lens demotes: no $ne/$gt mutation probe exists (grep confirmed). Kept by impact/prevalence, tiered as lead-only.",
+    "runtime_discovery": "For login and search endpoints, replace string fields with JSON operator objects: send `{\"username\": {\"$gt\": \"\"}, \"password\": {\"$gt\": \"\"}}` as the request body. Also test query-string form: `?filter[$ne]=x`. Observe authentication success or unexpected data returned.",
+    "detection_signal": "Login returns a valid session/token (HTTP 200 with auth cookie) when credentials are replaced with `{\"$gt\": \"\"}`, or a search endpoint returns more records than expected with operator-injected parameters. A 500 with a MongoDB error message is also a positive signal revealing the injection point.",
+    "active_probe": true,
+    "member_count": 2,
+    "references": [
+      "https://owasp.org/www-project-web-security-testing-guide/latest/4-Web_Application_Security_Testing/07-Input_Validation_Testing/05.6-Testing_for_NoSQL_Injection",
+      "https://portswigger.net/web-security/nosql-injection",
+      "https://cwe.mitre.org/data/definitions/943.html"
+    ]
+  },
+  {
+    "rank": 18,
+    "tier": "top51",
+    "merge_key": "jwt-flaw",
+    "name": "jwt-flaw",
+    "canonical_class": "jwt-flaw",
+    "pack": "authn",
+    "severity": "critical",
+    "frameworks": [
+      "agnostic",
+      "express",
+      "net/http",
+      "gin",
+      "echo",
+      "Angular",
+      "Vue",
+      "FastAPI",
+      "Spring",
+      "Django REST Framework",
+      "Flask"
+    ],
+    "why": "Full-ATO impact, broad spread. Runtime lens demotes: scanner decodes JWTs but does NOT forge/mint (no alg=none/HS256-confusion minting). Kept on impact; the kid-injection high-yield variant (coverage-gaps add) folds in under this merge_key as a distinct probe.",
+    "runtime_discovery": "Obtain a valid JWT from the login endpoint. Craft a new token with the header `{\"alg\":\"none\",\"typ\":\"JWT\"}`, sign with an empty string, and send it in the `Authorization` header. Also try switching from RS256 to HS256 signed with the app's public key as the HMAC secret.",
+    "detection_signal": "A 200 response (instead of 401/403) when sending a forged `alg:none` token or an HS256 token signed with the known public key. Auth-differential: the forged token grants the same access level as a legitimately issued token.",
+    "active_probe": true,
+    "member_count": 10,
+    "references": [
+      "https://portswigger.net/web-security/jwt",
+      "https://auth0.com/blog/critical-vulnerabilities-in-json-web-token-libraries/",
+      "https://cwe.mitre.org/data/definitions/347.html"
+    ]
+  },
+  {
+    "rank": 19,
+    "tier": "top51",
+    "merge_key": "cors-misconfig",
+    "name": "cors-misconfig",
+    "canonical_class": "cors-misconfig",
+    "pack": "headers",
+    "severity": "high",
+    "frameworks": [
+      "agnostic",
+      "express",
+      "FastAPI",
+      "React",
+      "Spring",
+      "Flask",
+      "Laravel",
+      "ASP.NET",
+      "go",
+      "Next.js",
+      "Angular",
+      "Vue",
+      "Django"
+    ],
+    "why": "14 members, ubiquitous. Runtime lens demotes: only the BaaS CORS=='*' check is active; there is NO general app Origin-replay engine. The credentialed Origin-replay variant (runtime lens add) is the only one that matters and should be built. Kept but tiered.",
+    "runtime_discovery": "Send OPTIONS preflight and GET/POST requests with an `Origin: https://attacker.example.com` header and a valid session cookie. Compare the `Access-Control-Allow-Origin` and `Access-Control-Allow-Credentials` response headers.",
+    "detection_signal": "`Access-Control-Allow-Origin` echoes back the injected attacker origin AND `Access-Control-Allow-Credentials: true` appears in the same response. Both headers present together on a credentialed request is the exploitable combination.",
+    "active_probe": true,
+    "member_count": 14,
+    "references": [
+      "https://portswigger.net/web-security/cors",
+      "https://owasp.org/www-community/attacks/CORS_OriginHeaderScrutiny"
+    ]
+  },
+  {
+    "rank": 20,
+    "tier": "top51",
+    "merge_key": "mass-assignment",
+    "name": "mass-assignment",
+    "canonical_class": "mass-assignment",
+    "pack": "injection",
+    "severity": "critical",
+    "frameworks": [
+      "agnostic",
+      "express",
+      "Ruby on Rails",
+      "Laravel",
+      "Spring",
+      "Django REST Framework",
+      "ASP.NET MVC",
+      "gin",
+      "echo",
+      "FastAPI",
+      "Pydantic"
+    ],
+    "why": "OWASP API6, 12 members across all ORMs. Runtime lens demotes: no privileged-field write-probe engine; current hits are static leads. Kept on prevalence/impact, tiered as lead.",
+    "runtime_discovery": "Submit registration or profile-update forms with extra JSON fields beyond what the UI exposes (`isAdmin`, `role`, `accountBalance`, `verified`). Compare the resulting resource (via a subsequent GET) to see if the injected field was persisted.",
+    "detection_signal": "A subsequent authenticated GET on the resource (user profile, product) returns the injected field value unchanged, or behavior changes (elevated access) consistent with the field being written. Auth-differential: User A submits `{\"role\":\"admin\"}`, then compare role-restricted endpoint responses between User A and a normal User B.",
+    "active_probe": true,
+    "member_count": 12,
+    "references": [
+      "https://cheatsheetseries.owasp.org/cheatsheets/Mass_Assignment_Cheat_Sheet.html",
+      "https://cwe.mitre.org/data/definitions/915.html"
+    ]
+  },
+  {
+    "rank": 21,
+    "tier": "top51",
+    "merge_key": "bfla",
+    "name": "bfla",
+    "canonical_class": "bfla",
+    "pack": "access-control",
+    "severity": "critical",
+    "frameworks": [
+      "agnostic",
+      "Spring",
+      "Next.js",
+      "ASP.NET",
+      "Django"
+    ],
+    "why": "OWASP API5, high impact. Partially confirmable via the same 2-user replay machinery as IDOR (access_control), but privileged-function replay is not fully built. Kept; tiered below idor-bola/unauthenticated-access.",
+    "runtime_discovery": "Crawl the application as an admin user and catalog all API endpoints. Replay those same requests using a non-admin user's session token. Compare response status codes and body content. Probe common admin path patterns (`/api/admin/`, `/api/internal/`, `/api/management/`, `/api/v1/admin`) using the non-admin session.",
+    "detection_signal": "A request to `/api/admin/users` or `/api/internal/config` using a regular-user JWT or session cookie returns HTTP 200 with data, rather than 401 or 403. Auth-diff comparison shows admin-session response and regular-user-session response are identical (same status, same structure, same data volume).",
+    "active_probe": true,
+    "member_count": 6,
+    "references": [
+      "https://owasp.org/API-Security/editions/2023/en/0xa5-broken-function-level-authorization/",
+      "https://portswigger.net/web-security/access-control"
+    ]
+  },
+  {
+    "rank": 22,
+    "tier": "top51",
+    "merge_key": "nextjs-middleware-authz-bypass",
+    "name": "nextjs-middleware-authz-bypass",
+    "canonical_class": "broken-access-control",
+    "pack": "access-control",
+    "severity": "critical",
+    "frameworks": [
+      "Next.js"
+    ],
+    "why": "CVE-class x-middleware-subrequest bypass; framework-bound, high prevalence given Next.js dominance (realist promotes). Runtime lens demotes: the specific header-trick probe is NOT implemented (grep confirmed no x-middleware-subrequest). Kept on impact, flagged as unbuilt.",
+    "runtime_discovery": "For every route that redirects unauthenticated requests (observed as 302/307 during an anonymous crawl), replay the request adding the header `x-middleware-subrequest: middleware` (or `pages/_middleware`). If the response changes from a redirect to a 200 with protected content, the middleware is bypassed.",
+    "detection_signal": "Route previously returning HTTP 302/307 redirect to `/login` now returns HTTP 200 with protected page content when `x-middleware-subrequest: middleware` header is present; `x-powered-by: Next.js` header confirms Next.js stack.",
+    "active_probe": true,
+    "member_count": 3,
+    "references": [
+      "https://nextjs.org/blog/cve-2025-29927",
+      "https://github.com/advisories/GHSA-f82v-jwr5-mffw"
+    ]
+  },
+  {
+    "rank": 23,
+    "tier": "top51",
+    "merge_key": "path-traversal",
+    "name": "path-traversal",
+    "canonical_class": "path-traversal",
+    "pack": "injection",
+    "severity": "critical",
+    "frameworks": [
+      "agnostic",
+      "express",
+      "Flask",
+      "Ruby on Rails",
+      "Next.js",
+      "ASP.NET Core",
+      "gin",
+      "echo"
+    ],
+    "why": "High-impact file-read primitive, 8 frameworks, clean oracle (read /etc/passwd). Runtime lens demotes: ../ injection probe not implemented, current hits are leads. Kept on impact, tiered.",
+    "runtime_discovery": "Fuzz filename, path, file, doc, resource, template, page, and similar parameters with traversal sequences: ../../../etc/passwd, ..%2F..%2F..%2Fetc%2Fpasswd, ....//....//etc/passwd, %252e%252e%252fetc%252fpasswd. Also test path segments in REST-style URLs (/files/../../etc/passwd). Use both Unix (/etc/passwd) and Windows (..\\..\\windows\\win.ini) targets.",
+    "detection_signal": "Response body contains file contents matching known system files: root:x:0:0: from /etc/passwd, [boot loader] from boot.ini, [extensions] from win.ini, or base64-encoded content of a source file. HTTP 200 with content-type text/plain or application/octet-stream for a traversal-based path. Response size differs substantially from the 404/error baseline.",
+    "active_probe": true,
+    "member_count": 7,
+    "references": [
+      "https://owasp.org/www-community/attacks/Path_Traversal",
+      "https://portswigger.net/web-security/file-path-traversal",
+      "https://cwe.mitre.org/data/definitions/22.html"
+    ]
+  },
+  {
+    "rank": 24,
+    "tier": "top51",
+    "merge_key": "ssti",
+    "name": "ssti",
+    "canonical_class": "ssti",
+    "pack": "injection",
+    "severity": "critical",
+    "frameworks": [
+      "Flask",
+      "Jinja2",
+      "Twig",
+      "FreeMarker",
+      "Pebble",
+      "Velocity",
+      "Handlebars",
+      "Mako",
+      "Angular",
+      "AngularJS"
+    ],
+    "why": "Escalates to RCE; clean {{7*7}} oracle. Runtime lens demotes: no arithmetic-payload reflection engine (grep confirmed no 7*7). Kept on RCE impact, tiered as lead.",
+    "runtime_discovery": "Inject SSTI probe strings ({{7*7}}, ${7*7}, #{7*7}) into every text input, query parameter, URL path segment, HTTP header, and cookie value. Observe response body for evaluated arithmetic. Follow up with class-chain payloads for RCE confirmation.",
+    "detection_signal": "Response body contains the literal evaluated result of the arithmetic probe (e.g., '49' when '{{7*7}}' was submitted). Distinct from XSS because the evaluation happens server-side before HTML rendering.",
+    "active_probe": true,
+    "member_count": 3,
+    "references": [
+      "https://portswigger.net/research/server-side-template-injection",
+      "https://owasp.org/www-project-web-security-testing-guide/v42/4-Web_Application_Security_Testing/07-Input_Validation_Testing/18-Testing_for_Server-Side_Template_Injection",
+      "https://cwe.mitre.org/data/definitions/94.html"
+    ]
+  },
+  {
+    "rank": 25,
+    "tier": "top51",
+    "merge_key": "open-redirect",
+    "name": "open-redirect",
+    "canonical_class": "open-redirect",
+    "pack": "injection",
+    "severity": "high",
+    "frameworks": [
+      "agnostic",
+      "express",
+      "Flask",
+      "Ruby on Rails",
+      "go",
+      "ASP.NET",
+      "Angular",
+      "Vue",
+      "Spring",
+      "Next.js",
+      "React"
+    ],
+    "why": "Realist promotes (OAuth-code/token-leak variant is ATO-grade, not the informational redirect it's often dismissed as). Runtime lens demotes (param-injection probe not active). Net: keep mid-tier; the ATO-escalation variant lifts it above pure informational.",
+    "runtime_discovery": "Enumerate all redirect-like parameters in login flows, logout handlers, OAuth callbacks, and navigation links. Replace the value with an external URL (https://evil.example.com) and an OOB collaborator URL. Follow the redirect chain with a headless browser or intercept at the proxy level. Also try protocol-relative (//evil.example.com) and bypass encodings (%2F%2F, ///evil.example.com).",
+    "detection_signal": "HTTP 301/302/307 Location header points to an attacker-controlled domain. Or a meta-refresh tag or JavaScript window.location assignment in the response body contains the injected URL. For JavaScript URIs: Location: javascript:alert(1) received in a 302 response. OOB: HTTP request arrives at collaborator from browser/server after redirect is followed.",
+    "active_probe": true,
+    "member_count": 12,
+    "references": [
+      "https://owasp.org/www-community/attacks/Unvalidated_Redirects_and_Forwards_Cheat_Sheet",
+      "https://portswigger.net/kb/issues/00500100_open-redirection-reflected",
+      "https://cwe.mitre.org/data/definitions/601.html"
+    ]
+  },
+  {
+    "rank": 26,
+    "tier": "top51",
+    "merge_key": "h2-console-exposed",
+    "name": "h2-console-exposed",
+    "canonical_class": "debug-endpoint-exposure",
+    "pack": "recon",
+    "severity": "critical",
+    "frameworks": [
+      "Spring Boot"
+    ],
+    "why": "Framework-bound single-path /h2-console probe -> DB RCE, near-zero FP. Runtime lens flags as easy high-ROI add (single GET + marker), currently not in probe list. Kept on impact, build-pending.",
+    "runtime_discovery": "Probe /h2-console and /h2-console/login.jsp. Also check /console (alternate path). Attempt access without authentication.",
+    "detection_signal": "HTTP 200 response from /h2-console with HTML containing 'H2 Console' title or a login form with 'JDBC URL' and 'User Name' fields. Any successful connection to the console without prior app authentication is a critical finding.",
+    "active_probe": true,
+    "member_count": 1,
+    "references": [
+      "https://www.h2database.com/html/tutorial.html#web_console",
+      "https://owasp.org/www-project-top-ten/2017/A6_2017-Security_Misconfiguration"
+    ]
+  },
+  {
+    "rank": 27,
+    "tier": "top51",
+    "merge_key": "otp-in-response",
+    "name": "otp-in-response",
+    "canonical_class": "otp-2fa-flaw",
+    "pack": "authn",
+    "severity": "critical",
+    "frameworks": [
+      "agnostic"
+    ],
+    "why": "Full MFA defeat; detected by response-body regex which the scanner genuinely does (runtime lens keeps it as implemented). FP flag: regex can match non-OTP 4-8 digit fields (zip/year/count) \u2014 medium FP, needs context gating.",
+    "runtime_discovery": "Trigger an OTP send action (login with valid credentials, registration, phone verification). Inspect the raw HTTP response body and headers for numeric strings matching the OTP length (4-8 digits), or JSON keys named `otp`, `code`, `token`, `pin`, `verification_code`, `debug`. Also check Location headers and cookies set at this step.",
+    "detection_signal": "HTTP response body or header contains a field whose value matches the exact OTP that completes the 2FA challenge (confirmed by using the extracted value to pass the 2FA step without receiving an SMS).",
+    "active_probe": false,
+    "member_count": 2,
+    "references": [
+      "https://owasp.org/www-project-web-security-testing-guide/latest/4-Web_Application_Security_Testing/04-Authentication_Testing/11-Testing_Multi-Factor_Authentication",
+      "https://cwe.mitre.org/data/definitions/311.html"
+    ]
+  },
+  {
+    "rank": 28,
+    "tier": "top51",
+    "merge_key": "secret-in-response-body",
+    "name": "secret-in-response-body",
+    "canonical_class": "secret-leak",
+    "pack": "leak",
+    "severity": "critical",
+    "frameworks": [
+      "Django",
+      "Laravel"
+    ],
+    "why": "SECRET_KEY/Sanctum token echoed in body = direct leakage caught by body scanning (runtime lens keeps as genuinely implemented). High impact, real detection.",
+    "runtime_discovery": "Crawl the application for config-dump or settings-exposure endpoints (/api/settings/, /debug/, /env/). Trigger 500 errors via malformed input and inspect tracebacks. Search all observed responses for patterns matching Django's insecure key format or high-entropy 50-character strings.",
+    "detection_signal": "Response body containing a string matching the regex `django-insecure-[a-z0-9!@#$%^&*()]{40,}` or a JSON key named 'SECRET_KEY' with a high-entropy value. Also fires when the Django debug page HTML includes 'SECRET_KEY' in the Settings table.",
+    "active_probe": true,
+    "member_count": 2,
+    "references": [
+      "https://docs.djangoproject.com/en/stable/ref/settings/#secret-key",
+      "https://cwe.mitre.org/data/definitions/312.html"
+    ]
+  },
+  {
+    "rank": 29,
+    "tier": "top51",
+    "merge_key": "spring-data-rest-exposure",
+    "name": "spring-data-rest-exposure",
+    "canonical_class": "idor-bola",
+    "pack": "recon",
+    "severity": "critical",
+    "frameworks": [
+      "Spring Boot",
+      "Spring Data REST"
+    ],
+    "why": "Auto-exposed repositories enable CRUD enumeration; distinct path-signature detection (single-path probe shape). Framework-bound critical, kept.",
+    "runtime_discovery": "GET the HATEOAS discovery root (/ or /api) to enumerate all auto-exported collection endpoints from _links. Probe each collection without authentication. Attempt GET (list), POST (create), PATCH (modify), DELETE on each endpoint as an unauthenticated user and as a low-privilege user.",
+    "detection_signal": "Unauthenticated GET to /api returns JSON with _links listing multiple entity collections. Fetching any collection link without a session returns HTTP 200 with entity data. A POST or PATCH returning 201/200 without authentication or for a resource the user should not own is a direct finding.",
+    "active_probe": true,
+    "member_count": 1,
+    "references": [
+      "https://docs.spring.io/spring-data/rest/docs/current/reference/html/",
+      "https://owasp.org/API-Security/editions/2023/en/0xa1-broken-object-level-authorization/",
+      "https://cwe.mitre.org/data/definitions/284.html"
+    ]
+  },
+  {
+    "rank": 30,
+    "tier": "top51",
+    "merge_key": "directory-listing",
+    "name": "directory-listing",
+    "canonical_class": "directory-listing",
+    "pack": "recon",
+    "severity": "medium",
+    "frameworks": [
+      "express",
+      "serve-static",
+      "Apache",
+      "Nginx",
+      "IIS",
+      "agnostic"
+    ],
+    "why": "Runtime lens promotes (genuinely implemented marker-based HTTP detection, low-FP, high prevalence on misconfigured static servers). Pure-read strength. Moved up from #41.",
+    "runtime_discovery": "Crawl all static path prefixes (typically `/static`, `/public`, `/assets`, `/dist`). Send GET requests to directory-level URLs (trailing slash). Observe whether the response contains an HTML `<ul>` or `<table>` of file names.",
+    "detection_signal": "HTTP 200 response to a directory URL with `Content-Type: text/html` and body containing repeated `<a href=` file links or a visible folder listing pattern (e.g., `Index of /`).",
+    "active_probe": true,
+    "member_count": 2,
+    "references": [
+      "https://expressjs.com/en/4x/api.html#express.static",
+      "https://cwe.mitre.org/data/definitions/548.html"
+    ]
+  },
+  {
+    "rank": 31,
+    "tier": "top51",
+    "merge_key": "xss-reflected-stored-dom",
+    "name": "xss-reflected-stored-dom",
+    "canonical_class": "xss",
+    "pack": "appsec",
+    "severity": "high",
+    "frameworks": [
+      "agnostic",
+      "Ruby on Rails",
+      "Flask",
+      "React",
+      "Vue"
+    ],
+    "why": "Most prevalent client-side bug. Reflected variant is lead-only (no active reflection probe), but DOM-XSS sinks are visible to browser_scanner. Realist adds blind/stored XSS via OOB as a distinct mode (see additions). Kept mid-tier.",
+    "runtime_discovery": "Inject a benign HTML marker (e.g., <kbd>keyleak-xss-probe-UNIQUEID</kbd> or <b>keyleak</b>) into every parameter of every crawled form and URL query string. If the marker appears unescaped in the response body (confirmed by parsing the DOM, not just string search), escalate to a script payload. Compare reflected value across HTML context, attribute context, and JS string context.",
+    "detection_signal": "Injected marker string appears verbatim in the DOM response with HTML tag structure intact (status 200); DOMParser confirms it as an element node rather than a text node. Any occurrence of <script>, onerror=, onload=, or javascript: derived from probe input in the response.",
+    "active_probe": true,
+    "member_count": 8,
+    "references": [
+      "https://owasp.org/www-community/attacks/xss/",
+      "https://portswigger.net/web-security/cross-site-scripting/reflected",
+      "https://cwe.mitre.org/data/definitions/79.html"
+    ]
+  },
+  {
+    "rank": 32,
+    "tier": "top51",
+    "merge_key": "excessive-data-exposure",
+    "name": "excessive-data-exposure",
+    "canonical_class": "excessive-data-exposure",
+    "pack": "api",
+    "severity": "high",
+    "frameworks": [
+      "agnostic"
+    ],
+    "why": "OWASP API3; detected by inspecting response bodies for over-broad objects \u2014 a natural response-diff check the scanner can genuinely do. Kept.",
+    "runtime_discovery": "Crawl authenticated endpoints and compare the full JSON response body against what the UI renders. Flag any response field containing patterns matching password, hash, secret, ssn, dob, internal_id, is_admin, role, token, credit_card. Diff responses for two users of different privilege levels to identify fields visible to both that should be role-gated.",
+    "detection_signal": "Response JSON contains field names matching a sensitive-keyword regex (e.g., `password`, `hash`, `secret`, `token`, `ssn`, `dob`, `is_admin`) not present in the rendered DOM; or low-privilege user response contains fields identical to high-privilege user response for the same resource.",
+    "active_probe": false,
+    "member_count": 1,
+    "references": [
+      "https://owasp.org/API-Security/editions/2023/en/0xa3-broken-object-property-level-authorization/",
+      "https://portswigger.net/web-security/api-testing"
+    ]
+  },
+  {
+    "rank": 33,
+    "tier": "top51",
+    "merge_key": "weak-session-secret",
+    "name": "weak-session-secret",
+    "canonical_class": "session-forgery",
+    "pack": "authn",
+    "severity": "critical",
+    "frameworks": [
+      "Flask",
+      "Ruby on Rails"
+    ],
+    "why": "Forgeable Flask/Rails signed session = full forgery. Runtime lens demotes (minting a valid cookie requires a forge step the scanner lacks). Kept on impact, flagged lead/unbuilt.",
+    "runtime_discovery": "Capture the session cookie (format: base64.base64.signature). Decode the header+payload (base64 with URL-safe alphabet, no padding). Attempt to re-sign with a wordlist of known weak keys using flask-unsign or manual HMAC. Submit the forged cookie and observe whether the application accepts the modified session data.",
+    "detection_signal": "A re-signed cookie containing {'role':'admin'} or an elevated user ID is accepted by the server with HTTP 200 and admin-level response content, rather than HTTP 401/403 or a session error page.",
+    "active_probe": true,
+    "member_count": 2,
+    "references": [
+      "https://noraj.github.io/flask-session-cookie-manager/",
+      "https://github.com/Paradoxis/Flask-Unsign",
+      "https://owasp.org/www-project-web-security-testing-guide/v42/4-Web_Application_Security_Testing/06-Session_Management_Testing/02-Testing_for_Cookies_Attributes"
+    ]
+  },
+  {
+    "rank": 34,
+    "tier": "top51",
+    "merge_key": "baas-config-exposed-storage",
+    "name": "open-cloud-storage-bucket",
+    "canonical_class": "exposed-storage",
+    "pack": "baas",
+    "severity": "high",
+    "frameworks": [
+      "Supabase",
+      "Firebase",
+      "AWS S3",
+      "GCS",
+      "Azure Blob",
+      "agnostic"
+    ],
+    "why": "Net-new from runtime lens (open-cloud-storage-bucket) folded in here as an extension of the BaaS prober: storage-list/public-bucket probe is the same confirmed-active shape baas_validator already uses for Supabase storage. High prevalence, reuses existing engine, low-FP. Promoted into Top 51 as a genuine implemented-adjacent strength.",
+    "runtime_discovery": "",
+    "detection_signal": "",
+    "active_probe": null,
+    "member_count": 0,
+    "references": []
+  },
+  {
+    "rank": 35,
+    "tier": "top51",
+    "merge_key": "client-side-only-authz",
+    "name": "client-side-only-authz",
+    "canonical_class": "broken-access-control",
+    "pack": "access-control",
+    "severity": "high",
+    "frameworks": [
+      "React",
+      "React Router",
+      "Next.js",
+      "LaunchDarkly",
+      "Unleash",
+      "Vue",
+      "Angular",
+      "agnostic"
+    ],
+    "why": "UI-only/feature-flag authz bypassed by direct API call; KeyLeak's JS endpoint-mining feeds this (real surface). Kept mid-tier.",
+    "runtime_discovery": "Parse the JS bundle for React Router route definitions (Route, createBrowserRouter path values) and collect every path string. Attempt direct navigation to each path as an unauthenticated or low-privilege user. Observe whether the app renders protected content or whether the API calls succeed when made directly.",
+    "detection_signal": "A route path extracted from the bundle (e.g. /admin, /billing, /internal) returns HTTP 200 with meaningful HTML/JSON content when accessed directly by a non-admin session, rather than redirecting (302) or returning 401/403.",
+    "active_probe": true,
+    "member_count": 3,
+    "references": [
+      "https://owasp.org/Top10/A01_2021-Broken_Access_Control/",
+      "https://cheatsheetseries.owasp.org/cheatsheets/Authorization_Cheat_Sheet.html"
+    ]
+  },
+  {
+    "rank": 36,
+    "tier": "top51",
+    "merge_key": "graphql-introspection-exposed",
+    "name": "graphql-introspection-exposed",
+    "canonical_class": "graphql-introspection-exposed",
+    "pack": "api",
+    "severity": "medium",
+    "frameworks": [
+      "GraphQL",
+      "Hasura",
+      "Apollo",
+      "React",
+      "Angular",
+      "Vue",
+      "agnostic"
+    ],
+    "why": "Realist promotes (reliably accepted, low-FP, clean __schema oracle). Runtime lens caveat: current detection is regex hint only, not an active introspection query. Kept; the introspection probe is an easy build.",
+    "runtime_discovery": "Send a POST request to the GraphQL endpoint with the standard introspection query body (`{__schema{types{name fields{name type{name}}}}}` and `{__typename}`). A successful response with schema data confirms introspection is enabled. Also probe common GraphQL paths: `/graphql`, `/api/graphql`, `/query`, `/gql`.",
+    "detection_signal": "POST to `/graphql` with `{\"query\":\"{__schema{queryType{name}}}\"}` returns HTTP 200 with a JSON body containing `__schema` data rather than an error or disabled-introspection message. Response body size is typically >1KB and contains type definitions.",
+    "active_probe": true,
+    "member_count": 5,
+    "references": [
+      "https://portswigger.net/web-security/graphql",
+      "https://owasp.org/www-project-web-security-testing-guide/latest/4-Web_Application_Security_Testing/12-API_Testing/01-Testing_GraphQL",
+      "https://cheatsheetseries.owasp.org/cheatsheets/GraphQL_Cheat_Sheet.html"
+    ]
+  },
+  {
+    "rank": 37,
+    "tier": "top51",
+    "merge_key": "insecure-cookie-flags",
+    "name": "insecure-cookie-flags",
+    "canonical_class": "insecure-cookie",
+    "pack": "headers",
+    "severity": "high",
+    "frameworks": [
+      "agnostic",
+      "express",
+      "Flask",
+      "ASP.NET",
+      "Laravel"
+    ],
+    "why": "Both realist and runtime lenses flag this: realist demotes payout (informational unless chained), runtime lens notes it is LISTED but UNBUILT (verified: no HttpOnly/SameSite/Secure parsing anywhere) and is the #1 zero-FP easy add (Set-Cookie header parse). Net: kept but demoted from #25; flagged as must-build, low standalone payout.",
+    "runtime_discovery": "Authenticate and inspect the `Set-Cookie` header for the session cookie. Check for `Secure`, `HttpOnly`, and `SameSite` attributes. Also compare the cookie name against known default values (`connect.sid`).",
+    "detection_signal": "`Set-Cookie` header on the login response contains `connect.sid=...` without `Secure` and/or without `SameSite`. Alternatively, the cookie name is the unchanged default `connect.sid`, which fingerprints the exact middleware.",
+    "active_probe": false,
+    "member_count": 5,
+    "references": [
+      "https://www.npmjs.com/package/express-session#cookie",
+      "https://cheatsheetseries.owasp.org/cheatsheets/Session_Management_Cheat_Sheet.html",
+      "https://cwe.mitre.org/data/definitions/614.html"
+    ]
+  },
+  {
+    "rank": 38,
+    "tier": "top51",
+    "merge_key": "laravel-debugbar-telescope-exposed",
+    "name": "laravel-debugbar-telescope-exposed",
+    "canonical_class": "debug-endpoint-exposure",
+    "pack": "recon",
+    "severity": "high",
+    "frameworks": [
+      "Laravel"
+    ],
+    "why": "Framework-bound, exposes queries/env/request data via specific path+marker. Same trivial GET shape; runtime lens lists it among the easy debug-path adds (currently not in probe list). Kept.",
+    "runtime_discovery": "Crawl the app and probe /_debugbar/open, /_debugbar/assets/stylesheets, /telescope, /telescope/api/requests, and /telescope/api/queries without authentication. Also inspect HTML source for the debugbar injection div.",
+    "detection_signal": "HTTP 200 on /_debugbar/open?max=20 returns JSON with 'queries', 'session', or 'env' keys. /telescope/api/requests returns a JSON array of recent HTTP requests including headers and payloads.",
+    "active_probe": true,
+    "member_count": 1,
+    "references": [
+      "https://github.com/barryvdh/laravel-debugbar",
+      "https://laravel.com/docs/telescope"
+    ]
+  },
+  {
+    "rank": 39,
+    "tier": "top51",
+    "merge_key": "go-pprof-debug-exposed",
+    "name": "go-pprof-debug-exposed",
+    "canonical_class": "debug-endpoint-exposure",
+    "pack": "recon",
+    "severity": "high",
+    "frameworks": [
+      "net/http"
+    ],
+    "why": "/debug/pprof on default mux leaks memory/goroutine data + DoS. Specific-path probe, common Go misconfig; among runtime lens easy-add debug paths (not currently in list). Kept.",
+    "runtime_discovery": "Crawl /debug/pprof/, /debug/pprof/goroutine, /debug/pprof/heap, /debug/pprof/cmdline without authentication. Check for HTTP 200 with profiling data.",
+    "detection_signal": "HTTP 200 response body at /debug/pprof/ containing 'goroutine', 'heap', 'allocs', or 'cmdline' index links; or /debug/pprof/goroutine?debug=1 returning a live goroutine stack dump.",
+    "active_probe": true,
+    "member_count": 1,
+    "references": [
+      "https://pkg.go.dev/net/http/pprof",
+      "https://owasp.org/www-project-top-ten/2021/A05_2021-Security_Misconfiguration"
+    ]
+  },
+  {
+    "rank": 40,
+    "tier": "top51",
+    "merge_key": "host-header-injection",
+    "name": "host-header-injection",
+    "canonical_class": "host-header-injection",
+    "pack": "appsec",
+    "severity": "high",
+    "frameworks": [
+      "agnostic",
+      "Django",
+      "go"
+    ],
+    "why": "Realist promotes (password-reset-poisoning variant is straight ATO). Runtime lens demotes (no X-Forwarded-Host injection probe \u2014 grep confirmed). Net: kept mid-tier on the ATO variant, flagged unbuilt.",
+    "runtime_discovery": "On password-reset and email-verification flows, replay the request with a modified Host header (Host: evil.example.com) or supplementary headers (X-Forwarded-Host, X-Host, X-Original-Host, Forwarded: host=evil.example.com). Trigger a password-reset email to a test account and inspect the link domain. Also probe for cache poisoning by injecting a Host and observing whether the modified value is reflected in the response or stored in a cache.",
+    "detection_signal": "Password-reset or account-confirmation email contains a link pointing to the attacker-supplied host value instead of the legitimate domain. Alternatively: the HTTP response body or Location header reflects the injected Host value (X-Forwarded-Host reflection in an HTML link, canonical URL, or CORS header). Cache-poisoning variant: second request with a legitimate Host header returns a response containing the previously injected evil domain.",
+    "active_probe": true,
+    "member_count": 4,
+    "references": [
+      "https://portswigger.net/web-security/host-header",
+      "https://owasp.org/www-project-web-security-testing-guide/v42/4-Web_Application_Security_Testing/07-Input_Validation_Testing/17-Testing_for_Host_Header_Injection",
+      "https://cwe.mitre.org/data/definitions/116.html"
+    ]
+  },
+  {
+    "rank": 41,
+    "tier": "top51",
+    "merge_key": "cmd-injection",
+    "name": "cmd-injection",
+    "canonical_class": "cmd-injection",
+    "pack": "injection",
+    "severity": "critical",
+    "frameworks": [
+      "agnostic"
+    ],
+    "why": "Coverage-gaps promotes: critical-RCE with a clean time-blind/OOB oracle, ranked far below impact and not in prior Top 51. Runtime lens caveat: no active engine yet, so lead-only today. Promoted into Top 51 on impact + buildability.",
+    "runtime_discovery": "Inject shell metacharacters with time-delay payloads into parameters likely passed to OS commands (filename, host, ip, domain, format fields): ; sleep 5, | sleep 5, && sleep 5, $(sleep 5), `sleep 5`. Measure response latency delta vs baseline. For OOB confirmation, inject DNS callback payloads (ping -c1 <collaborator_host>) and monitor the listener.",
+    "detection_signal": "Time-delay: response latency consistently exceeds baseline by \u22654 seconds for sleep-based payloads. OOB: DNS or HTTP request received at the Burp Collaborator / interactsh listener with the app's source IP. Error-based: response contains shell output fragments like uid=, /etc/passwd lines, or Windows system directory listings when whoami/dir is injected.",
+    "active_probe": true,
+    "member_count": 1,
+    "references": [
+      "https://owasp.org/www-community/attacks/Command_Injection",
+      "https://portswigger.net/web-security/os-command-injection",
+      "https://cwe.mitre.org/data/definitions/78.html"
+    ]
+  },
+  {
+    "rank": 42,
+    "tier": "top51",
+    "merge_key": "resource-id-enumeration",
+    "name": "resource-id-enumeration",
+    "canonical_class": "resource-id-enumeration",
+    "pack": "api",
+    "severity": "high",
+    "frameworks": [
+      "agnostic"
+    ],
+    "why": "OWASP API9; sequential/guessable IDs + legacy API versions enumerable via ID fuzzing and version-path probing. Coverage-gaps promotes. Detectable with the scanner's probe surface. Kept.",
+    "runtime_discovery": "Extract all numeric and short-slug IDs from crawled responses. Probe a range of adjacent IDs (current-50 to current+50) as an unauthenticated or low-privilege user. Compare HTTP 200/403/404 distribution. A 403 confirms existence while 404 denies it \u2014 any 403 for a foreign-user resource is an enumeration signal.",
+    "detection_signal": "Sequential ID probing yields mixed 200/403 vs uniform 404 responses. A 403 on `/api/orders/1042` while the authenticated user only owns order 2991 indicates the object exists and the server leaks existence via status code rather than returning a consistent 404 for all unauthorized resources.",
+    "active_probe": true,
+    "member_count": 2,
+    "references": [
+      "https://owasp.org/API-Security/editions/2023/en/0xa1-broken-object-level-authorization/",
+      "https://cwe.mitre.org/data/definitions/639.html"
+    ]
+  },
+  {
+    "rank": 43,
+    "tier": "top51",
+    "merge_key": "xxe-injection",
+    "name": "xxe-injection",
+    "canonical_class": "xxe",
+    "pack": "injection",
+    "severity": "critical",
+    "frameworks": [
+      "Java",
+      "PHP",
+      ".NET",
+      "Python (lxml)",
+      "Ruby (Nokogiri)"
+    ],
+    "why": "Coverage-gaps promotes: critical impact, clean OOB oracle, under-ranked at 73 and not in prior Top 51. Promoted in on impact; OOB engine is a build dependency.",
+    "runtime_discovery": "Identify endpoints that consume XML (file uploads, SOAP, XML API bodies, SVG uploads, DOCX/XLSX imports). Replace or inject a DOCTYPE block into the XML: <!DOCTYPE foo [<!ENTITY xxe SYSTEM 'file:///etc/passwd'>]> and reference &xxe; in the body. Submit and inspect response. For blind XXE, use an out-of-band SYSTEM entity pointing to a Burp Collaborator HTTP URL.",
+    "detection_signal": "In-band: response body contains the contents of /etc/passwd (root:x:0:0:), /etc/hostname, or Windows system files. OOB: HTTP or DNS interaction received at the collaborator listener with the request originating from the app server's IP. Error-based: XML parser error message reveals local file path or network connectivity to internal hosts.",
+    "active_probe": true,
+    "member_count": 1,
+    "references": [
+      "https://owasp.org/www-community/vulnerabilities/XML_External_Entity_(XXE)_Processing",
+      "https://portswigger.net/web-security/xxe",
+      "https://cwe.mitre.org/data/definitions/611.html"
+    ]
+  },
+  {
+    "rank": 44,
+    "tier": "top51",
+    "merge_key": "token-in-query-string",
+    "name": "token-in-query-string",
+    "canonical_class": "token-in-url",
+    "pack": "leak",
+    "severity": "medium",
+    "frameworks": [
+      "FastAPI",
+      "React",
+      "agnostic"
+    ],
+    "why": "Tokens/PII in URL/query leak via logs/referrers; detected directly in request URLs/links \u2014 runtime lens keeps as genuinely implemented and low-FP. Kept.",
+    "runtime_discovery": "Crawl all endpoints and observe the URL patterns used for authentication. Check whether any authenticated endpoint is reachable with the token in the query string rather than (or in addition to) the Authorization header.",
+    "detection_signal": "Requests to /api/data?token=<jwt> or /export?api_key=<key> return HTTP 200 authenticated responses. The OpenAPI schema for the endpoint shows an APIKeyQuery security scheme. The full token value is visible in the request URL captured by the proxy.",
+    "active_probe": false,
+    "member_count": 2,
+    "references": [
+      "https://owasp.org/Top10/A02_2021-Cryptographic_Failures/",
+      "https://cwe.mitre.org/data/definitions/598.html"
+    ]
+  },
+  {
+    "rank": 45,
+    "tier": "top51",
+    "merge_key": "prototype-pollution",
+    "name": "prototype-pollution",
+    "canonical_class": "prototype-pollution",
+    "pack": "injection",
+    "severity": "critical",
+    "frameworks": [
+      "agnostic",
+      "express",
+      "body-parser",
+      "Next.js",
+      "Angular",
+      "Vue"
+    ],
+    "why": "Can escalate to RCE/authz bypass in Node. Runtime lens demotes (no __proto__ payload engine \u2014 grep confirmed). Kept on impact, tiered as lead/unbuilt.",
+    "runtime_discovery": "Fetch each crawled URL and append a probe query string: ?__proto__[keyleaktest]=polluted and ?constructor[prototype][keyleaktest]=polluted. After page load, execute page.evaluate(() => ({}).keyleaktest) in the headless browser context. A non-undefined return value confirms pollution. Also fuzz JSON request bodies on API endpoints with {\"__proto__\":{\"keyleaktest\":true}}.",
+    "detection_signal": "page.evaluate returns a non-undefined value for a sentinel property name seeded only via the probe parameter (e.g., ({}).keyleaktest === 'polluted'). Console errors referencing prototype or constructor mutations are also a secondary signal.",
+    "active_probe": true,
+    "member_count": 4,
+    "references": [
+      "https://portswigger.net/web-security/prototype-pollution",
+      "https://portswigger.net/research/widespread-prototype-pollution-gadgets",
+      "https://cwe.mitre.org/data/definitions/1321.html"
+    ]
+  },
+  {
+    "rank": 46,
+    "tier": "top51",
+    "merge_key": "django-admin-exposed",
+    "name": "django-admin-exposed",
+    "canonical_class": "debug-endpoint-exposure",
+    "pack": "recon",
+    "severity": "high",
+    "frameworks": [
+      "Django",
+      "Django REST Framework"
+    ],
+    "why": "Specific-path /admin + DRF browsable API probe, very common in Django. Same GET+marker shape; among easy debug-path adds. Kept.",
+    "runtime_discovery": "Crawl the application for /admin/, /admin/login/, /django-admin/, /staff/. Issue GET requests and observe whether a Django admin login page (HTML containing 'Django administration' or 'django-admin' CSS class) is returned with HTTP 200.",
+    "detection_signal": "HTTP 200 response to GET /admin/login/ with response body containing the string 'Django administration' or a <form> with action='/admin/login/'. Absence of IP-restriction redirect (302 to a deny page) confirms exposure.",
+    "active_probe": true,
+    "member_count": 2,
+    "references": [
+      "https://docs.djangoproject.com/en/stable/ref/contrib/admin/",
+      "https://owasp.org/www-project-web-security-testing-guide/latest/4-Web_Application_Security_Testing/02-Configuration_and_Deployment_Management_Testing/05-Enumerate_Infrastructure_and_Application_Admin_Interfaces"
+    ]
+  },
+  {
+    "rank": 47,
+    "tier": "top51",
+    "merge_key": "rate-limit-missing",
+    "name": "rate-limit-missing",
+    "canonical_class": "rate-limit",
+    "pack": "authn",
+    "severity": "high",
+    "frameworks": [
+      "agnostic",
+      "FastAPI",
+      "go",
+      "express"
+    ],
+    "why": "OWASP API4; brute-force/credential-stuffing on auth/OTP. Runtime lens demotes (no burst-timing engine). Kept on impact, flagged unbuilt.",
+    "runtime_discovery": "After reaching the 2FA OTP entry screen with a valid partial session, send automated POST requests to the OTP submission endpoint cycling through all possible values (0000\u20139999 for 4-digit, or a subset for 6-digit). Measure whether the server returns 429 Too Many Requests, locks the session, or continues returning 401/400 without restriction.",
+    "detection_signal": "Server returns consistent 401/400 (wrong OTP) responses across 100+ sequential attempts without a 429, redirect to lockout page, or increasing delay; confirms absence of rate limiting.",
+    "active_probe": true,
+    "member_count": 6,
+    "references": [
+      "https://owasp.org/www-project-web-security-testing-guide/latest/4-Web_Application_Security_Testing/04-Authentication_Testing/11-Testing_Multi-Factor_Authentication",
+      "https://cwe.mitre.org/data/definitions/307.html"
+    ]
+  },
+  {
+    "rank": 48,
+    "tier": "top51",
+    "merge_key": "werkzeug-debug-pin-derivation",
+    "name": "werkzeug-debug-pin-derivation",
+    "canonical_class": "debug-endpoint-exposure",
+    "pack": "recon",
+    "severity": "critical",
+    "frameworks": [
+      "Flask",
+      "Werkzeug"
+    ],
+    "why": "Interactive debugger console = RCE; distinct high-impact Flask finding via specific endpoint probe. Among runtime lens easy debug-path adds (not currently probed). Kept on impact.",
+    "runtime_discovery": "After confirming debug mode is active, probe for LFI or path traversal to read /proc/net/arp, /proc/self/cgroup, /etc/machine-id, /sys/class/net/eth0/address. Also check whether error tracebacks expose the Flask app's filesystem path. Combine gathered values to compute the PIN formula offline.",
+    "detection_signal": "HTTP 500 traceback response exposes absolute filesystem path of the Flask app (e.g., '/home/app/app.py'). Additional LFI or SSRF probe returns /etc/machine-id or MAC address content, providing all ingredients for PIN derivation.",
+    "active_probe": true,
+    "member_count": 1,
+    "references": [
+      "https://book.hacktricks.xyz/network-services-pentesting/pentesting-web/werkzeug",
+      "https://www.daehee.com/werkzeug-debugger-pin/",
+      "https://cwe.mitre.org/data/definitions/94.html"
+    ]
+  },
+  {
+    "rank": 49,
+    "tier": "top51",
+    "merge_key": "oidc-email-claim-trust",
+    "name": "oidc-email-claim-trust",
+    "canonical_class": "oauth-oidc-flaw",
+    "pack": "authn",
+    "severity": "critical",
+    "frameworks": [
+      "agnostic"
+    ],
+    "why": "Trusting unverified OIDC email claim -> ATO via attacker IdP. Runtime lens demotes (auth-flow probe not built). Kept on emerging-impact; the oauth redirect_uri/PKCE variant (coverage-gaps add) folds in under this oauth-oidc-flaw merge_key.",
+    "runtime_discovery": "Register an account at the OAuth/OIDC Identity Provider using the target email without verifying it (some providers allow this). Complete the OIDC flow with the app. Inspect the ID token JWT claims for `email_verified` field. Observe whether the app accepts the login and maps to the victim's existing account.",
+    "detection_signal": "App completes login and opens the victim's account session when presented with an OIDC ID token containing `email_verified: false` (or missing the field) for an email address that corresponds to an existing app account.",
+    "active_probe": true,
+    "member_count": 1,
+    "references": [
+      "https://portswigger.net/web-security/oauth/openid",
+      "https://openid.net/specs/openid-connect-core-1_0.html#StandardClaims",
+      "https://cwe.mitre.org/data/definitions/287.html"
+    ]
+  },
+  {
+    "rank": 50,
+    "tier": "top51",
+    "merge_key": "user-enumeration",
+    "name": "user-enumeration",
+    "canonical_class": "user-enumeration",
+    "pack": "authn",
+    "severity": "medium",
+    "frameworks": [
+      "agnostic",
+      "ASP.NET",
+      "Ruby on Rails",
+      "Django"
+    ],
+    "why": "Both realist and runtime lenses demote (heavily duplicated, routinely informational, no response-diff timing engine built). Kept at the floor as a common precursor; low standalone payout.",
+    "runtime_discovery": "Submit registration or password-reset requests with a known-existing email and a known-nonexistent email (or random UUID). Compare HTTP status codes, response body strings (e.g., 'email not found' vs 'reset link sent'), and response times. Any observable difference (textual, status, or timing >100ms) confirms enumeration.",
+    "detection_signal": "Two requests to `/api/auth/forgot-password`: one with a seeded valid email, one with a random nonexistent email. Observable diff in status code (200 vs 404), body text ('user not found' vs 'check your email'), or response time delta >150ms. Automated diff of trimmed response bodies flags the divergence.",
+    "active_probe": true,
+    "member_count": 4,
+    "references": [
+      "https://owasp.org/www-project-web-security-testing-guide/latest/4-Web_Application_Security_Testing/03-Identity_Management_Testing/04-Testing_for_Account_Enumeration_and_Guessable_User_Account",
+      "https://cwe.mitre.org/data/definitions/204.html"
+    ]
+  },
+  {
+    "rank": 51,
+    "tier": "top51",
+    "merge_key": "password-reset-token-predictable",
+    "name": "password-reset-token-predictable",
+    "canonical_class": "password-reset-flaw",
+    "pack": "authn",
+    "severity": "high",
+    "frameworks": [
+      "agnostic"
+    ],
+    "why": "Coverage-gaps promotes; sits at the economic center of the bounty ATO-chain. The password-reset-token-leakage high-yield variant (coverage-gaps add) folds in under this merge_key as a distinct probe. Promoted into the 51 to anchor the auth-takeover chain.",
+    "runtime_discovery": "Trigger password resets for a controlled email address multiple times in quick succession. Examine the reset tokens received: check length, character set, and whether tokens share a common prefix or are sequential. Attempt to decode as Base64/hex and look for recognizable fields (timestamp, username hash). Test if an expired token is still accepted after use.",
+    "detection_signal": "Reset tokens are fewer than 128 bits of entropy; or tokens show sequential/predictable patterns across multiple requests; or a previously used/expired token still returns 200 on the reset confirmation endpoint instead of an error.",
+    "active_probe": true,
+    "member_count": 1,
+    "references": [
+      "https://owasp.org/www-project-web-security-testing-guide/latest/4-Web_Application_Security_Testing/04-Authentication_Testing/09-Testing_for_Weak_Password_Change_or_Reset_Functionalities",
+      "https://cwe.mitre.org/data/definitions/640.html"
+    ]
+  },
+  {
+    "rank": 52,
+    "tier": "addition",
+    "merge_key": null,
+    "name": "exposed-git-directory",
+    "canonical_class": "secrets-exposure",
+    "pack": "leak",
+    "severity": "critical",
+    "frameworks": [
+      "agnostic"
+    ],
+    "why": "Realist add + coverage-gaps confirm the gap is real (verified: no .git/config, backup, or .DS_Store probe exists despite the #3 description claiming '.git/backup' coverage). A dedicated /.git/ directory probe out-pays generic .env on acceptance and is dedup-resistant. Distinct enough from exposed-env-file to warrant its own probe.",
+    "runtime_discovery": "pure HTTP GET, same shape as existing exposed-path probes; near-zero FP",
+    "detection_signal": "GET /.git/config, /.git/HEAD, /.git/index; reconstruct source from objects/packs",
+    "active_probe": null,
+    "member_count": 0,
+    "references": []
+  },
+  {
+    "rank": 53,
+    "tier": "addition",
+    "merge_key": null,
+    "name": "web-cache-deception-poisoning",
+    "canonical_class": "web-cache-attack",
+    "pack": "appsec",
+    "severity": "high",
+    "frameworks": [
+      "agnostic",
+      "Cloudflare",
+      "Akamai",
+      "Fastly",
+      "Next.js"
+    ],
+    "why": "Named independently by all three lenses (realist 'cache-deception-poisoning', coverage-gaps 'web-cache-deception-poisoning'). Completely absent from the cluster index, high-frequency and well-paid on CDN-fronted targets. Genuine taxonomy hole.",
+    "runtime_discovery": "two-request black-box probe (cached vs uncached diff); buildable on the existing HTTP probe surface",
+    "detection_signal": "append /nonexistent.css or .json to authenticated path; observe cached sensitive response served to unauthenticated request; or X-Cache/Age header poisoning",
+    "active_probe": null,
+    "member_count": 0,
+    "references": []
+  },
+  {
+    "rank": 54,
+    "tier": "addition",
+    "merge_key": null,
+    "name": "open-cloud-storage-bucket",
+    "canonical_class": "exposed-storage",
+    "pack": "baas",
+    "severity": "high",
+    "frameworks": [
+      "AWS S3",
+      "GCS",
+      "Azure Blob",
+      "Firebase Storage",
+      "agnostic"
+    ],
+    "why": "Runtime lens add; reuses the confirmed-active BaaS prober (baas_validator storage-list). Generic public S3/GCS/Azure-blob enumeration is high-prevalence, low-FP, and one of the few genuinely active checks the scanner can already perform. Folded into Top 51 at #34 as it is implemented-adjacent.",
+    "runtime_discovery": "active anon request, same engine as Supabase storage probe",
+    "detection_signal": "anonymous LIST/GET on bucket URLs extracted from bundles/config; 200 + object listing = open",
+    "active_probe": null,
+    "member_count": 0,
+    "references": []
+  },
+  {
+    "rank": 55,
+    "tier": "addition",
+    "merge_key": null,
+    "name": "http-request-smuggling",
+    "canonical_class": "http-request-smuggling",
+    "pack": "injection",
+    "severity": "critical",
+    "frameworks": [
+      "agnostic",
+      "Nginx",
+      "HAProxy",
+      "Node.js"
+    ],
+    "why": "Coverage-gaps: top-tier class with ZERO cluster representation. Genuine high-impact gap, black-box detectable via timing/desync, though it requires a raw-socket probe engine the scanner does not yet have.",
+    "runtime_discovery": "raw-socket timing probe (OOB-style oracle); new engine dependency",
+    "detection_signal": "CL.TE / TE.CL desync via crafted Content-Length + Transfer-Encoding; measure response-time delta or socket poisoning",
+    "active_probe": null,
+    "member_count": 0,
+    "references": []
+  },
+  {
+    "rank": 56,
+    "tier": "addition",
+    "merge_key": null,
+    "name": "insecure-deserialization",
+    "canonical_class": "insecure-deserialization",
+    "pack": "injection",
+    "severity": "critical",
+    "frameworks": [
+      "Java",
+      "PHP",
+      "Python",
+      "Ruby",
+      ".NET"
+    ],
+    "why": "Coverage-gaps: generic insecure deserialization has no cluster (aspnet-viewstate is the only narrow representative). Critical-RCE, black-box detectable via OOB gadget callback. Genuine gap distinct from the framework-specific viewstate entry.",
+    "runtime_discovery": "OOB-callback oracle; shares engine need with ssrf/xxe",
+    "detection_signal": "send crafted serialized payload (Java/PHP/Python pickle/.NET) with OOB callback gadget; observe DNS/HTTP callback",
+    "active_probe": null,
+    "member_count": 0,
+    "references": []
+  },
+  {
+    "rank": 57,
+    "tier": "addition",
+    "merge_key": null,
+    "name": "account-takeover-chain",
+    "canonical_class": "auth-takeover",
+    "pack": "authn",
+    "severity": "critical",
+    "frameworks": [
+      "agnostic"
+    ],
+    "why": "Realist add: explicit ATO-chain class fusing reset-token + response-leaked-OTP + identity-claim confusion (the 'economic center of bounty'). Not a single existing cluster \u2014 it is a chained-detection orchestration over otp-in-response + password-reset-flaw + oidc-email-claim-trust. Worth a dedicated meta-detection rather than scattering the signal.",
+    "runtime_discovery": "chained multi-step auth-flow probe; orchestrates existing authn-pack signals",
+    "detection_signal": "correlate OTP-in-response + predictable/leaked reset token + unverified email-claim acceptance in one auth flow",
+    "active_probe": null,
+    "member_count": 0,
+    "references": []
+  },
+  {
+    "rank": 58,
+    "tier": "addition",
+    "merge_key": null,
+    "name": "websocket-auth-origin-bypass",
+    "canonical_class": "websocket-security",
+    "pack": "appsec",
+    "severity": "high",
+    "frameworks": [
+      "agnostic",
+      "Socket.IO",
+      "ws",
+      "Phoenix Channels"
+    ],
+    "why": "Coverage-gaps: WebSocket auth / cross-site WebSocket hijacking (CSWSH) has zero cluster representation. Black-box detectable by opening a WS with a foreign Origin and observing authenticated data. Genuine gap on real-time-heavy apps.",
+    "runtime_discovery": "active WS handshake probe; new but well-bounded engine",
+    "detection_signal": "WS handshake with attacker Origin / no token; receive authenticated stream = CSWSH",
+    "active_probe": null,
+    "member_count": 0,
+    "references": []
+  },
+  {
+    "rank": null,
+    "tier": "extended",
+    "merge_key": "openapi-docs-exposed",
+    "name": "OpenAPI / Swagger Docs Exposed (FastAPI /docs)",
+    "canonical_class": "debug-endpoint-exposure",
+    "pack": null,
+    "severity": "medium",
+    "frameworks": [
+      "FastAPI",
+      "Starlette"
+    ],
+    "why": "",
+    "runtime_discovery": "Crawl the target; probe /docs, /redoc, /openapi.json, /api/docs, /api/openapi.json. Fetch /openapi.json and parse the JSON for paths, security schemes, and server variables. No auth required to read the schema on a misconfigured app.",
+    "detection_signal": "HTTP 200 on /openapi.json returns a JSON body with top-level keys 'openapi', 'info', and 'paths'. /docs returns an HTML page whose title contains 'Swagger UI'. /redoc returns a page containing 'ReDoc'. All are unauthenticated.",
+    "active_probe": true,
+    "member_count": 1,
+    "references": []
+  },
+  {
+    "rank": null,
+    "tier": "extended",
+    "merge_key": "graphql-batching-amplification",
+    "name": "GraphQL Query Batching / Aliasing DoS Amplification",
+    "canonical_class": "graphql-batching-amplification",
+    "pack": null,
+    "severity": "high",
+    "frameworks": [
+      "GraphQL",
+      "Hasura",
+      "Apollo",
+      "agnostic"
+    ],
+    "why": "",
+    "runtime_discovery": "Send a POST to the GraphQL endpoint with a JSON array body containing 50 identical login mutation operations (batching) or a single query with 50 aliases for the same field. Measure response time vs a single-operation baseline. Also attempt 50 batched login mutations with different passwords to test brute-force potential per HTTP request.",
+    "detection_signal": "A POST body containing a JSON array of 50 operations returns HTTP 200 with an array of 50 results, response time under 5x the single-request baseline (indicating parallel execution), and no 429 or complexity-limit error. For aliased queries, a single request returns 50 separate resolver results under the alias keys.",
+    "active_probe": true,
+    "member_count": 2,
+    "references": []
+  },
+  {
+    "rank": null,
+    "tier": "extended",
+    "merge_key": "aspnet-viewstate-mac-bypass",
+    "name": "ASP.NET ViewState MAC Disabled (deserialization integrity bypass)",
+    "canonical_class": "deserialization-integrity-bypass",
+    "pack": null,
+    "severity": "critical",
+    "frameworks": [
+      "ASP.NET WebForms"
+    ],
+    "why": "",
+    "runtime_discovery": "Crawl all WebForms pages and extract __VIEWSTATE values from hidden inputs. Decode from Base64 and inspect the first bytes for an HMAC suffix. Attempt to submit a tampered ViewState (e.g., flip bits in the payload) and observe whether the server accepts it (200 OK) or rejects it (ViewState validation error / 500).",
+    "detection_signal": "Tampered __VIEWSTATE accepted (200 OK) with no MAC validation error in the response body. Alternatively, ysoserial.net-generated payloads returning an error that differs from a normal MAC failure (timing or error string change) indicates deserialization execution path was reached.",
+    "active_probe": true,
+    "member_count": 1,
+    "references": []
+  },
+  {
+    "rank": null,
+    "tier": "extended",
+    "merge_key": "phpinfo-exposure",
+    "name": "phpinfo() Page Exposed",
+    "canonical_class": "debug-endpoint-exposure",
+    "pack": null,
+    "severity": "medium",
+    "frameworks": [
+      "PHP"
+    ],
+    "why": "",
+    "runtime_discovery": "Probe common phpinfo paths: /phpinfo.php, /info.php, /php_info.php, /test.php, /?phpinfo=1. Also check server-info paths like /server-info and /_info.",
+    "detection_signal": "HTTP 200 response body contains the string 'PHP Version' followed by a version number and an HTML table with 'PHP Credits' or 'Environment' sections. The Environment table may contain DATABASE_URL, APP_KEY, or similar values.",
+    "active_probe": true,
+    "member_count": 1,
+    "references": []
+  },
+  {
+    "rank": null,
+    "tier": "extended",
+    "merge_key": "token-in-telemetry",
+    "name": "Auth Token Logged to Telemetry / Console (Angular interceptor)",
+    "canonical_class": "secrets-exposure",
+    "pack": null,
+    "severity": "high",
+    "frameworks": [
+      "Angular"
+    ],
+    "why": "",
+    "runtime_discovery": "Intercept outbound HTTP requests from the SPA using the browser Network panel. Filter for requests to known error-reporting endpoints (sentry.io, browser.sentry-cdn.com, rum.browser-intake-datadoghq.com). Inspect the POST body for breadcrumb objects containing Authorization, x-api-key, or Cookie header values from previous requests.",
+    "detection_signal": "Outbound POST to a telemetry/logging endpoint contains a JSON body with a breadcrumbs or data field that includes an Authorization or x-api-key value matching a token observed in the application's own API calls. Observable purely from passive network traffic interception.",
+    "active_probe": false,
+    "member_count": 1,
+    "references": []
+  },
+  {
+    "rank": null,
+    "tier": "extended",
+    "merge_key": "session-fixation",
+    "name": "Session Fixation (no session ID rotation on login)",
+    "canonical_class": "session-fixation",
+    "pack": null,
+    "severity": "high",
+    "frameworks": [
+      "agnostic",
+      "ASP.NET",
+      "Flask",
+      "Django",
+      "Spring"
+    ],
+    "why": "",
+    "runtime_discovery": "Obtain a pre-authentication session token (visit the login page without authenticating). Record the session ID. Complete the login flow. Inspect the post-login Set-Cookie header: if the session ID is identical to the pre-auth value, the app is vulnerable. Additionally, test whether the app accepts a session ID supplied in a URL parameter and promotes it to a cookie.",
+    "detection_signal": "The session cookie value in the post-login Set-Cookie response is identical to the session cookie value present before authentication (diff of pre-auth vs post-auth session token shows no change).",
+    "active_probe": true,
+    "member_count": 5,
+    "references": []
+  },
+  {
+    "rank": null,
+    "tier": "extended",
+    "merge_key": "csrf",
+    "name": "Missing/Disabled CSRF Protection (incl. OAuth state)",
+    "canonical_class": "csrf",
+    "pack": null,
+    "severity": "high",
+    "frameworks": [
+      "Ruby on Rails",
+      "ASP.NET",
+      "Flask",
+      "Django",
+      "go",
+      "agnostic",
+      "Spring",
+      "Next.js"
+    ],
+    "why": "",
+    "runtime_discovery": "Crawl all POST/PATCH/DELETE forms and API endpoints. For each, replay the request without the `authenticity_token` field or `X-CSRF-Token` header. If the server still processes the state change (returns 200 or 302 instead of 422 Unprocessable Entity), CSRF protection is absent or skipped.",
+    "detection_signal": "POST to a state-changing endpoint (password change, email update, account delete) without any `authenticity_token` parameter or `X-CSRF-Token` header returns HTTP 200 or 302 (success redirect) rather than HTTP 422 with a `ActionController::InvalidAuthenticityToken` error.",
+    "active_probe": true,
+    "member_count": 8,
+    "references": []
+  },
+  {
+    "rank": null,
+    "tier": "extended",
+    "merge_key": "security-headers-missing",
+    "name": "Missing Security Headers / CSP (HSTS, X-Frame, CSP)",
+    "canonical_class": "security-headers",
+    "pack": null,
+    "severity": "medium",
+    "frameworks": [
+      "agnostic",
+      "express",
+      "FastAPI",
+      "ASP.NET",
+      "go",
+      "Angular",
+      "Vue"
+    ],
+    "why": "",
+    "runtime_discovery": "Fetch the app root and any authenticated page with a plain GET. Inspect all response headers for presence and correct values of the standard defensive set.",
+    "detection_signal": "Absence of Content-Security-Policy header, or X-Frame-Options missing/set to ALLOWALL, or X-Content-Type-Options not set to 'nosniff', or Strict-Transport-Security absent on HTTPS responses, or Server header exposing exact version string (e.g., 'Apache/2.4.51').",
+    "active_probe": false,
+    "member_count": 8,
+    "references": []
+  },
+  {
+    "rank": null,
+    "tier": "extended",
+    "merge_key": "missing-sri",
+    "name": "Missing Subresource Integrity on Third-Party Scripts",
+    "canonical_class": "missing-sri",
+    "pack": null,
+    "severity": "medium",
+    "frameworks": [
+      "agnostic",
+      "React"
+    ],
+    "why": "",
+    "runtime_discovery": "Crawl each rendered page and parse all <script src=...> and <link rel=stylesheet href=...> tags whose src/href points to a domain other than the first-party origin. Check whether each external tag includes a valid integrity= hash attribute. Also flag <script src=> pointing to third-party domains served without HTTPS.",
+    "detection_signal": "HTML DOM contains at least one <script src=https://cdn.example.com/...> or <link href=https://...> where the src/href host does not match the page origin AND the tag lacks an integrity= attribute. Pure passive DOM observation \u2014 no active probe needed.",
+    "active_probe": false,
+    "member_count": 2,
+    "references": []
+  },
+  {
+    "rank": null,
+    "tier": "extended",
+    "merge_key": "server-version-disclosure",
+    "name": "Server / Tech / Version Disclosure (Server, X-Powered-By headers)",
+    "canonical_class": "version-disclosure",
+    "pack": null,
+    "severity": "low",
+    "frameworks": [
+      "agnostic",
+      "ASP.NET",
+      "express"
+    ],
+    "why": "",
+    "runtime_discovery": "Fetch any page (even a 404) and inspect Server, X-Powered-By, X-AspNet-Version, X-Runtime, X-Generator, and Via headers. Version strings confirm the technology fingerprint.",
+    "detection_signal": "X-Powered-By header present with value like 'PHP/8.1.3', 'Express', 'ASP.NET'; Server header containing version like 'Apache/2.4.51 (Ubuntu)' or 'nginx/1.18.0'; X-AspNet-Version header present; X-Generator set to 'WordPress 6.x'.",
+    "active_probe": false,
+    "member_count": 3,
+    "references": []
+  },
+  {
+    "rank": null,
+    "tier": "extended",
+    "merge_key": "robots-sitemap-path-disclosure",
+    "name": "robots.txt / sitemap Path Disclosure",
+    "canonical_class": "information-disclosure",
+    "pack": null,
+    "severity": "low",
+    "frameworks": [
+      "agnostic"
+    ],
+    "why": "",
+    "runtime_discovery": "Fetch /robots.txt and /sitemap.xml (and /sitemap_index.xml) as the very first step. Extract all Disallow and Allow paths from robots.txt and all <loc> values from sitemaps. Probe each discovered path to determine accessibility without authentication.",
+    "detection_signal": "robots.txt Disallow lines containing /admin, /internal, /api/, /backup, /staging, /private, or /debug. sitemap.xml <loc> entries pointing to pages not linked from public navigation. Any Disallow path that responds with 200 rather than 401/403 when probed.",
+    "active_probe": true,
+    "member_count": 1,
+    "references": []
+  },
+  {
+    "rank": null,
+    "tier": "extended",
+    "merge_key": "clickjacking",
+    "name": "Clickjacking (missing X-Frame-Options / frame-ancestors)",
+    "canonical_class": "clickjacking",
+    "pack": null,
+    "severity": "medium",
+    "frameworks": [
+      "agnostic"
+    ],
+    "why": "",
+    "runtime_discovery": "For every page returned with HTTP 200, inspect the X-Frame-Options header (must be DENY or SAMEORIGIN) and the Content-Security-Policy header for a frame-ancestors directive. Attempt to embed the target URL in a data-URI iframe from the scanner's headless browser context and observe whether the frame loads.",
+    "detection_signal": "Response header X-Frame-Options is absent or set to ALLOWALL; CSP frame-ancestors is absent or set to *; headless browser successfully renders the target page inside a cross-origin iframe without error. Pages containing form[action] or button[type=submit] that load in the iframe are higher priority.",
+    "active_probe": true,
+    "member_count": 1,
+    "references": []
+  },
+  {
+    "rank": null,
+    "tier": "extended",
+    "merge_key": "rails-default-catchall-route",
+    "name": "Rails Default Catch-All Route / Action Exposure",
+    "canonical_class": "debug-endpoint-exposure",
+    "pack": null,
+    "severity": "high",
+    "frameworks": [
+      "Ruby on Rails"
+    ],
+    "why": "",
+    "runtime_discovery": "Crawl the app and enumerate URL patterns by guessing controller/action pairs: `/admin/index`, `/users/destroy/1`, `/orders/export`. Look for any action name that differs from the REST standard seven (index/show/new/create/edit/update/destroy). Attempt HTTP GET/POST to guessed routes and observe whether a 200 or redirect-with-content is returned instead of a 404.",
+    "detection_signal": "HTTP 200 response body with HTML or JSON content for a guessed path like `/<controller>/<non-restful-action>` that is not linked anywhere in the crawled surface; the response differs from a genuine 404 page (different status code, different Content-Length, or recognizable application chrome).",
+    "active_probe": true,
+    "member_count": 1,
+    "references": []
+  },
+  {
+    "rank": null,
+    "tier": "extended",
+    "merge_key": "type-coercion-validation-bypass",
+    "name": "Pydantic Type-Coercion Input-Validation Bypass",
+    "canonical_class": "input-validation-bypass",
+    "pack": null,
+    "severity": "medium",
+    "frameworks": [
+      "FastAPI",
+      "Pydantic"
+    ],
+    "why": "",
+    "runtime_discovery": "Submit requests with type-confused payloads: send a number where a string is expected, send a string for a boolean field ('true', '1', 'yes'), send an array where a scalar is expected. Observe whether the app accepts the coerced value and reflects it in business logic (e.g. a boolean field sent as 'admin' string).",
+    "detection_signal": "POST with 'active': 'yes' returns 200 and subsequent GET shows 'active': true. POST with 'amount': '100.00; echo pwned' triggers a 500 with database/processing error rather than a 422 validation error. Response diverges from the OpenAPI schema's documented type.",
+    "active_probe": true,
+    "member_count": 1,
+    "references": []
+  },
+  {
+    "rank": null,
+    "tier": "extended",
+    "merge_key": "http-method-unrestricted",
+    "name": "Excessive / Unrestricted HTTP Methods (TRACE, PUT, DELETE)",
+    "canonical_class": "http-method-unrestricted",
+    "pack": null,
+    "severity": "low",
+    "frameworks": [
+      "net/http"
+    ],
+    "why": "",
+    "runtime_discovery": "Issue TRACE, OPTIONS, and arbitrary HTTP method (FUZZ, HACK) requests to all discovered endpoints. Observe which methods return non-405 responses. Check TRACE responses for cookie/header reflection.",
+    "detection_signal": "TRACE request returns HTTP 200 with request headers reflected in the response body (including Cookie and Authorization headers). Or OPTIONS response lists methods including TRACE/CONNECT/arbitrary verbs not expected for the endpoint.",
+    "active_probe": true,
+    "member_count": 1,
+    "references": []
+  },
+  {
+    "rank": null,
+    "tier": "extended",
+    "merge_key": "postmessage-origin-bypass",
+    "name": "postMessage Origin Wildcard / Missing Origin Check",
+    "canonical_class": "postmessage-origin-bypass",
+    "pack": null,
+    "severity": "high",
+    "frameworks": [
+      "agnostic",
+      "React"
+    ],
+    "why": "",
+    "runtime_discovery": "Enumerate message event listeners by injecting a script that captures addEventListener('message', ...) registrations and logs the handler source. Send synthetic window.postMessage payloads from the scanner context with a crafted origin and data payload containing HTML/JS. Observe DOM changes, navigation events, or data exposure after message receipt.",
+    "detection_signal": "DOM mutation or navigation occurs after a synthetic postMessage from a non-matching origin. Source-map or bundle scan finds message event handler that either lacks origin check or uses string.includes/regex match (xss_sink_lead pattern triggers on message.data reaching innerHTML). Headless browser fires an alert or script executes following the probe message.",
+    "active_probe": true,
+    "member_count": 2,
+    "references": []
+  }
+]
