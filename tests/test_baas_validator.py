@@ -14,6 +14,7 @@ from keyleak.baas_validator import (
     BaaSProbeResult,
     BaaSValidation,
     TABLE_PROBE_CAP,
+    _tables_from_openapi,
     extract_baas_config,
     validate_baas_config,
 )
@@ -543,6 +544,61 @@ class RealtimeAnalysisTests(unittest.TestCase):
         channel_findings = [f for f in result.findings if f.type == "baas_predictable_channel"]
         assert len(channel_findings) == 1
         assert "notifications" in channel_findings[0].evidence.snippet
+
+
+class OpenApiTableEnumerationTests(unittest.TestCase):
+    """M5: tables exposed by the PostgREST root but NOT named in the bundle (CBSE case)."""
+
+    def test_parse_tables_from_openapi_definitions_and_paths(self):
+        body = {
+            "definitions": {"users": {}, "payouts": {}},
+            "paths": {"/": {}, "/users": {}, "/secret_notes": {}, "/rpc/do_thing": {}, "/{id}": {}},
+        }
+        names = _tables_from_openapi(body)
+        self.assertIn("users", names)
+        self.assertIn("payouts", names)
+        self.assertIn("secret_notes", names)
+        self.assertNotIn("rpc/do_thing", names)   # RPCs excluded
+        self.assertNotIn("", names)                # root excluded
+        self.assertNotIn("{id}", names)            # parameterized excluded
+
+    def test_parse_handles_non_dict_body(self):
+        self.assertEqual(_tables_from_openapi(None), [])
+        self.assertEqual(_tables_from_openapi("not json"), [])
+
+    def test_enumerated_only_open_table_is_probed_and_flagged(self):
+        # The page never references 'private_messages'; the OpenAPI root exposes it.
+        config = BaaSConfig(
+            provider="supabase",
+            project_url="https://abcdefghijklmnopqrst.supabase.co",
+            api_key="anon-key",
+            tables=["public_posts"],  # the only table the JS bundle named
+        )
+
+        def prober(method, url, headers, body=None):
+            if method == "GET" and url.endswith("/rest/v1/"):
+                return {"status_code": 200, "headers": {}, "body": {
+                    "definitions": {"public_posts": {}, "private_messages": {}},
+                }}
+            if "/rest/v1/private_messages" in url:
+                return {"status_code": 200, "headers": {}, "body": [{"id": 1, "body": "secret"}]}
+            if "/rest/v1/public_posts" in url:
+                return {"status_code": 200, "headers": {}, "body": [{"id": 1, "title": "hi"}]}
+            return {"status_code": 404, "headers": {}, "body": None}
+
+        result = validate_baas_config(config, prober=prober)
+        open_names = {r.target for r in result.open_tables}
+        # the enumerated-only table was discovered and probed even though the JS never named it
+        self.assertIn("private_messages", open_names)
+        self.assertIn("public_posts", open_names)
+        # and its finding is annotated as the high-signal, code-invisible case
+        enum_finding = next(f for f in result.findings
+                            if f.type == "baas_open_table" and "private_messages" in f.evidence.redacted_value)
+        self.assertIn("NOT referenced", enum_finding.risk_reason)
+        # a normally-referenced table is NOT given the enumerated-only annotation
+        js_finding = next(f for f in result.findings
+                          if f.type == "baas_open_table" and "public_posts" in f.evidence.redacted_value)
+        self.assertNotIn("NOT referenced", js_finding.risk_reason)
 
 
 if __name__ == "__main__":

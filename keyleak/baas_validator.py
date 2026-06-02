@@ -356,7 +356,16 @@ def _validate_supabase(config: BaaSConfig, prober: BaaSProber, *, js_extraction:
             validation_status="confirmed",
         ))
 
-    _probe_tables(config, headers, prober, validation)
+    # Enumerate tables exposed via the PostgREST OpenAPI root (GET /rest/v1/),
+    # not just the ones named in the page bundle. Catches sensitive tables that
+    # are anon-reachable but never referenced in client JS — the CBSE-class case.
+    enumerated = _tables_from_openapi(resp.get("body"))
+    js_named = set(config.tables)
+    enumerated_only = frozenset(name for name in enumerated if name not in js_named)
+    if enumerated_only:
+        config.tables = list(dict.fromkeys(list(config.tables) + sorted(enumerated_only)))
+
+    _probe_tables(config, headers, prober, validation, enumerated_only=enumerated_only)
     _probe_storage(config, headers, prober, validation)
     _probe_rpcs(config, headers, prober, validation)
     # Mutating probe (POST insert) — read-only by default; explicit opt-in only.
@@ -368,11 +377,38 @@ def _validate_supabase(config: BaaSConfig, prober: BaaSProber, *, js_extraction:
     return validation
 
 
+def _tables_from_openapi(body: Any) -> List[str]:
+    """Extract exposed table names from a PostgREST ``GET /rest/v1/`` OpenAPI doc.
+
+    PostgREST publishes every table it exposes under ``definitions`` (Swagger 2.0)
+    and as top-level ``paths`` (``/{table}``). Reading these lets KeyLeak probe
+    tables that are reachable by the anon key but never referenced in the page's
+    JS — the exact shape of the CBSE-class breach.
+    """
+    if not isinstance(body, dict):
+        return []
+    names: set = set()
+    definitions = body.get("definitions")
+    if isinstance(definitions, dict):
+        names.update(key for key in definitions if isinstance(key, str))
+    paths = body.get("paths")
+    if isinstance(paths, dict):
+        for path in paths:
+            if not isinstance(path, str):
+                continue
+            segment = path.strip("/")
+            if not segment or "/" in segment or "{" in segment or segment.startswith("rpc"):
+                continue
+            names.add(segment)
+    return sorted(name for name in names if name and not name.startswith("rpc"))
+
+
 def _probe_tables(
     config: BaaSConfig,
     headers: Dict[str, str],
     prober: BaaSProber,
     validation: BaaSValidation,
+    enumerated_only: frozenset = frozenset(),
 ) -> None:
     for table in config.tables[:TABLE_PROBE_CAP]:
         try:
@@ -415,7 +451,11 @@ def _probe_tables(
                     request_url=f"{redact_url(config.project_url)}/rest/v1/{table}",
                 ),
                 risk_reason=f"Supabase table '{table}' has no effective RLS policy. "
-                            f"Anyone with the anon key can read all {len(body)} row(s) returned.",
+                            f"Anyone with the anon key can read all {len(body)} row(s) returned."
+                            + (" This table is exposed by the REST API but is NOT referenced "
+                               "anywhere in the page's code — it is reachable purely because RLS "
+                               "is missing (it would be invisible to a code-only review)."
+                               if table in enumerated_only else ""),
                 remediation=f"Enable RLS: ALTER TABLE {table} ENABLE ROW LEVEL SECURITY; "
                             f"then create SELECT/INSERT/UPDATE/DELETE policies.",
                 validation_status="confirmed",
