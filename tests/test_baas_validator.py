@@ -591,14 +591,78 @@ class OpenApiTableEnumerationTests(unittest.TestCase):
         # the enumerated-only table was discovered and probed even though the JS never named it
         self.assertIn("private_messages", open_names)
         self.assertIn("public_posts", open_names)
-        # and its finding is annotated as the high-signal, code-invisible case
+        # the enumerated-only finding is a LEAD with softened, accurate wording
         enum_finding = next(f for f in result.findings
                             if f.type == "baas_open_table" and "private_messages" in f.evidence.redacted_value)
-        self.assertIn("NOT referenced", enum_finding.risk_reason)
-        # a normally-referenced table is NOT given the enumerated-only annotation
+        self.assertEqual(enum_finding.validation_status, "lead")
+        self.assertIn("not among the table names extracted", enum_finding.risk_reason)
+        self.assertNotIn("no effective RLS", enum_finding.risk_reason)  # not asserted as fact
+        # a JS-referenced readable table is a CONFIRMED no-RLS finding
         js_finding = next(f for f in result.findings
                           if f.type == "baas_open_table" and "public_posts" in f.evidence.redacted_value)
-        self.assertNotIn("NOT referenced", js_finding.risk_reason)
+        self.assertEqual(js_finding.validation_status, "confirmed")
+        self.assertIn("no effective RLS", js_finding.risk_reason)
+
+    def test_empty_array_is_not_an_open_table(self):
+        """200 [] = anon role saw no rows = correctly RLS-protected. NOT a finding."""
+        config = BaaSConfig(
+            provider="supabase",
+            project_url="https://abcdefghijklmnopqrst.supabase.co",
+            api_key="anon-key",
+            tables=["secured"],
+        )
+
+        def prober(method, url, headers, body=None):
+            if method == "GET" and url.endswith("/rest/v1/"):
+                return {"status_code": 200, "headers": {}, "body": {"definitions": {"secured": {}}}}
+            if "/rest/v1/secured" in url:
+                return {"status_code": 200, "headers": {}, "body": []}  # empty -> protected
+            return {"status_code": 404, "headers": {}, "body": None}
+
+        result = validate_baas_config(config, prober=prober)
+        self.assertEqual(
+            [f for f in result.findings if f.type == "baas_open_table"], [],
+            "a 200 empty-array response must not produce an open-table finding",
+        )
+        self.assertTrue(any(p.target == "secured" and p.status == "empty"
+                            for p in result.protected_tables))
+
+    def test_view_gets_view_remediation_not_alter_table(self):
+        """A read-only relation (no POST in OpenAPI) is a view; ALTER TABLE is invalid."""
+        config = BaaSConfig(
+            provider="supabase",
+            project_url="https://abcdefghijklmnopqrst.supabase.co",
+            api_key="anon-key",
+            tables=[],
+        )
+
+        def prober(method, url, headers, body=None):
+            if method == "GET" and url.endswith("/rest/v1/"):
+                # leaderboard exposed as a path with GET only (a view) — no post op
+                return {"status_code": 200, "headers": {}, "body": {
+                    "paths": {"/leaderboard": {"get": {}}},
+                }}
+            if "/rest/v1/leaderboard" in url:
+                return {"status_code": 200, "headers": {}, "body": [{"rank": 1, "user": "a"}]}
+            return {"status_code": 404, "headers": {}, "body": None}
+
+        result = validate_baas_config(config, prober=prober)
+        finding = next(f for f in result.findings if f.type == "baas_open_table")
+        self.assertIn("view", finding.risk_reason.lower())
+        self.assertNotIn("ALTER TABLE", finding.remediation)
+        self.assertIn("security_invoker", finding.remediation)
+
+    def test_rpc_prefixed_table_name_survives_parsing(self):
+        names = _tables_from_openapi({"definitions": {"rpc_audit_log": {}}, "paths": {"/rpc/do": {"post": {}}}})
+        self.assertIn("rpc_audit_log", names)   # a real table, not an RPC
+        self.assertNotIn("do", names)           # the actual RPC is excluded (path has /rpc/)
+
+    def test_table_severity_uses_token_boundaries(self):
+        from keyleak.baas_validator import _table_severity
+        self.assertEqual(_table_severity("authors"), "high")        # not 'auth'
+        self.assertEqual(_table_severity("reporting"), "high")      # not 'report'
+        self.assertEqual(_table_severity("payout_ledger"), "critical")
+        self.assertEqual(_table_severity("admin"), "critical")
 
 
 if __name__ == "__main__":

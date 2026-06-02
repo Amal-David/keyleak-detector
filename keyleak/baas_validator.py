@@ -356,16 +356,24 @@ def _validate_supabase(config: BaaSConfig, prober: BaaSProber, *, js_extraction:
             validation_status="confirmed",
         ))
 
-    # Enumerate tables exposed via the PostgREST OpenAPI root (GET /rest/v1/),
-    # not just the ones named in the page bundle. Catches sensitive tables that
-    # are anon-reachable but never referenced in client JS — the CBSE-class case.
-    enumerated = _tables_from_openapi(resp.get("body"))
-    js_named = set(config.tables)
-    enumerated_only = frozenset(name for name in enumerated if name not in js_named)
-    if enumerated_only:
-        config.tables = list(dict.fromkeys(list(config.tables) + sorted(enumerated_only)))
+    # Enumerate relations exposed via the PostgREST OpenAPI root (GET /rest/v1/),
+    # not just the ones named in the page bundle — catches anon-reachable tables
+    # never referenced in client JS (the CBSE-class case). Read-only; the global
+    # TABLE_PROBE_CAP still bounds total probes; does NOT mutate the caller config.
+    root_body = resp.get("body")
+    enumerated = _tables_from_openapi(root_body)
+    insertable = _insertable_relations(root_body)
+    js_named = list(config.tables)
+    js_set = set(js_named)
+    enumerated_only = frozenset(name for name in enumerated if name not in js_set)
+    view_tables = frozenset(name for name in enumerated if name not in insertable)
+    # Probe JS-named + enumerated-only, ordered so sensitive relations come first
+    # (stable sort) and the cap cannot starve the dangerous tables.
+    union = list(dict.fromkeys(js_named + sorted(enumerated_only)))
+    tables_to_probe = sorted(union, key=lambda name: 0 if _table_severity(name) == "critical" else 1)
 
-    _probe_tables(config, headers, prober, validation, enumerated_only=enumerated_only)
+    _probe_tables(config, headers, prober, validation,
+                  tables=tables_to_probe, lead_tables=enumerated_only, view_tables=view_tables)
     _probe_storage(config, headers, prober, validation)
     _probe_rpcs(config, headers, prober, validation)
     # Mutating probe (POST insert) — read-only by default; explicit opt-in only.
@@ -390,17 +398,54 @@ def _tables_from_openapi(body: Any) -> List[str]:
     names: set = set()
     definitions = body.get("definitions")
     if isinstance(definitions, dict):
-        names.update(key for key in definitions if isinstance(key, str))
+        names.update(key for key in definitions if isinstance(key, str) and key)
     paths = body.get("paths")
     if isinstance(paths, dict):
         for path in paths:
             if not isinstance(path, str):
                 continue
             segment = path.strip("/")
-            if not segment or "/" in segment or "{" in segment or segment.startswith("rpc"):
+            # Exclude root, parameterized paths, and RPC endpoints (/rpc/<fn>, which
+            # contain a slash). Do NOT filter on an 'rpc' name prefix — a real table
+            # named e.g. rpc_audit_log is legitimate.
+            if not segment or "/" in segment or "{" in segment:
                 continue
             names.add(segment)
-    return sorted(name for name in names if name and not name.startswith("rpc"))
+    return sorted(names)
+
+
+def _insertable_relations(body: Any) -> set:
+    """Relations whose OpenAPI path advertises a POST (insertable = base table).
+
+    Relations without a POST are read-only — typically VIEWS, where ``ALTER TABLE
+    ... ENABLE ROW LEVEL SECURITY`` is invalid. Used to avoid emitting bogus
+    remediation for views.
+    """
+    insertable: set = set()
+    if not isinstance(body, dict):
+        return insertable
+    paths = body.get("paths")
+    if isinstance(paths, dict):
+        for path, ops in paths.items():
+            if not isinstance(path, str) or not isinstance(ops, dict):
+                continue
+            segment = path.strip("/")
+            if not segment or "/" in segment or "{" in segment:
+                continue
+            if any(str(op).lower() == "post" for op in ops):
+                insertable.add(segment)
+    return insertable
+
+
+_SEVERITY_ORDER = ("info", "low", "medium", "high", "critical")
+
+
+def _downgrade_severity(severity: str) -> str:
+    try:
+        index = _SEVERITY_ORDER.index(severity)
+    except ValueError:
+        return severity
+    return _SEVERITY_ORDER[max(0, index - 1)]
 
 
 def _probe_tables(
@@ -408,9 +453,13 @@ def _probe_tables(
     headers: Dict[str, str],
     prober: BaaSProber,
     validation: BaaSValidation,
-    enumerated_only: frozenset = frozenset(),
+    *,
+    tables: Optional[List[str]] = None,
+    lead_tables: frozenset = frozenset(),
+    view_tables: frozenset = frozenset(),
 ) -> None:
-    for table in config.tables[:TABLE_PROBE_CAP]:
+    probe_list = tables if tables is not None else config.tables
+    for table in probe_list[:TABLE_PROBE_CAP]:
         try:
             resp = prober("GET", f"{config.project_url}/rest/v1/{table}?select=*&limit=1", headers)
         except Exception:
@@ -423,42 +472,67 @@ def _probe_tables(
         body = resp.get("body")
 
         if status == 200 and isinstance(body, list):
-            columns = list(body[0].keys()) if body and isinstance(body[0], dict) else []
-            result = BaaSProbeResult(
-                probe_type="table_read",
-                target=table,
-                status="confirmed",
-                http_status=status,
-                row_count=len(body),
-                columns=columns,
-            )
-            validation.open_tables.append(result)
+            if not body:
+                # 200 with an empty array: the anon role returned no rows. For a
+                # CORRECTLY RLS-protected table this is the expected response (the
+                # policy filters every row — you do NOT get a 401/403). So an empty
+                # result is evidence of protection (or an empty table), NOT an open
+                # table. Reporting it as "no effective RLS" is a false positive.
+                validation.protected_tables.append(BaaSProbeResult(
+                    probe_type="table_read", target=table, status="empty", http_status=status,
+                    note="200 with no rows — anon role read nothing (RLS-protected or empty)",
+                ))
+                continue
+
+            columns = list(body[0].keys()) if isinstance(body[0], dict) else []
+            is_lead = table in lead_tables       # enumerated-only: not in extracted JS names
+            is_view = table in view_tables       # not insertable in OpenAPI -> likely a view
+            base_severity = _table_severity(table)
+            severity = _downgrade_severity(base_severity) if is_lead else base_severity
+            relation = "view" if is_view else "table"
+
+            validation.open_tables.append(BaaSProbeResult(
+                probe_type="table_read", target=table, status="confirmed",
+                http_status=status, row_count=len(body), columns=columns,
+            ))
 
             col_summary = ", ".join(columns[:10])
             if len(columns) > 10:
                 col_summary += f" (+{len(columns) - 10} more)"
+
+            reason = f"Supabase {relation} '{table}' returned {len(body)} row(s) to the anon key. "
+            if is_lead:
+                reason += ("It is exposed by the REST API but is not among the table names "
+                           "extracted from the page's JS, so it may be reachable without being "
+                           "referenced in client code — verify it isn't loaded dynamically or "
+                           "intentionally public.")
+            else:
+                reason += "It has no effective RLS policy: anyone with the anon key can read these rows."
+            if is_view:
+                reason += " This is a view; RLS cannot be enabled on a view directly."
+                remediation = (f"'{table}' is a view — RLS cannot be enabled on it. Secure the "
+                               "underlying table(s) with RLS, or recreate the view with "
+                               "security_invoker = on so it respects the caller's RLS.")
+            else:
+                remediation = (f"Enable RLS: ALTER TABLE {table} ENABLE ROW LEVEL SECURITY; "
+                               "then create SELECT/INSERT/UPDATE/DELETE policies.")
+
             validation.findings.append(Finding(
                 type="baas_open_table",
-                severity=_table_severity(table),
-                confidence=0.95,
+                severity=severity,
+                confidence=0.6 if is_lead else 0.95,
                 detector_id="baas.open_table",
                 source=config.project_url,
                 evidence=Evidence(
                     source=config.project_url,
-                    snippet=f"Table '{table}' readable without auth. Columns: {col_summary}",
+                    snippet=f"{relation.title()} '{table}' readable with anon key. Columns: {col_summary}",
                     redacted_value=f"table:{table}",
                     response_status=status,
                     request_url=f"{redact_url(config.project_url)}/rest/v1/{table}",
                 ),
-                risk_reason=f"Supabase table '{table}' has no effective RLS policy. "
-                            f"Anyone with the anon key can read all {len(body)} row(s) returned."
-                            + (" This table is exposed by the REST API but is NOT referenced "
-                               "anywhere in the page's code — it is reachable purely because RLS "
-                               "is missing (it would be invisible to a code-only review)."
-                               if table in enumerated_only else ""),
-                remediation=f"Enable RLS: ALTER TABLE {table} ENABLE ROW LEVEL SECURITY; "
-                            f"then create SELECT/INSERT/UPDATE/DELETE policies.",
-                validation_status="confirmed",
+                risk_reason=reason,
+                remediation=remediation,
+                validation_status="lead" if is_lead else "confirmed",
                 category="baas",
                 references=["https://supabase.com/docs/guides/auth/row-level-security"],
             ))
@@ -477,9 +551,11 @@ _SENSITIVE_TABLE_PREFIXES = (
 
 
 def _table_severity(table: str) -> str:
+    # Match sensitive keywords on token boundaries, so 'authors' is not escalated
+    # by 'auth' and 'reporting' is not escalated by 'report'.
     lower = table.lower()
-    for prefix in _SENSITIVE_TABLE_PREFIXES:
-        if prefix in lower:
+    for keyword in _SENSITIVE_TABLE_PREFIXES:
+        if re.search(r"(?:^|[^a-z0-9])" + re.escape(keyword) + r"(?:[^a-z0-9]|$)", lower):
             return "critical"
     return "high"
 
