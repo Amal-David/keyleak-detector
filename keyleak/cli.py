@@ -36,6 +36,13 @@ def main(argv: Optional[List[str]] = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
 
+    if args.command == "bundles":
+        return _print_bundles()
+
+    if getattr(args, "bundle", ""):
+        if _apply_bundle_selection(args) != 0:
+            return 1
+
     try:
         proxy = resolve_proxy(getattr(args, "proxy", "") or "")
     except ProxyError as exc:
@@ -306,12 +313,15 @@ def build_parser() -> argparse.ArgumentParser:
     )
     subparsers = parser.add_subparsers(dest="command")
 
+    subparsers.add_parser("bundles", help="List scan bundles (named groups of detector packs + scan phases).")
+
     scan = subparsers.add_parser("scan", help="Scan a running web app through the local KeyLeak web scanner.")
     scan.add_argument("url")
     scan.add_argument("--server", default=DEFAULT_SERVER)
     scan.add_argument("--profile", default="browser", choices=["browser", "authenticated"])
     scan.add_argument("--launch-profile", default="launch-gate", choices=["launch-gate", "local-dev", "bug-bounty", "ci", "full"])
     scan.add_argument("--packs", default="", help=f"Comma-separated detector packs. Available: {', '.join(DETECTOR_PACKS)}")
+    scan.add_argument("--bundle", default="", help="Scan bundle (named group of packs + phases). Run `keyleak bundles` to list. Selects the bundle's packs; overrides --packs.")
     scan.add_argument("--bearer", default="")
     scan.add_argument("--cookie", default="")
     scan.add_argument("--bearer-b", default="", help="Second throwaway user's bearer token for access-control comparison.")
@@ -326,6 +336,7 @@ def build_parser() -> argparse.ArgumentParser:
     local.add_argument("--include", default=",".join(DEFAULT_INCLUDES))
     local.add_argument("--launch-profile", default="launch-gate", choices=["launch-gate", "local-dev", "bug-bounty", "ci", "full"])
     local.add_argument("--packs", default="", help=f"Comma-separated detector packs. Available: {', '.join(DETECTOR_PACKS)}")
+    local.add_argument("--bundle", default="", help="Scan bundle (named group of packs). Run `keyleak bundles` to list. Selects the bundle's packs; overrides --packs.")
     local.add_argument("--fail-on", default="high", choices=["low", "medium", "high", "critical"])
     local.add_argument("--baseline", default="", help="Suppress findings already present in a previous KeyLeak JSON report.")
     local.add_argument("--allowlist", default="", help="Suppress known findings from a JSON or line-based allowlist.")
@@ -555,6 +566,42 @@ def _add_format_flags(parser: argparse.ArgumentParser) -> None:
     group.add_argument("--sarif", action="store_true", help="Emit SARIF 2.1.0 report.")
     group.add_argument("--markdown", action="store_true", help="Emit Markdown report.")
     group.add_argument("--html", action="store_true", help="Emit self-contained HTML report.")
+
+
+def _print_bundles() -> int:
+    from .bundles import BUNDLES, unpopulated_packs
+    print("Scan bundles  (keyleak scan --bundle <id>  /  keyleak local --bundle <id>):\n")
+    for bundle in BUNDLES.values():
+        kind = "probing" if bundle.is_probing else "navigation" if bundle.sends_requests else "passive"
+        print(f"  {bundle.id:<9} {bundle.title}  [{kind}]")
+        print(f"            {bundle.description}")
+        print(f"            packs:  {', '.join(bundle.packs)}")
+        print(f"            phases: {', '.join(bundle.phases)}")
+        empties = unpopulated_packs(bundle)
+        if empties:
+            print(f"            note: packs not yet populated (later milestones): {', '.join(empties)}")
+        print()
+    return 0
+
+
+def _apply_bundle_selection(args: argparse.Namespace) -> int:
+    """Resolve --bundle into args.packs (the bundle's runtime packs) and report,
+    loudly, the phases it implies and any packs not yet populated."""
+    from .bundles import REPO_ONLY_PACKS, resolve_bundle, unpopulated_packs
+    try:
+        bundle = resolve_bundle(args.bundle)
+    except KeyError as exc:
+        print(str(exc), file=sys.stderr)
+        return 1
+    runtime_packs = [pack for pack in bundle.packs if pack not in REPO_ONLY_PACKS]
+    args.packs = ",".join(runtime_packs)
+    print(f"[bundle] {bundle.id}: packs={','.join(runtime_packs)} phases={','.join(bundle.phases)}", file=sys.stderr)
+    empties = unpopulated_packs(bundle)
+    if empties:
+        print(f"[bundle] note: packs not yet populated (skipped; land in later milestones): {', '.join(empties)}", file=sys.stderr)
+    if bundle.is_probing:
+        print("[bundle] note: active phases (crawl/probe/fuzz/authz_diff/baas_probe/mitm) are not yet orchestrated by the CLI (M3+); selecting pack detectors for now.", file=sys.stderr)
+    return 0
 
 
 def _split_includes(value: str):
