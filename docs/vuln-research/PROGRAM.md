@@ -118,7 +118,7 @@ Proof, not assertion: code must show passing tests; designs must cite real
 | M3 active-check registry + recon probes (24) | ⬜ |
 | M4 auth-diff BFLA/BOPLA (5) | ⬜ |
 | M5 remainder (RLS-disabled-vs-permissive, per-table matrix UI, GraphQL probe) | ⬜ |
-| **M6a** correlation engine core (`attack_chains.py`, 5 grounded chains) | ✅ shipped; R4 in review |
+| **M6a** correlation engine core (`attack_chains.py`, 5 grounded chains) | ✅ shipped + reviewed (R4-fixed: single-URL anchoring, lead-cap) |
 | M6b correlation → build_report wiring + report section | ⬜ |
 | M7 fuzz/forms + MITM (opt-in) | ⬜ |
 
