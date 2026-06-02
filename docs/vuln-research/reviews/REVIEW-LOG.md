@@ -30,3 +30,17 @@ All 10 round-1 items verified resolved at code/test level. Residual nits (fixed 
 - scan-bundles.md CLI section split into "implemented now (scan/local)" vs "planned".
 Outcome: design + M1 foundation accepted. Proceeding to M5 (RLS flagship) under the same gate.
 
+## Step: M5 OpenAPI-root table enumeration
+
+### Round 3 (fp-and-safety 62, code-quality 68, design-alignment 78 — below bar)
+Ship-blocking false positives the gate caught:
+- `200 []` flagged as an OPEN table at HIGH — but it's the EXPECTED anon response for a CORRECTLY RLS-protected table (a pre-existing bug M5 amplified).
+- Views + by-design-public tables flagged HIGH with invalid `ALTER TABLE <view> ENABLE RLS`.
+- "code-invisible" annotation overclaimed; parser dropped `rpc_*` tables; `_table_severity` escalated `authors` via substring; M5 mutated caller config; cap could starve enumerated tables.
+Fixes (d390184): 200-[] floor → protected/empty; enumerated-only → leads (downgraded, softened); view-aware remediation; path-only RPC exclusion; token-boundary severity; no mutation; sensitive-first ordering. +4 tests.
+
+### Round 3b (fp-and-safety 94 PASS; code-quality 78 — one regression)
+fp-and-safety: all 4 R3 items verified resolved by independent adversarial probing. code-quality found a NEW regression: view detection by ABSENCE of POST mislabeled base tables as views on definitions-only OpenAPI bodies.
+Fix (69781b9): `_view_relations` requires POSITIVE evidence (in paths, ops present, no post); unknown insertability defaults to table. Regression test added; fails if reverted.
+Outcome: M5 accepted (fp/safety 94; the single code-quality must-fix resolved + test-guarded). 40 baas tests pass.
+

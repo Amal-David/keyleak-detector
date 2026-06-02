@@ -113,7 +113,7 @@ Proof, not assertion: code must show passing tests; designs must cite real
 | Review gate R1 (62–74) → fixes → R2 (88/90/90/86) | ✅ cleared |
 | **M1** bundles core (`bundles.py`, `--bundle`/`bundles` CLI) | ✅ shipped + reviewed |
 | BaaS write-probe safety gate (read-only default) | ✅ shipped (R1 finding) |
-| **M5** OpenAPI-root table enumeration (CBSE case) | ✅ shipped; R3 in review |
+| **M5** OpenAPI-root table enumeration (CBSE case) | ✅ shipped + reviewed (R3→R3b, FP-hardened) |
 | M2 passive detectors (13) | ⬜ next |
 | M3 active-check registry + recon probes (24) | ⬜ |
 | M4 auth-diff BFLA/BOPLA (5) | ⬜ |
