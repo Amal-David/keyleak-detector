@@ -664,6 +664,30 @@ class OpenApiTableEnumerationTests(unittest.TestCase):
         self.assertEqual(_table_severity("payout_ledger"), "critical")
         self.assertEqual(_table_severity("admin"), "critical")
 
+    def test_definitions_only_table_is_not_misclassified_as_view(self):
+        """Regression: a base table from a paths-less OpenAPI body must get table
+        (ALTER TABLE) remediation, not view (security_invoker) remediation."""
+        config = BaaSConfig(
+            provider="supabase",
+            project_url="https://abcdefghijklmnopqrst.supabase.co",
+            api_key="anon-key",
+            tables=["orders"],
+        )
+
+        def prober(method, url, headers, body=None):
+            if method == "GET" and url.endswith("/rest/v1/"):
+                # definitions-only: insertability unknown -> must default to table
+                return {"status_code": 200, "headers": {}, "body": {"definitions": {"orders": {}}}}
+            if "/rest/v1/orders" in url:
+                return {"status_code": 200, "headers": {}, "body": [{"id": 1, "total": 9}]}
+            return {"status_code": 404, "headers": {}, "body": None}
+
+        result = validate_baas_config(config, prober=prober)
+        finding = next(f for f in result.findings if f.type == "baas_open_table")
+        self.assertIn("ALTER TABLE", finding.remediation)
+        self.assertNotIn("security_invoker", finding.remediation)
+        self.assertNotIn("view", finding.risk_reason.lower())
+
 
 if __name__ == "__main__":
     unittest.main()

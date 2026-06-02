@@ -362,11 +362,12 @@ def _validate_supabase(config: BaaSConfig, prober: BaaSProber, *, js_extraction:
     # TABLE_PROBE_CAP still bounds total probes; does NOT mutate the caller config.
     root_body = resp.get("body")
     enumerated = _tables_from_openapi(root_body)
-    insertable = _insertable_relations(root_body)
     js_named = list(config.tables)
     js_set = set(js_named)
     enumerated_only = frozenset(name for name in enumerated if name not in js_set)
-    view_tables = frozenset(name for name in enumerated if name not in insertable)
+    # Views = relations CONFIRMED read-only by the OpenAPI doc (in paths, no POST).
+    # Relations with unknown insertability (definitions-only) default to table.
+    view_tables = frozenset(_view_relations(root_body))
     # Probe JS-named + enumerated-only, ordered so sensitive relations come first
     # (stable sort) and the cap cannot starve the dangerous tables.
     union = list(dict.fromkeys(js_named + sorted(enumerated_only)))
@@ -414,16 +415,18 @@ def _tables_from_openapi(body: Any) -> List[str]:
     return sorted(names)
 
 
-def _insertable_relations(body: Any) -> set:
-    """Relations whose OpenAPI path advertises a POST (insertable = base table).
+def _view_relations(body: Any) -> set:
+    """Relations CONFIRMED read-only by the OpenAPI doc — present in ``paths`` with
+    operations but no ``post`` (typically VIEWS, where ``ALTER TABLE ... ENABLE ROW
+    LEVEL SECURITY`` is invalid).
 
-    Relations without a POST are read-only — typically VIEWS, where ``ALTER TABLE
-    ... ENABLE ROW LEVEL SECURITY`` is invalid. Used to avoid emitting bogus
-    remediation for views.
+    Only positive evidence counts: a relation that is absent from ``paths`` (e.g. a
+    definitions-only body) has UNKNOWN insertability and is NOT treated as a view,
+    so a base table is never mislabeled and handed bogus view remediation.
     """
-    insertable: set = set()
+    views: set = set()
     if not isinstance(body, dict):
-        return insertable
+        return views
     paths = body.get("paths")
     if isinstance(paths, dict):
         for path, ops in paths.items():
@@ -432,9 +435,10 @@ def _insertable_relations(body: Any) -> set:
             segment = path.strip("/")
             if not segment or "/" in segment or "{" in segment:
                 continue
-            if any(str(op).lower() == "post" for op in ops):
-                insertable.add(segment)
-    return insertable
+            op_names = {str(op).lower() for op in ops}
+            if op_names and "post" not in op_names:
+                views.add(segment)
+    return views
 
 
 _SEVERITY_ORDER = ("info", "low", "medium", "high", "critical")
