@@ -22,3 +22,11 @@ Fixes applied (commits 17556ba, f2a16ad, 7f3abf5):
 - CLI: `keyleak bundles` + `scan/local --bundle` (skip-loudly on unpopulated packs / un-orchestrated phases).
 - 88 tests pass. **Round 2 launched to verify (bar: every lens ≥ 85).**
 
+### Round 2 (scores: security 88, architecture 90, code-quality 90, product 86 — ALL >= 85 ✅ GATE CLEARED)
+All 10 round-1 items verified resolved at code/test level. Residual nits (fixed in f34d571):
+- docs called `_probe_rpcs` a POST and `_probe_write_access` "read-only" — corrected (rpcs surface leads without executing; write-probe is mutating/opt-in).
+- `validate_bundles` now enforces rate>0 for all request-sending bundles; `runnable_packs()` added.
+- CLI warns loudly when a `--bundle` resolves to zero runnable detectors (e.g. `injection` today).
+- scan-bundles.md CLI section split into "implemented now (scan/local)" vs "planned".
+Outcome: design + M1 foundation accepted. Proceeding to M5 (RLS flagship) under the same gate.
+
