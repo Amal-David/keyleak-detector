@@ -69,27 +69,32 @@ union of findings to surface chained attack vectors.
 
 ## CLI / UX
 
-- `keyleak scan <url> --bundle authz` (new `--bundle` flag; resolves to packs +
-  phases + probe policy). `--bundle` composes with existing `--packs`/`--profile`.
-- `keyleak scan <url> --bundle deep --bearer $A --bearer-b $B --proxy warp`
-  runs the whole thing (active phases enabled because the bundle declares them;
-  still read-only + rate-limited).
-- `keyleak bundles` (new subcommand) lists bundles + what each runs.
-- Active phases require explicit opt-in: a bundle that declares `fuzz`/`mitm`/
-  `authz_diff` only runs them when the needed inputs (two bearers, proxy, or an
-  explicit `--active` ack) are present; otherwise it degrades to passive and
-  reports the skipped phase loudly (no silent reduction in coverage).
+**Implemented now (M1):**
+- `keyleak bundles` — lists every bundle, its packs/phases, and flags bundles with
+  no runnable detectors yet.
+- `keyleak scan <url> --bundle <id>` and `keyleak local <path> --bundle <id>` —
+  resolve the bundle's runtime packs into the scan (`--bundle` **overrides**
+  `--packs`), printing the implied phases and skipping-loudly on unpopulated packs.
+
+**Planned (later milestones):**
+- `--bundle` on `site-scan`/`browser-scan` and full **phase orchestration** (crawl,
+  subdomain, probe, fuzz, authz_diff, baas_probe, mitm). Today `--bundle` selects
+  packs; the active phases a bundle declares are not yet executed by the CLI.
+- `keyleak scan <url> --bundle deep --bearer $A --bearer-b $B --proxy warp` — the
+  full active run. Active phases require their inputs (two bearers, proxy, explicit
+  `--active` ack); a missing input degrades loudly (no silent coverage loss).
 
 ## Implementation shape (P7)
 
 1. `keyleak/bundles.py` — `Bundle` dataclass + `BUNDLES` registry +
-   `resolve_bundle(id) -> (packs, phases, policy)`. Pure data + resolution; unit
-   tested.
-2. Add new packs to `DETECTOR_PACKS` and populate detectors (catalog-driven).
-3. `cli.py` — `--bundle` flag on `scan`/`site-scan`/`browser-scan`; `bundles`
-   subcommand. Reuses `normalize_packs`.
+   `resolve_bundle(id)` / `bundle_packs` / `runnable_packs` / `validate_bundles`.
+   Pure data + resolution; unit tested. **(done — M1)**
+2. Register new packs in `DETECTOR_PACKS` **(done)** and populate detectors
+   (catalog-driven, M2–M7).
+3. `cli.py` — `--bundle` flag on `scan`/`local` + `bundles` subcommand **(done)**;
+   extend to `site-scan`/`browser-scan` later. Reuses `normalize_packs`.
 4. `site_scanner.py` deep mode — sequence active phases per the resolved bundle's
-   `active_phases`, honoring `probe_policy` + guards.
+   `phases`, honoring `probe_policy` + guards. **(later — M3+)**
 5. Reporting — group findings by bundle/pack; append the correlation section.
 
 ## Open questions for the human (flagged, defaults chosen)

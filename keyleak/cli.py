@@ -569,11 +569,13 @@ def _add_format_flags(parser: argparse.ArgumentParser) -> None:
 
 
 def _print_bundles() -> int:
-    from .bundles import BUNDLES, unpopulated_packs
+    from .bundles import BUNDLES, runnable_packs, unpopulated_packs
     print("Scan bundles  (keyleak scan --bundle <id>  /  keyleak local --bundle <id>):\n")
     for bundle in BUNDLES.values():
         kind = "probing" if bundle.is_probing else "navigation" if bundle.sends_requests else "passive"
-        print(f"  {bundle.id:<9} {bundle.title}  [{kind}]")
+        runnable = runnable_packs(bundle)
+        status = "" if runnable else "  (NO runnable detectors yet)"
+        print(f"  {bundle.id:<9} {bundle.title}  [{kind}]{status}")
         print(f"            {bundle.description}")
         print(f"            packs:  {', '.join(bundle.packs)}")
         print(f"            phases: {', '.join(bundle.phases)}")
@@ -587,7 +589,7 @@ def _print_bundles() -> int:
 def _apply_bundle_selection(args: argparse.Namespace) -> int:
     """Resolve --bundle into args.packs (the bundle's runtime packs) and report,
     loudly, the phases it implies and any packs not yet populated."""
-    from .bundles import REPO_ONLY_PACKS, resolve_bundle, unpopulated_packs
+    from .bundles import REPO_ONLY_PACKS, resolve_bundle, runnable_packs, unpopulated_packs
     try:
         bundle = resolve_bundle(args.bundle)
     except KeyError as exc:
@@ -596,6 +598,8 @@ def _apply_bundle_selection(args: argparse.Namespace) -> int:
     runtime_packs = [pack for pack in bundle.packs if pack not in REPO_ONLY_PACKS]
     args.packs = ",".join(runtime_packs)
     print(f"[bundle] {bundle.id}: packs={','.join(runtime_packs)} phases={','.join(bundle.phases)}", file=sys.stderr)
+    if not runnable_packs(bundle):
+        print(f"[bundle] WARNING: bundle {bundle.id!r} has NO runnable detectors yet — its packs/phases land in later milestones. This scan will find nothing until then.", file=sys.stderr)
     empties = unpopulated_packs(bundle)
     if empties:
         print(f"[bundle] note: packs not yet populated (skipped; land in later milestones): {', '.join(empties)}", file=sys.stderr)

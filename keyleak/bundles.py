@@ -87,6 +87,12 @@ def unpopulated_packs(bundle: "Bundle") -> Tuple[str, ...]:
     return tuple(p for p in bundle.packs if not detectors_for_packs([p]))
 
 
+def runnable_packs(bundle: "Bundle") -> Tuple[str, ...]:
+    """Bundle packs that have at least one detector today (the part that will
+    actually run). Empty tuple means the bundle has no runnable detectors yet."""
+    return tuple(p for p in bundle.packs if detectors_for_packs([p]))
+
+
 _PASSIVE = ProbePolicy()                                              # 0 requests
 _NAV = ProbePolicy(probing=False, max_requests=300, rate_per_sec=3.0)  # crawl/subdomain only
 _PROBE = ProbePolicy(probing=True, max_requests=300, rate_per_sec=2.0)  # crafted probes, no writes
@@ -171,8 +177,8 @@ def validate_bundles(bundles: Optional[Mapping[str, "Bundle"]] = None) -> None:
             raise ValueError(f"Bundle {bundle.id!r} sends requests but has no request budget")
         if bundle.is_probing and not policy.probing:
             raise ValueError(f"Bundle {bundle.id!r} has probing phases but a non-probing policy")
-        if policy.probing and policy.rate_per_sec <= 0:
-            raise ValueError(f"Bundle {bundle.id!r} has a probing policy with non-positive rate")
+        if bundle.sends_requests and policy.rate_per_sec <= 0:
+            raise ValueError(f"Bundle {bundle.id!r} sends requests but has a non-positive rate limit")
         if policy.allow_write_probe and not policy.probing:
             raise ValueError(f"Bundle {bundle.id!r} allows write probe without a probing policy")
         if policy.scope not in ALLOWED_SCOPES:

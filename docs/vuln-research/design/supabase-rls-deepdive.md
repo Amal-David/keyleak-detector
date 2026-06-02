@@ -22,8 +22,9 @@ and every built-in bundle. The read-only probes:
   `rpc_functions[]`, `storage_buckets[]` from browser-scan findings + injected JS.
 - Supabase probes: `_probe_tables` (`GET /rest/v1/{t}?select=*&limit=1`),
   `_probe_storage` (`GET /storage/v1/bucket` for public-flagged buckets, then
-  `GET /storage/v1/object/list/{bucket}`), `_probe_rpcs` (`POST /rest/v1/rpc/{fn}`
-  with empty args), `_probe_write_access` (a POST insert — **opt-in only**, see
+  `GET /storage/v1/object/list/{bucket}`), `_probe_rpcs` (surfaces client-referenced
+  RPCs as **leads without calling them** — POSTing would execute the function),
+  `_probe_write_access` (a POST insert — **opt-in only**, see
   above), `_probe_auth_config`, `_analyze_realtime`. Caps: TABLE 50 / BUCKET 10 /
   RPC 20 / WRITE 20. `prober` is injectable (testable). Result:
   `BaaSValidation{key_valid, open_tables[], protected_tables[], accessible_buckets[],
@@ -59,7 +60,8 @@ Each maps to a `baas` detector or an active probe result. Severity in (), probe 
 6. **Public storage upload** — anon upload allowed. (critical) Signal:
    bucket `public=true` + permissive policy; infer from bucket metadata, don't upload.
 7. **Callable RPC with side effects** — `POST /rest/v1/rpc/{fn}` reachable by anon;
-   some RPCs wrap privileged SQL. (high, active read-only call with empty args)
+   some RPCs wrap privileged SQL. (high — surfaced as a **lead without execution**;
+   KeyLeak does not POST to `/rpc/{fn}` because that would run the function)
    Signal: 200/204 (vs 404/401). Never pass crafted args.
 8. **Exposed auth settings / signup enabled** — `GET /auth/v1/settings` reveals
    external providers, `mailer_autoconfirm`, `disable_signup=false`. (medium)

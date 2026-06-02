@@ -23,7 +23,9 @@ Condensed from a full-codebase map. File:line refs are approximate.
 - `baas_validator.py` — `BaaSConfig`, `BaaSProbeResult`, `BaaSValidation`;
   `validate_baas_config(config, prober, js_extraction)`. Per-provider probes:
   Supabase (`_probe_tables` GET `/rest/v1/{t}?select=*&limit=1`, `_probe_storage`,
-  `_probe_rpcs`, `_probe_write_access` read-only test, `_probe_auth_config`,
+  `_probe_rpcs` (surfaces RPCs as leads WITHOUT calling them — POSTing would
+  execute the function), `_probe_write_access` (mutating insert probe — opt-in via
+  `allow_write_probe`, OFF by default), `_probe_auth_config`,
   `_analyze_realtime`), Firebase, Appwrite, PocketBase. Caps: TABLE 50 / BUCKET 10
   / RPC 20 / WRITE 20. `prober` is an injectable Callable (testable).
 - `access_control.compare_access_control_urls(urls, user_a_auth, user_b_auth,
