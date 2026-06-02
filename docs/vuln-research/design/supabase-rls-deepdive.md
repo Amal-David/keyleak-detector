@@ -12,14 +12,20 @@ Appwrite (open collection permissions), PocketBase (open list rules), and Hasura
 
 ## What KeyLeak already does (reuse)
 
-`baas_validator.py` already extracts config from the running page and probes
-read-only:
+`baas_validator.py` already extracts config from the running page and probes —
+**read-only by default after review R1**: the one mutating probe
+(`_probe_write_access`, a `POST /rest/v1/{table}` insert that relies on
+`Prefer: tx=rollback`, which not every PostgREST deployment honors) is now gated
+behind an explicit `allow_write_probe=True` and is **off** for the default scan
+and every built-in bundle. The read-only probes:
 - `extract_baas_config()` — provider, `project_url`, anon `api_key`, `tables[]`,
   `rpc_functions[]`, `storage_buckets[]` from browser-scan findings + injected JS.
 - Supabase probes: `_probe_tables` (`GET /rest/v1/{t}?select=*&limit=1`),
-  `_probe_storage`, `_probe_rpcs` (`POST /rest/v1/rpc/{fn}`), `_probe_write_access`
-  (read-only test insert), `_probe_auth_config`, `_analyze_realtime`. Caps: TABLE 50
-  / BUCKET 10 / RPC 20 / WRITE 20. `prober` is injectable (testable). Result:
+  `_probe_storage` (`GET /storage/v1/bucket` for public-flagged buckets, then
+  `GET /storage/v1/object/list/{bucket}`), `_probe_rpcs` (`POST /rest/v1/rpc/{fn}`
+  with empty args), `_probe_write_access` (a POST insert — **opt-in only**, see
+  above), `_probe_auth_config`, `_analyze_realtime`. Caps: TABLE 50 / BUCKET 10 /
+  RPC 20 / WRITE 20. `prober` is injectable (testable). Result:
   `BaaSValidation{key_valid, open_tables[], protected_tables[], accessible_buckets[],
   callable_rpcs[], writable_tables[], cors_open}`.
 
@@ -35,16 +41,21 @@ Each maps to a `baas` detector or an active probe result. Severity in (), probe 
    `USING (true)`. (critical) Signal: open read **and** the table appears in the
    OpenAPI root (`GET /rest/v1/`) definitions. Report which, since the fix differs.
 3. **Open table write (insert/update/delete)** — anon mutation accepted.
-   (critical, active write — read-only *probe* via `Prefer: return=minimal` +
-   immediate constraint failure, or a dry-run that we never commit; if a true
-   no-op insert can't be guaranteed safe, downgrade to "write policy present"
-   inference from the OpenAPI/`Allow` header rather than mutating). Signal:
-   `POST /rest/v1/{t}` → 201/200 (vs 401/403/42501 RLS denial).
+   (critical) **Detection is off by default** because the only way to confirm a
+   write is to attempt one. The current `_probe_write_access` POSTs a row relying
+   on `Prefer: tx=rollback` (not universally honored) → gated behind
+   `allow_write_probe=True`. **Preferred safe path (M5):** infer write capability
+   *without mutating* — a no-body `POST` (expect `400`/`415` schema error if writes
+   are allowed vs `401`/`403`/`42501` if RLS blocks), or read the PostgREST OpenAPI
+   root / `Allow` header for the table. Only fall back to the real insert under
+   explicit opt-in. Signal (inference): `401/403/42501` ⇒ protected; non-auth
+   error ⇒ likely writable.
 4. **Service-role key exposure** — the `service_role` JWT (RLS-bypassing) leaked
    in bundle/storage/headers. (critical, passive) Signal: JWT with
    `"role":"service_role"`. This is game-over; flag distinctly from anon key.
 5. **Open storage bucket** — anon can list/download objects. (high, active read)
-   Signal: `GET /storage/v1/object/list/{bucket}` or `/storage/v1/b/{b}/o` → 200.
+   Signal: `GET /storage/v1/bucket` returns buckets with `public: true`, and/or
+   `GET /storage/v1/object/list/{bucket}` → 200 with a non-empty object list.
 6. **Public storage upload** — anon upload allowed. (critical) Signal:
    bucket `public=true` + permissive policy; infer from bucket metadata, don't upload.
 7. **Callable RPC with side effects** — `POST /rest/v1/rpc/{fn}` reachable by anon;

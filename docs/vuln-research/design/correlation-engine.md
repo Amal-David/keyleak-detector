@@ -17,24 +17,39 @@ chains the rules didn't encode — but it is **opt-in, offline-local, and never
 required**; the default path is pure rules. Rules are the product; the LLM is a
 power-user amplifier that only ever *adds* candidate chains for human review.
 
-## Where it hooks (grounded)
+## Where it hooks (grounded — corrected after review R1)
 
-`reporting.build_report(target, findings, scan_mode, attack_vectors, profile,
-packs)` already normalizes findings and folds `_attack_vector_findings()` in.
-Add `keyleak/attack_chains.py` and call `correlate(findings, context)` inside
-`build_report` right after normalize, passing the result through the existing
-`attack_vectors` channel. `context` carries `report.extra["provenance"]`
-(finding.id → [urls]) so chains can require **co-location** (same registrable host)
-and cite where each leg was observed.
+`reporting.build_report(target, findings, scan_mode, attack_vectors=..., profile,
+packs)` already exists, but its `attack_vectors` param is **not** a general
+channel: `_attack_vector_findings()` only understands the shape
+`{"subdomains": [{"host", "findings": [...]}]}` and flattens it into plain
+`category="access-control"` findings — it would lose the AttackVector model and
+severity-escalation. So correlation gets a **new** `attack_chains` parameter
+(not a reuse of `attack_vectors`): `build_report(..., attack_chains: list[AttackVector] = None)`
+plus a dedicated `_attack_vector_section()` serializer. `correlate(findings,
+context)` runs after normalize and its result is passed in via that new param.
+
+**Provenance (corrected):** `report.extra["provenance"]` (finding.id → [urls]) is
+populated by `site_scanner._merge_findings`, **not** by `build_report`, and only
+for multi-page site scans. Single-URL `browser_scan` and BaaS-validation findings
+have **no** provenance entry — so `correlate` must derive a host key with a
+fallback: `provenance.get(finding.id)` else the host parsed from
+`finding.evidence.request_url` or `finding.source`. Without this fallback the
+flagship single-URL RLS chain would silently never fire.
 
 ## Data model
+
+Legs match on the **real fields that exist today** — `finding.type` and
+`finding.detector_id` — NOT on a `canonical_class` taxonomy (which does not exist
+in the codebase; introducing one would be a separate prerequisite milestone). Each
+leg is a set of accepted `finding.type` values (and/or `detector_id` globs):
 
 ```python
 @dataclass(frozen=True)
 class ChainLeg:
-    match: str            # glob over finding.type or detector_id, e.g. "baas.*open_table*", "access-control.idor"
-    classes: tuple = ()   # OR over canonical_class tags (catalog-aligned)
-    where: str = "any"    # "same_host" | "any" — provenance constraint
+    types: tuple = ()     # accepted finding.type values, e.g. ("baas_open_table",)
+    detector_globs: tuple = ()  # OR globs over detector_id, e.g. ("access-control.*",)
+    where: str = "any"    # "same_host" | "any" — provenance constraint (with fallback host)
     min_count: int = 1
 
 @dataclass(frozen=True)
@@ -57,10 +72,13 @@ class AttackVector:
 ```
 
 `correlate(findings, context) -> list[AttackVector]`:
-1. Index findings by type/detector_id/canonical_class and by host (from provenance).
+1. Index findings by `finding.type` and `finding.detector_id`, and by host —
+   host from `provenance[finding.id]` else parsed from `evidence.request_url` /
+   `source` (the single-URL fallback).
 2. For each `ChainRule`, find finding sets satisfying every leg (respecting
-   `where`/`requires_same_host`). Use the catalog's `canonical_class` so chains are
-   robust to detector renames.
+   `where`/`requires_same_host`). Leg matching is on the concrete `types` /
+   `detector_globs` sets above; detector renames are handled by keeping those
+   sets in one place next to the rules, not by an absent class layer.
 3. Emit one `AttackVector` per satisfied combination (dedupe by member-id set).
 4. Escalation: vector severity = `max(rule.severity, max(member severity))`;
    confidence = `confirmed` only if at least one leg came from an active probe.
@@ -72,7 +90,24 @@ the combined severity. Verdict escalates to BLOCK SHIP on any `critical` vector.
 
 ## Seed rule book (v1 — ~24 chains)
 
-Legs reference catalog `canonical_class` keys. Severity shown is the *composite*.
+The class-name labels in the table below are **shorthand for sets of real
+`finding.type` values that the code emits today** (so the engine matches on
+fields that exist). The mapping for the highest-value chains, using the actual
+strings from `baas_validator.py`, `detectors.py`, and `access_control.py`:
+
+| shorthand | real finding.type / detector_id |
+|-----------|----------------------------------|
+| anon-key present | `supabase_publishable_key`, `supabase_url`, `firebase_client_config` |
+| baas-rls open-table | `baas_open_table` (active-probe, confirmed) |
+| baas-rls open-write | `baas_writable_table` |
+| baas open-storage | `baas_open_storage` |
+| service_role leak | `baas_service_role_exposed` |
+| idor/bola | `idor` (detector_id `access-control.*two_user*`) |
+| source-map exposed | `source_map_reference` |
+| cors wildcard | `baas_cors_wildcard` (BaaS) / a `cors_*` client finding (M2) |
+
+New finding types added in M2–M5 (e.g. `actuator_exposed`, `exposed_env_file`,
+`jwt_alg_none`, `ssrf_*`) extend these leg sets. Severity shown is the *composite*.
 
 | id | chain (legs) | composite | why it matters |
 |----|--------------|-----------|----------------|

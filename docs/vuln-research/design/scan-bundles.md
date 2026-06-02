@@ -20,15 +20,22 @@ We formalize that.
 
 ## Bundle model
 
-A **Bundle** = `{ id, title, description, packs[], active_phases[], probe_policy }`.
+A **Bundle** = `{ id, title, description, packs[], phases[], probe_policy }`
+(as implemented in `keyleak/bundles.py`).
 
-- `packs[]` — which detector packs run (reuses the existing pack system; we add
-  new packs below).
-- `active_phases[]` — subset of `{passive, crawl, subdomain, forms, authz_diff,
-  baas_probe, mitm, fuzz}`. Passive-only bundles send no crafted requests.
-- `probe_policy` — `{ active: bool, max_requests, rate_per_sec, read_only: true,
-  scope: same-registrable-domain }`. Active probing stays read-only, rate-limited,
-  in-scope, and behind `net_guard`/`offline_guard`/`--proxy` (never destructive).
+- `packs[]` — which detector packs run (reuses the existing pack system; the new
+  packs below are registered in `DETECTOR_PACKS`).
+- `phases[]` — subset of `{passive, crawl, subdomain, probe, forms, fuzz,
+  authz_diff, baas_probe, mitm}`, in three classes: **passive** (zero new
+  requests), **navigation** (`crawl`/`subdomain` — real read-only GETs / CT logs),
+  and **probing** (everything else — crafted requests).
+- `probe_policy` = `ProbePolicy{ probing: bool, allow_write_probe: bool=False,
+  max_requests, rate_per_sec, scope }`. Probing is **read-only by default**: the
+  single mutating probe (`baas_validator._probe_write_access`) only runs when a
+  bundle sets `allow_write_probe=True`, which **no built-in bundle does**.
+  `validate_bundles` enforces budget/rate/scope and that probing phases carry a
+  probing policy. All requests stay rate-limited, in-scope, and behind
+  `net_guard`/`offline_guard`/`--proxy`.
 
 ### New detector packs (populated from the ranked catalog in P3)
 

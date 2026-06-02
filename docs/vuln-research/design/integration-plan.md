@@ -28,7 +28,11 @@ gets a `suggested_pack` from P3. Packs compose into bundles (`bundles.py`, D6).
 
 Active probes today are hardcoded (baas_validator, access_control). To add ~30
 active checks cleanly, introduce a small registry mirroring the injectable-`prober`
-pattern already proven in `baas_validator`/`blast_radius`:
+pattern already proven in `baas_validator` (a single `prober(method, url, headers,
+body=None)` callable) and `blast_radius` (real signature
+`compute_blast_radius(finding, raw_value=None, *, probes: dict[str, Prober])` — a
+`{detector_id: Prober}` dict). `ActiveCheck.http` follows the simpler
+`baas_validator` single-callable shape:
 
 ```python
 class ActiveCheck(Protocol):

@@ -29,8 +29,10 @@ Condensed from a full-codebase map. File:line refs are approximate.
 - `access_control.compare_access_control_urls(urls, user_a_auth, user_b_auth,
   fetch, max_urls)` — two-user IDOR: object-id URL regex, fetch with A vs B,
   body-similarity > 0.85 + both 2xx → `type="idor"`. `fetch` injectable.
-- `blast_radius.blast_radius(finding, prober)` — read-only scope probes for GitHub
-  PAT / Stripe / OpenAI / Gemini / JWT-claim decode.
+- `blast_radius.compute_blast_radius(finding, raw_value=None, *, probes: dict[str, Prober])`
+  — read-only scope probes for GitHub PAT / Stripe / OpenAI / Gemini / JWT-claim
+  decode. NOTE the real shape: a `{detector_id: Prober}` dict + the raw token, not
+  a single callable. (This is the pattern the new ActiveCheck `http` should follow.)
 
 ## Guards every active phase must respect
 
@@ -65,10 +67,12 @@ Condensed from a full-codebase map. File:line refs are approximate.
    `@dataclass ChainRule {id, name, requires:[detector_id/type globs], when:Callable,
    produce:Callable→Finding/AttackVector, severity}`; `ATTACK_CHAINS` registry;
    `correlate(findings, context) -> List[AttackVector]`. Hook it into
-   `build_report` right where `_attack_vector_findings` already runs (pass the
-   correlated vectors in via the existing `attack_vectors` arg, or call correlate
-   inside build_report post-normalize). Uses `report.extra["provenance"]` so chains
-   can say "both findings hit api.example.com".
+   `build_report` via a NEW `attack_chains` param + a dedicated section — NOT the
+   existing `attack_vectors` arg, whose `_attack_vector_findings` only understands
+   `{"subdomains":[{host,findings}]}` and would flatten/lose the AttackVector model.
+   `report.extra["provenance"]` (set by `site_scanner._merge_findings`, absent on
+   single-URL scans) provides host co-location, with a fallback to the host parsed
+   from `evidence.request_url`/`source` so single-URL RLS chains still fire.
 4. **Bundles** → `keyleak/bundles.py` (Bundle = packs + active_phases + probe_policy);
    `--bundle` CLI flag resolves to packs+phases; `deep` runs everything + correlate.
 
