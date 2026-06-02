@@ -107,3 +107,11 @@ Proof, not assertion: code must show passing tests; designs must cite real
   - Architecture-map agent launched (active-scan internals for D5/D7) — running.
   - Decision recorded: meta-analysis = rule-based first, optional LLM hook.
   - Next on completion: P2 dedupe → write catalog/master.json → P3 adversarial rank.
+- 2026-06-02 (cont.): P1 research landed (269 entries). P2 normalized + per-slice.
+  D6/D5/D8/D7 designs written. **M1 shipped**: bundles.py + 12 passing tests.
+  P3 ranking landed: 66 clusters → Top 51 (29 crit/18 high/4 med) + 7 adversarial
+  additions (req-smuggling, web-cache-deception, deser, ATO chain, ws-auth,
+  exposed-.git, open-bucket) + 16 extended → master.json/RANKED.md/mapping.
+  Milestone load: M2=13, M3=24, M4=5, M5=4, M7=12.
+  Adversarial Review Gate R1 running over designs + M1 (gates M2).
+  - Next: apply R1 fixes → M2 (passive detectors) under the gate → M3..M7.
