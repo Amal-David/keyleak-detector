@@ -29,6 +29,7 @@ from typing import Any, Callable, Dict, List, Optional
 from .extension_bundle import extension_pattern_payload
 from .models import Evidence, Finding, ScanReport
 from .proxy import playwright_proxy
+from .redaction import new_run_salt, redact_value
 from .reporting import build_report
 
 
@@ -426,7 +427,8 @@ def run_browser_scan(
     elif baas_tables and not baas_extraction:
         baas_extraction = {"tables": list(baas_tables), "rpcs": [], "buckets": []}
 
-    findings = [_to_finding(entry, url) for entry in raw or []]
+    run_salt = new_run_salt()
+    findings = [_to_finding(entry, url, run_salt) for entry in raw or []]
     baas_findings = _run_baas_validation(raw, baas_extraction, baas_validate, baas_prober, proxy)
     findings.extend(baas_findings)
 
@@ -467,13 +469,21 @@ def _run_baas_validation(
     return validation.findings
 
 
-def _to_finding(entry: Dict[str, Any], target: str) -> Finding:
+def _to_finding(entry: Dict[str, Any], target: str, run_salt: Optional[bytes] = None) -> Finding:
     source = entry.get("source") or target
     value = str(entry.get("value") or "")
+    # Redact before the value ever leaves this process. The browser path used to
+    # store the raw match in ``redacted_value``/``snippet``, leaking cleartext
+    # secrets into reports, CI artifacts, and the /scan JSON response. Always use
+    # salted (HMAC) redaction — never the partial prefix/suffix masking — so a
+    # caller that forgets to pass a salt can't leak secret fragments.
+    if run_salt is None:
+        run_salt = new_run_salt()
+    redacted = redact_value(value, run_salt=run_salt)
     evidence = Evidence(
         source=source,
-        snippet=value[:240],
-        redacted_value=value[:120],
+        snippet=redacted,
+        redacted_value=redacted,
         request_url=target,
     )
     detector_id = str(entry.get("detector_id") or "browser:unknown")
@@ -500,7 +510,8 @@ def evaluate_findings_payload(
     baas_validate: bool = False,
     baas_prober: Optional[Any] = None,
 ) -> ScanReport:
-    findings = [_to_finding(entry, target_url) for entry in raw_findings or []]
+    run_salt = new_run_salt()
+    findings = [_to_finding(entry, target_url, run_salt) for entry in raw_findings or []]
     baas_findings = _run_baas_validation(raw_findings, baas_extraction, baas_validate, baas_prober)
     findings.extend(baas_findings)
     return build_report(

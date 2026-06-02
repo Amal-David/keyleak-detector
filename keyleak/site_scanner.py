@@ -318,11 +318,13 @@ def _filter_links(
     registrable: str,
     seen: Set[str],
     remaining: int,
+    target_guard: Optional[Callable[[str], Optional[str]]] = None,
 ) -> List[str]:
     """Pure helper: keep in-scope, http(s), de-duplicated links.
 
     Updates ``seen`` in place with normalized URLs. Returns up to
-    ``remaining`` newly discovered normalized URLs, in order.
+    ``remaining`` newly discovered normalized URLs, in order. Links blocked by
+    ``target_guard`` are skipped here so they never consume the crawl budget.
     """
     out: List[str] = []
     if remaining <= 0:
@@ -334,6 +336,8 @@ def _filter_links(
         if p.scheme not in ("http", "https") or not p.netloc:
             continue
         if registrable_domain(p.netloc) != registrable:
+            continue
+        if target_guard is not None and target_guard(p.hostname) is not None:
             continue
         normalized = _normalize_url(link)
         if normalized in seen:
@@ -351,6 +355,7 @@ def crawl_pages(
     headless: bool = True,
     proxy: Optional[str] = None,
     collect_raw: Optional[Set[str]] = None,
+    target_guard: Optional[Callable[[str], Optional[str]]] = None,
     on_progress: ProgressFn = None,
 ) -> List[str]:
     """Breadth-first crawl across ``hosts`` up to ``depth`` link levels.
@@ -364,6 +369,8 @@ def crawl_pages(
     seen: Set[str] = set()
     roots = []
     for h in hosts:
+        if target_guard is not None and target_guard(h) is not None:
+            continue
         root = _normalize_url(f"https://{h}")
         if root not in seen:
             seen.add(root)
@@ -412,10 +419,11 @@ def crawl_pages(
                             continue
                         lp = urlparse(link)
                         if lp.scheme in ("http", "https") and lp.netloc \
-                                and registrable_domain(lp.netloc) == registrable:
+                                and registrable_domain(lp.netloc) == registrable \
+                                and not (target_guard is not None and target_guard(lp.hostname) is not None):
                             collect_raw.add(link)
                 remaining = max_pages - (len(results) + len(queue))
-                for nu in _filter_links(links, registrable, seen, remaining):
+                for nu in _filter_links(links, registrable, seen, remaining, target_guard):
                     queue.append((nu, level + 1))
         finally:
             browser.close()
@@ -540,9 +548,15 @@ def scan_site(
     offline: bool = False,
     proxy: Optional[str] = None,
     auto_install: bool = True,
+    target_guard: Optional[Callable[[str], Optional[str]]] = None,
     on_progress: ProgressFn = None,
 ) -> ScanReport:
     """Full Site Scan: discover subdomains, crawl pages, scan each for secrets.
+
+    ``target_guard``, if given, is called with each host before it is probed,
+    crawled, or scanned; a non-None return means "skip this host". The web path
+    passes an SSRF guard here so subdomain enumeration and link-following can't
+    reach internal/metadata addresses (CLI leaves it unset).
 
     Returns an aggregated ScanReport whose ``extra`` carries the scanned
     subdomains, page count, and a ``provenance`` map (finding id -> URLs).
@@ -565,6 +579,25 @@ def scan_site(
     if not subdomains:
         subdomains = [domain]
 
+    # SSRF guard: drop any discovered subdomain that resolves to a blocked
+    # (internal/metadata) address before it is ever probed or crawled.
+    if target_guard is not None:
+        safe_hosts: List[str] = []
+        for host in subdomains:
+            reason = target_guard(host)
+            if reason is None:
+                safe_hosts.append(host)
+            else:
+                _emit(on_progress, "subdomains", f"Skipping {host}: {reason}")
+        # Only fall back to the apex if it isn't itself blocked — never re-add a
+        # host target_guard just rejected (it would still be probed for takeover).
+        if safe_hosts:
+            subdomains = safe_hosts
+        elif target_guard(domain) is None:
+            subdomains = [domain]
+        else:
+            subdomains = []
+
     # Subdomain-takeover check runs in parallel with the crawl/scan below. It
     # only uses ``requests`` (no Playwright), so a single worker thread safely
     # overlaps the main-thread browser work and adds almost no wall-clock time.
@@ -583,50 +616,60 @@ def scan_site(
         )
 
     raw_query_urls: Set[str] = set()
-    urls = crawl_pages(
-        subdomains, depth=depth, max_pages=max_pages,
-        headless=headless, proxy=proxy, collect_raw=raw_query_urls,
-        on_progress=on_progress,
-    )
-
     pairs: List[Tuple[Finding, str]] = []
-    for finding in _dangerous_param_findings(raw_query_urls):
-        pairs.append((finding, finding.evidence.request_url))
-    total = len(urls)
-    for i, url in enumerate(urls):
-        _emit(on_progress, "scan", f"Scanning [{i + 1}/{total}] {url}", i + 1, total)
-        try:
-            report = run_browser_scan(
-                url,
-                headless=headless,
-                baas_validate=baas_validate,
-                baas_prober=baas_prober,
-                baas_tables=baas_tables,
-                scan_budget_seconds=scan_budget_seconds,
-                proxy=proxy,
-            )
-            for f in report.findings:
-                pairs.append((f, url))
-        except Exception as exc:
-            print(f"[keyleak]   Error scanning {url}: {exc}", file=sys.stderr)
-            continue
-
-    # Join the parallel subdomain-takeover check and fold its findings in.
     takeover_count = 0
-    if takeover_future is not None:
-        try:
-            takeover_findings = takeover_future.result()
-        except Exception:
-            takeover_findings = []
-        finally:
+    total = 0
+    urls: List[str] = []
+    # Everything from the crawl through the takeover join runs inside a
+    # try/finally so the background takeover pool is always shut down — even if
+    # crawl_pages or the per-host scan raises.
+    try:
+        urls = crawl_pages(
+            subdomains, depth=depth, max_pages=max_pages,
+            headless=headless, proxy=proxy, collect_raw=raw_query_urls,
+            target_guard=target_guard, on_progress=on_progress,
+        )
+
+        for finding in _dangerous_param_findings(raw_query_urls):
+            pairs.append((finding, finding.evidence.request_url))
+        total = len(urls)
+        for i, url in enumerate(urls):
+            # SSRF guard: a crawled link may resolve to an internal address.
+            if target_guard is not None and target_guard(urlparse(url).hostname) is not None:
+                continue
+            _emit(on_progress, "scan", f"Scanning [{i + 1}/{total}] {url}", i + 1, total)
+            try:
+                report = run_browser_scan(
+                    url,
+                    headless=headless,
+                    baas_validate=baas_validate,
+                    baas_prober=baas_prober,
+                    baas_tables=baas_tables,
+                    scan_budget_seconds=scan_budget_seconds,
+                    proxy=proxy,
+                )
+                for f in report.findings:
+                    pairs.append((f, url))
+            except Exception as exc:
+                print(f"[keyleak]   Error scanning {url}: {exc}", file=sys.stderr)
+                continue
+
+        # Join the parallel subdomain-takeover check and fold its findings in.
+        if takeover_future is not None:
+            try:
+                takeover_findings = takeover_future.result()
+            except Exception:
+                takeover_findings = []
+            for f in takeover_findings:
+                pairs.append((f, f.source))
+            takeover_count = len(takeover_findings)
+            if takeover_count:
+                _emit(on_progress, "takeover",
+                      f"Subdomain-takeover check flagged {takeover_count} host(s)",
+                      takeover_count, takeover_count)
+    finally:
+        if takeover_pool is not None:
             takeover_pool.shutdown(wait=False)
-        for f in takeover_findings:
-            pairs.append((f, f.source))
-        takeover_count = len(takeover_findings)
-        if takeover_count:
-            _emit(on_progress, "takeover",
-                  f"Subdomain-takeover check flagged {takeover_count} host(s)",
-                  takeover_count, takeover_count)
 
     findings, provenance = _merge_findings(pairs)
     _emit(on_progress, "done",

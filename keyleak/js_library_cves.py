@@ -110,11 +110,15 @@ def parse_version(raw: Optional[str]) -> Optional[Version]:
             head += ch
         else:
             break
-    parts = [p for p in head.split(".") if p != ""]
-    if not parts:
+    # Reject malformed versions (leading/trailing dot or empty components like
+    # ".5", "3..5", "1.2.") rather than silently coercing them to a wrong number.
+    if not head or head[0] == ".":
         return None
+    parts = head.split(".")
     nums: List[int] = []
     for p in parts[:3]:
+        if p == "":
+            return None
         try:
             nums.append(int(p))
         except ValueError:

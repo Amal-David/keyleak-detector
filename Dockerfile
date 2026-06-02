@@ -81,6 +81,10 @@ EXPOSE 5002
 # Set environment variables
 ENV PYTHONUNBUFFERED=1
 ENV PORT=5002
+# Inside the container the app must listen on all interfaces to be reachable
+# through the published port mapping. The host (`python app.py`) defaults to
+# loopback; this opt-in is container-only.
+ENV KEYLEAK_HOST=0.0.0.0
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \

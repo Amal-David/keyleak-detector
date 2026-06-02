@@ -21,7 +21,7 @@ class OfflineViolation(RuntimeError):
     """Raised when ``--offline`` mode rejects an outbound socket connection."""
 
 
-_LOOPBACK_HOSTS = {"localhost", "127.0.0.1", "::1", "0.0.0.0"}
+_LOOPBACK_HOSTS = {"localhost", "127.0.0.1", "::1"}
 _INSTALLED = False
 _ORIGINAL_CONNECT: Optional[callable] = None
 # 4-tuple addresses ((host, port, flowinfo, scopeid)) only have str/int in [0].
