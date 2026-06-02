@@ -41,11 +41,26 @@ class RlsAnonFulldbTests(unittest.TestCase):
 
 
 class HostFallbackTests(unittest.TestCase):
-    def test_single_url_scan_with_no_provenance_still_chains(self):
-        # both findings carry only their own source/request_url (no provenance map)
-        findings = [mk("supabase_url"), mk("baas_open_table")]
-        vectors = correlate(findings, provenance=None)
-        self.assertTrue(any(v.rule_id == "rls-anon-fulldb" for v in vectors))
+    def test_realistic_single_url_chains_only_with_target(self):
+        # Production single-URL shape: anon key on the PAGE host, but baas_open_table
+        # is emitted with the SUPABASE project host. They are different network hosts.
+        anon = mk("supabase_publishable_key", host="https://myapp.com")
+        tbl = mk("baas_open_table", host="https://abcxyz.supabase.co",
+                 request_url="https://abcxyz.supabase.co/rest/v1/users")
+        # Without a target, the two legs are on different hosts -> must NOT chain.
+        self.assertFalse(any(v.rule_id == "rls-anon-fulldb" for v in correlate([anon, tbl])))
+        # With the scan target, both anchor to the target host -> the chain fires.
+        vectors = correlate([anon, tbl], target="https://myapp.com")
+        rls = [v for v in vectors if v.rule_id == "rls-anon-fulldb"]
+        self.assertEqual(len(rls), 1)
+        self.assertEqual(rls[0].hosts, ["myapp.com"])
+
+    def test_bare_filename_source_is_not_treated_as_a_host(self):
+        # Findings whose source/request_url are bare strings (no scheme) must not be
+        # grouped by a bogus 'host' -> no false same-host chain.
+        anon = mk("supabase_publishable_key", host="app.js", request_url="app.js")
+        tbl = mk("baas_open_table", host="bundle.js", request_url="bundle.js")
+        self.assertEqual([v for v in correlate([anon, tbl]) if v.rule_id == "rls-anon-fulldb"], [])
 
     def test_provenance_map_is_used_when_present(self):
         anon = mk("supabase_publishable_key", host="x", request_url="")  # no host on the finding
@@ -81,6 +96,37 @@ class OtherChainsTests(unittest.TestCase):
     def test_sourcemap_alone_does_not_fire(self):
         vectors = correlate([mk("source_map_reference", detector_id="leak.source_map_reference")])
         self.assertEqual([v for v in vectors if v.rule_id == "sourcemap-secret-recovery"], [])
+
+    def test_write_takeover_fires(self):
+        findings = [mk("supabase_url"), mk("baas_writable_table")]
+        self.assertTrue(any(v.rule_id == "rls-anon-write-takeover" for v in correlate(findings)))
+
+    def test_write_takeover_negative_without_anon_key(self):
+        self.assertEqual(
+            [v for v in correlate([mk("baas_writable_table")]) if v.rule_id == "rls-anon-write-takeover"], [])
+
+    def test_cors_alone_does_not_fire(self):
+        self.assertEqual(
+            [v for v in correlate([mk("baas_cors_wildcard", severity="low")])
+             if v.rule_id == "cors-wildcard-open-table"], [])
+
+
+class SeverityCapTests(unittest.TestCase):
+    def test_lead_only_chain_is_capped_at_high(self):
+        # an enumerated-only / maybe-public open table is a LEAD; it must not alone
+        # produce a BLOCK-SHIP critical vector.
+        findings = [mk("supabase_publishable_key", severity="medium", status="lead"),
+                    mk("baas_open_table", severity="high", status="lead")]
+        rls = [v for v in correlate(findings) if v.rule_id == "rls-anon-fulldb"][0]
+        self.assertEqual(rls.confidence, "lead")
+        self.assertEqual(rls.severity, "high")  # capped, not critical
+
+    def test_confirmed_member_yields_critical(self):
+        findings = [mk("supabase_publishable_key", status="lead"),
+                    mk("baas_open_table", status="confirmed")]
+        rls = [v for v in correlate(findings) if v.rule_id == "rls-anon-fulldb"][0]
+        self.assertEqual(rls.confidence, "confirmed")
+        self.assertEqual(rls.severity, "critical")  # real missing-RLS finding
 
 
 class EngineSemanticsTests(unittest.TestCase):

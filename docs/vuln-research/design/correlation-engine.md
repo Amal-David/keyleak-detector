@@ -17,6 +17,13 @@ chains the rules didn't encode — but it is **opt-in, offline-local, and never
 required**; the default path is pure rules. Rules are the product; the LLM is a
 power-user amplifier that only ever *adds* candidate chains for human review.
 
+> **Status:** the engine core (`keyleak/attack_chains.py`, `correlate()`) is built
+> and tested (M6a). The wiring described below — the new `build_report` param, the
+> report section, and the `browser_scanner`/`site_scanner` call sites — is **M6b,
+> not yet implemented**, so `correlate()` produces no user-visible output yet. The
+> single-URL host-alignment requirement (pass the scan `target`) is locked by a test
+> so M6b cannot regress it.
+
 ## Where it hooks (grounded — corrected after review R1)
 
 `reporting.build_report(target, findings, scan_mode, attack_vectors=..., profile,

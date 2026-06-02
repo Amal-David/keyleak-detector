@@ -44,3 +44,19 @@ fp-and-safety: all 4 R3 items verified resolved by independent adversarial probi
 Fix (69781b9): `_view_relations` requires POSITIVE evidence (in paths, ops present, no post); unknown insertability defaults to table. Regression test added; fails if reverted.
 Outcome: M5 accepted (fp/safety 94; the single code-quality must-fix resolved + test-guarded). 40 baas tests pass.
 
+## Step: M6a correlation engine
+
+### Round 4 (false-vector-correctness 72, design-and-quality 78 — below bar)
+Real defects the gate caught:
+- **Flagship chain dead on real single-URL scans**: anon key is on the page host but baas_open_table carries the *supabase* project host → different hosts → `rls-anon-fulldb` never fired in production (tests passed only because the helper co-located both on a synthetic host).
+- A **lead / maybe-public open table** escalated to a misleading CRITICAL (only confidence='lead' signalled softness) → could BLOCK SHIP a correctly-secured app.
+- `_host_of` parsed **bare filenames** ('app.js') as hosts → potential false same-host grouping.
+- Untested critical rule (write-takeover) + no cors negative; engine not yet wired (deferred to M6b).
+Fixes (this step):
+- `correlate(..., target=<url>)` anchors all findings of a single-target scan to the target host (fixes the flagship single-URL miss); realistic cross-host test added that fails without `target`.
+- Lead-confidence vectors capped at 'high' (only a confirmed member yields critical); test added.
+- Strict `_host_of` (http(s) scheme required); bare-filename test added.
+- write-takeover + cors negative tests added. 21 attack-chain tests pass.
+- M6b wiring explicitly marked not-yet-implemented in the module + design doc (no over-claim).
+Outcome: engine correctness fixes landed + locked by tests; M6b (wiring) tracked separately. Residual: full end-to-end output awaits M6b.
+

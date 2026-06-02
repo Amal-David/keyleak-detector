@@ -18,6 +18,14 @@ Design (see docs/vuln-research/design/correlation-engine.md):
 Only rules whose every leg maps to a finding type KeyLeak emits today are shipped.
 More rules activate as later milestones add finding types (jwt_alg_none, ssrf_*,
 actuator_exposed, ...); those are listed in the design doc, not enabled here.
+
+STATUS: this is the engine core (M6a). It is NOT yet called by any scan path — the
+wiring into ``reporting.build_report`` (a new ``attack_chains`` param + report
+section) and the call sites in ``browser_scanner`` (passing ``target=<page url>``)
+and ``site_scanner`` (passing ``provenance``) are milestone M6b. Until then
+``correlate`` produces no user-visible output. The single-URL host-alignment
+requirement (pass ``target``) is captured by ``test_realistic_single_url_...`` so
+the M6b wiring cannot reintroduce the cross-host miss.
 """
 
 from __future__ import annotations
@@ -162,21 +170,37 @@ SEED_CHAINS: Tuple[ChainRule, ...] = (
 
 
 def _host_of(value: Optional[str]) -> Optional[str]:
+    # Only an explicit http(s) URL yields a host. Bare strings (filenames like
+    # 'app.js', labels like 'Inline Script #1', or bare domains) must NOT be parsed
+    # as hosts, or unrelated findings would be grouped into false same-host chains.
     if not value:
         return None
-    text = str(value)
     try:
-        host = urlsplit(text if "//" in text else "//" + text).hostname
+        parts = urlsplit(str(value))
     except ValueError:
         return None
-    return host.lower() if host else None
+    if parts.scheme not in ("http", "https") or not parts.hostname:
+        return None
+    return parts.hostname.lower()
 
 
-def _finding_host(finding: Finding, provenance: Dict[str, List[str]]) -> Optional[str]:
+def _finding_host(
+    finding: Finding,
+    provenance: Dict[str, List[str]],
+    target_host: Optional[str],
+) -> Optional[str]:
+    # 1) site-scan provenance (per-finding URLs) is the most precise.
     for url in provenance.get(finding.id, []) or []:
         host = _host_of(url)
         if host:
             return host
+    # 2) single-target scan: every finding came from scanning one target, so anchor
+    #    them all to that target host. This is what makes the flagship single-URL
+    #    RLS chain fire even though the BaaS finding's own URL is the project host
+    #    (e.g. *.supabase.co) while the anon key is on the page host.
+    if target_host:
+        return target_host
+    # 3) best-effort fallback to the finding's own request URL / source.
     evidence = getattr(finding, "evidence", None)
     for candidate in (getattr(evidence, "request_url", None), finding.source):
         host = _host_of(candidate)
@@ -218,16 +242,34 @@ def _stable_id(rule_id: str, member_ids) -> str:
     return f"chain_{hash_value:08x}"
 
 
-def correlate(findings: List[Finding], provenance: Optional[Dict[str, List[str]]] = None) -> List[AttackVector]:
+def _cap_severity(severity: str, ceiling: str) -> str:
+    if _SEVERITY_RANK.get(severity, 0) > _SEVERITY_RANK.get(ceiling, 0):
+        return ceiling
+    return severity
+
+
+def correlate(
+    findings: List[Finding],
+    provenance: Optional[Dict[str, List[str]]] = None,
+    target: Optional[str] = None,
+) -> List[AttackVector]:
     """Derive composite attack vectors from a finding list.
 
-    ``provenance`` is the site-scan finding.id -> [urls] map (optional); absent it,
-    host co-location falls back to each finding's own request_url/source.
+    ``provenance`` is the site-scan finding.id -> [urls] map (optional). ``target``
+    is the single scan target URL for a one-page scan: when set, all findings are
+    anchored to its host for same-host correlation (a single-URL scan inspects one
+    target, even though a BaaS finding's own URL is the project host). Without
+    either, host co-location falls back to each finding's own request_url/source.
+
+    Composite severity escalates to the rule's level, but a vector with no
+    ``confirmed`` member (confidence == "lead") is capped at "high", so a
+    soft/maybe-intentional finding cannot alone produce a BLOCK-SHIP critical.
     """
     provenance = provenance or {}
+    target_host = _host_of(target)
     by_host: Dict[Optional[str], List[Finding]] = defaultdict(list)
     for finding in findings:
-        by_host[_finding_host(finding, provenance)].append(finding)
+        by_host[_finding_host(finding, provenance, target_host)].append(finding)
 
     vectors: List[AttackVector] = []
     seen: set = set()
@@ -252,6 +294,11 @@ def correlate(findings: List[Finding], provenance: Optional[Dict[str, List[str]]
             confidence = "confirmed" if any(
                 getattr(m, "validation_status", "lead") == "confirmed" for m in members
             ) else "lead"
+            if confidence != "confirmed":
+                # No confirmed member: the chain rests on leads (e.g. an
+                # enumerated-only / maybe-public table). Don't let it alone BLOCK
+                # SHIP — cap at "high" so it's reviewed, not treated as proven.
+                severity = _cap_severity(severity, "high")
             vectors.append(AttackVector(
                 id=_stable_id(rule.id, member_ids),
                 rule_id=rule.id,
