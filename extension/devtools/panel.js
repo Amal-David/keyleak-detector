@@ -209,8 +209,10 @@ tabstripEl.addEventListener('click', (event) => {
 });
 
 chrome.devtools.network.onRequestFinished.addListener((request) => {
-  request.getContent((body) => {
-    if (!body || body.length > MAX_DEVTOOLS_BODY) return;
+  request.getContent((body, encoding) => {
+    // getContent returns base64 for binary responses; the analyzer only scans
+    // text, so skip binary bodies rather than scanning the base64 blob.
+    if (!body || encoding === 'base64' || body.length > MAX_DEVTOOLS_BODY) return;
     const contentTypeHeader = (request.response.headers || []).find(header => header.name.toLowerCase() === 'content-type');
     const tabId = chrome.devtools.inspectedWindow.tabId;
     chrome.runtime.sendMessage({

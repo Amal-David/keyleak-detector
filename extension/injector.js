@@ -152,6 +152,11 @@
       return stream;
     };
     window.EventSource.prototype = OriginalEventSource.prototype;
+    // Preserve the static readyState constants so page code comparing against
+    // EventSource.OPEN/CONNECTING/CLOSED keeps working (never break the page).
+    Object.defineProperty(window.EventSource, 'CONNECTING', { value: OriginalEventSource.CONNECTING });
+    Object.defineProperty(window.EventSource, 'OPEN', { value: OriginalEventSource.OPEN });
+    Object.defineProperty(window.EventSource, 'CLOSED', { value: OriginalEventSource.CLOSED });
   }
 
   // --- Track worker script URLs so the extension can fetch/scan worker bundles ---

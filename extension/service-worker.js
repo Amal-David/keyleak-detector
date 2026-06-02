@@ -401,12 +401,14 @@ async function handleAnalyzeLibraries(tabId, data = {}) {
   if (!Array.isArray(libraries) || libraries.length === 0) {
     return { ok: true, findings: 0 };
   }
+  // Count coverage from the scan itself: the library surface was inspected
+  // regardless of whether any version turned out to be vulnerable, so a page
+  // running only safe libraries still reports "JS library versions" covered.
+  const tabData = await readTabData(tabId, pageUrl);
+  tabData.stats.libraries += 1;
+  await persistTabData(tabId, tabData);
+
   const findings = buildLibraryFindings(libraries, pageUrl);
-  if (findings.length > 0) {
-    const tabData = await readTabData(tabId, pageUrl);
-    tabData.stats.libraries += 1;
-    await persistTabData(tabId, tabData);
-  }
   await addFindings(tabId, findings, pageUrl);
   return { ok: true, findings: findings.length };
 }

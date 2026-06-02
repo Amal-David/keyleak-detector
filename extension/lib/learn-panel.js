@@ -69,6 +69,7 @@ export function renderLearnPanel(finding, info) {
   const attackScenario = detector.attack_scenario || '';
   const remediation = detector.remediation || finding?.remediation || '';
   const riskReason = finding?.risk_reason || '';
+  const validationStatus = detector.validation_status || finding?.validation_status || '';
 
   const why = [riskReason, attackScenario && riskReason ? '' : null]
     .filter(Boolean)
@@ -85,7 +86,7 @@ export function renderLearnPanel(finding, info) {
     <div class="learn-meta">
       pack: <strong>${escapeHtml(pack)}</strong>
       &nbsp;&middot;&nbsp; severity: <strong>${escapeHtml(severity)}</strong>
-      ${detector.validation_status ? `&nbsp;&middot;&nbsp; status: <strong>${escapeHtml(detector.validation_status)}</strong>` : ''}
+      ${validationStatus ? `&nbsp;&middot;&nbsp; status: <strong>${escapeHtml(validationStatus)}</strong>` : ''}
     </div>`;
 
   return `
