@@ -446,10 +446,26 @@ class WriteAccessTests(unittest.TestCase):
                 return {"status_code": 401, "body": None, "headers": {}}
             return {"status_code": 404, "body": None, "headers": {}}
 
-        result = validate_baas_config(self._config(), prober=smart_prober)
+        result = validate_baas_config(self._config(), prober=smart_prober, allow_write_probe=True)
         assert result.key_valid is True
         assert len(result.writable_tables) == 1
         assert any(f.type == "baas_writable_table" for f in result.findings)
+
+    def test_write_probe_skipped_by_default_sends_no_post(self):
+        """Safety: the default scan is read-only — no POST insert is ever issued."""
+        methods = []
+
+        def spy_prober(method, url, headers, body=None):
+            methods.append(method)
+            if method == "GET" and url.endswith("/rest/v1/"):
+                return {"status_code": 200, "body": None, "headers": {}}
+            if method == "GET" and "/rest/v1/users" in url:
+                return {"status_code": 200, "body": [{"id": 1}], "headers": {}}
+            return {"status_code": 404, "body": None, "headers": {}}
+
+        result = validate_baas_config(self._config(), prober=spy_prober)  # default: no opt-in
+        assert "POST" not in methods, "read-only scan must not POST to the target"
+        assert result.writable_tables == []
 
     def test_write_blocked_by_rls(self):
         def rls_prober(method, url, headers, body=None):
@@ -465,7 +481,7 @@ class WriteAccessTests(unittest.TestCase):
                 return {"status_code": 401, "body": None, "headers": {}}
             return {"status_code": 404, "body": None, "headers": {}}
 
-        result = validate_baas_config(self._config(), prober=rls_prober)
+        result = validate_baas_config(self._config(), prober=rls_prober, allow_write_probe=True)
         assert len(result.writable_tables) == 0
         assert not any(f.type == "baas_writable_table" for f in result.findings)
 

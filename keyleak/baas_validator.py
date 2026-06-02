@@ -282,14 +282,25 @@ def validate_baas_config(
     *,
     prober: Optional[BaaSProber] = None,
     js_extraction: Optional[Dict[str, Any]] = None,
+    allow_write_probe: bool = False,
 ) -> BaaSValidation:
     """Run read-only probes against a BaaS configuration.
 
     Returns a ``BaaSValidation`` with enriched findings. All HTTP calls go
     through ``prober`` (defaults to ``requests`` in production).
+
+    By default the scan is strictly read-only. The one mutating probe — a test
+    ``POST`` insert used to detect missing write-side RLS — is **skipped unless
+    ``allow_write_probe=True``** is passed explicitly, because the ``Prefer:
+    tx=rollback`` rollback it relies on is not honored by every PostgREST
+    deployment and an un-rolled-back insert would write a row into the target's
+    database. No built-in scan bundle enables it.
     """
     if config.provider == "supabase":
-        return _validate_supabase(config, prober or _default_prober, js_extraction=js_extraction)
+        return _validate_supabase(
+            config, prober or _default_prober,
+            js_extraction=js_extraction, allow_write_probe=allow_write_probe,
+        )
     if config.provider == "firebase":
         return _validate_firebase(config, prober or _default_prober)
     if config.provider == "appwrite":
@@ -302,7 +313,7 @@ def validate_baas_config(
     )
 
 
-def _validate_supabase(config: BaaSConfig, prober: BaaSProber, *, js_extraction: Optional[Dict[str, Any]] = None) -> BaaSValidation:
+def _validate_supabase(config: BaaSConfig, prober: BaaSProber, *, js_extraction: Optional[Dict[str, Any]] = None, allow_write_probe: bool = False) -> BaaSValidation:
     url = config.project_url
     headers = {
         "apikey": config.api_key,
@@ -348,7 +359,9 @@ def _validate_supabase(config: BaaSConfig, prober: BaaSProber, *, js_extraction:
     _probe_tables(config, headers, prober, validation)
     _probe_storage(config, headers, prober, validation)
     _probe_rpcs(config, headers, prober, validation)
-    _probe_write_access(config, headers, prober, validation)
+    # Mutating probe (POST insert) — read-only by default; explicit opt-in only.
+    if allow_write_probe:
+        _probe_write_access(config, headers, prober, validation)
     _probe_auth_config(config, headers, prober, validation)
     _analyze_realtime(config, validation, js_extraction)
 

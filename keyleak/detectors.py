@@ -99,6 +99,15 @@ DETECTOR_PACKS = {
     "correctness": "N+1, regression, off-by-one, timezone/date, and semantic config leads.",
     "housekeeping": "Missing tests, dead code, and stale comments or docs.",
     "baas": "BaaS misconfiguration: open tables, exposed admin logic, storage, and RPC abuse vectors.",
+    # Runtime-vulnerability program packs (populated incrementally in M2-M7).
+    # Registered up front so scan bundles resolve through normalize_packs; a pack
+    # with no detectors yet simply contributes nothing until its milestone lands.
+    "injection": "Injection + input-validation leads found at runtime: SQLi/NoSQLi/SSTI/command/SSRF/open-redirect/traversal.",
+    "authn": "Authentication/session leads: JWT flaws, OAuth/OIDC, session + cookie, password reset, OTP-in-response, 2FA bypass.",
+    "client": "Client-side/browser leads: DOM XSS, prototype pollution, postMessage, tokens in web storage, clickjacking.",
+    "api": "API-layer leads: excessive data exposure, broken object/property-level authz, enumeration, GraphQL introspection/abuse.",
+    "recon": "Attack-surface/recon leads: subdomain takeover, debug/admin endpoints, exposed files, default credentials.",
+    "headers": "Security-header and cookie-flag hygiene (passive).",
 }
 
 HEATMAP_ROWS = {
