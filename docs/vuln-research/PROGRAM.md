@@ -118,7 +118,8 @@ Proof, not assertion: code must show passing tests; designs must cite real
 | M3 active-check registry + recon probes (24) | ⬜ |
 | M4 auth-diff BFLA/BOPLA (5) | ⬜ |
 | M5 remainder (RLS-disabled-vs-permissive, per-table matrix UI, GraphQL probe) | ⬜ |
-| M6 correlation engine (`attack_chains.py`) | ⬜ |
+| **M6a** correlation engine core (`attack_chains.py`, 5 grounded chains) | ✅ shipped; R4 in review |
+| M6b correlation → build_report wiring + report section | ⬜ |
 | M7 fuzz/forms + MITM (opt-in) | ⬜ |
 
 **How to resume:** pick the next ⬜ milestone from `design/integration-plan.md` §6;
@@ -146,3 +147,6 @@ Open question for the human: confirm my goal interpretation at the top of this f
   safety bug (BaaS write-probe POSTed rows; now read-only by default + opt-in).
   Shipped M1 (bundles + CLI) and M5 flagship (OpenAPI-root table enumeration —
   catches the CBSE case). R3 reviewing M5. All tests green. Handoff snapshot above.
+- 2026-06-02 (cont.): M5 FP-hardened through R3→R3b (write-probe + 200-[] FP + view
+  regression all fixed). Shipped M6a: attack-vector correlation engine
+  (attack_chains.py, 5 grounded chains, 15 tests). R4 reviewing. Draft PR #16 open.
