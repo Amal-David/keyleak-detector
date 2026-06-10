@@ -87,6 +87,14 @@ def scan_path(
         for match in find_split_tokens(fragments_by_file):
             findings.append(_split_token_finding(match))
 
+    # Dependency lifecycle-hook audit (supply-chain). The regex pack skips
+    # node_modules, so a malicious dependency's preinstall/postinstall is
+    # otherwise invisible. Runs when the leak pack is active and a manifest is
+    # present. Read-only.
+    if "leak" in active_packs and ((target / "package.json").is_file() or (target / "node_modules").is_dir()):
+        from .lifecycle_audit import audit_node_dependencies
+        findings.extend(audit_node_dependencies(str(target)))
+
     return build_report(str(target), findings, scan_mode="local", profile=profile, packs=active_packs)
 
 
