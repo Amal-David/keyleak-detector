@@ -19,9 +19,9 @@ Legend: effort S(<2h) / M(half-day) / L(day+). Status ⬜ todo · 🔄 doing · 
 
 | ID | Item | Fixes | Effort | Status |
 |----|------|-------|--------|--------|
-| **B1** | **Wire `correlate()` into `build_report`** (new `attack_chains` param) + render an "Attack chains" section in md/html/json; pass `provenance` from site_scanner and `target` from browser_scanner. Turns the flagship meta-analysis from dead code into output. (= prior program M6b.) | W3 | M | ⬜ |
-| B2 | **Bundle phases: execute or fail loud.** `--bundle` must either run its declared navigation/probe phases (route through existing `scan_site`/probers) or hard-error — never silently downgrade to passive. `injection` (0 detectors) must skip loudly with a non-zero notice. | W4 | M | ⬜ |
-| B3 | **Confidence/validation-aware verdict** + truthful reason string (don't claim a high-confidence gate that isn't there). | W10 | S | ⬜ |
+| **B1** | **Wire `correlate()` into `build_report`** (new `attack_chains` param) + render an "Attack chains" section in md/html/json; pass `provenance` from site_scanner and `target` from browser_scanner. Turns the flagship meta-analysis from dead code into output. (= prior program M6b.) | W3 | M | ✅ |
+| B2 | **Bundle phases: execute or fail loud.** `--bundle` must either run its declared navigation/probe phases (route through existing `scan_site`/probers) or hard-error — never silently downgrade to passive. `injection` (0 detectors) must skip loudly with a non-zero notice. | W4 | M | ✅ |
+| B3 | **Confidence/validation-aware verdict** + truthful reason string (don't claim a high-confidence gate that isn't there). | W10 | S | ✅ |
 
 ## Tier 2 — Usefulness: the honest "scan before you ship" experience
 
@@ -45,7 +45,7 @@ Legend: effort S(<2h) / M(half-day) / L(day+). Status ⬜ todo · 🔄 doing · 
 | ID | Item | Fixes | Effort | Status |
 |----|------|-------|--------|--------|
 | **E1** | **Add `pull_request` CI** (SHA-pinned actions): unittest suite (fails on collection errors), `cd extension && node --test`, and the launch-gate. | W5 | S | ⬜ |
-| E2 | **Fix dependency declarations** — add `tldextract`/`PyYAML`/`PySocks` to `requirements.txt`, add `[project].dependencies`, parity test. Unblocks the 4 disabled suites + `pip install .`. | W5, W8 | S | ⬜ |
+| E2 | **Fix dependency declarations** — add `tldextract`/`PyYAML`/`PySocks` to `requirements.txt`, add `[project].dependencies`, parity test. Unblocks the 4 disabled suites + `pip install .`. | W5, W8 | S | ✅ |
 | E3 | **Harden serializer tests** — real SARIF-2.1.0 schema assert + HTML XSS-escaping assert on attacker-controlled finding fields; tests for the untested detector engines. | W12, W13 | M | ⬜ |
 
 ## Sequencing & safety rails
