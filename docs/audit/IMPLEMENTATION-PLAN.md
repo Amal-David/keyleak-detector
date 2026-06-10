@@ -37,14 +37,14 @@ Legend: effort S(<2h) / M(half-day) / L(day+). Status ⬜ todo · 🔄 doing · 
 | **D1** | **Live deployed-surface probe** — read-only marker-confirmed GETs for `/.env`, `/.git/config`, `/.git/HEAD`, Spring `/actuator/env|heapdump`, unauth LLM `/api/tags`,`/v1/models`. Behind scope guard + caps. "Run this before you deploy." | gap #1,#3,#4 | M | ⬜ |
 | D2 | **Dependency lifecycle-hook scanner** — walk `node_modules/*/package.json` (+ root) for `pre/post/install`+`prepare` hooks invoking bun/curl/base64/git-ref; operationalizes this repo's CLAUDE.md supply-chain rules. | gap #2 | M | ⬜ |
 | D3 | **Refresh Shai-Hulud IOCs** to 2.0 / Miasma (new C2 hosts, `environment_source.js`/`bun_installer.js`, repo-description markers). | gap #6 | S | ⬜ |
-| D4 | **GitHub Actions hardening detectors** — unpinned `uses:@tag`, `permissions: write-all`, secret echoed in `run:`. | gap #7 | S | ⬜ |
+| D4 | **GitHub Actions hardening detectors** — unpinned `uses:@tag`, `permissions: write-all`, secret echoed in `run:`. | gap #7 | S | ✅ |
 | D5 | **CORS Origin-reflection probe** (generic, not just BaaS `*`) + expanded vulnerable-JS-library table (lodash/axios/Next.js incl. CVE-2026-44575/-29927/Angular/Vue). | gap #9,#10 | M | ⬜ |
 
 ## Tier 4 — Foundation (quality / CI / packaging)
 
 | ID | Item | Fixes | Effort | Status |
 |----|------|-------|--------|--------|
-| **E1** | **Add `pull_request` CI** (SHA-pinned actions): unittest suite (fails on collection errors), `cd extension && node --test`, and the launch-gate. | W5 | S | ⬜ |
+| **E1** | **Add `pull_request` CI** (SHA-pinned actions): unittest suite (fails on collection errors), `cd extension && node --test`, and the launch-gate. | W5 | S | ✅ |
 | E2 | **Fix dependency declarations** — add `tldextract`/`PyYAML`/`PySocks` to `requirements.txt`, add `[project].dependencies`, parity test. Unblocks the 4 disabled suites + `pip install .`. | W5, W8 | S | ✅ |
 | E3 | **Harden serializer tests** — real SARIF-2.1.0 schema assert + HTML XSS-escaping assert on attacker-controlled finding fields; tests for the untested detector engines. | W12, W13 | M | ⬜ |
 
