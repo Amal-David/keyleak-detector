@@ -29,42 +29,65 @@ LIFECYCLE_HOOKS = ("preinstall", "install", "postinstall", "prepare", "prepublis
 
 # Hard cap so a giant monorepo can't make the audit run unbounded.
 MAX_MANIFESTS = 5000
+# Per-file read cap (a crafted 50 MB package.json must not be read whole).
+MAX_MANIFEST_BYTES = 4 * 1024 * 1024
+
+# A "download" token and an "exec" token; a lifecycle script containing both
+# (in any order — piped, ;-chained, or `sh -c "$(curl ...)"`) is downloading and
+# running remote code. Kept as two cheap sub-checks so we catch the non-pipe
+# forms the original single regex missed (gate D2-FN).
+_DOWNLOAD_RE = re.compile(r"\b(?:curl|wget)\b|New-Object\s+Net\.WebClient|downloadString", re.I)
+_EXEC_RE = re.compile(r"\|\s*(?:sh|bash|node|python3?)\b|\b(?:sh|bash)\s+-c\b|\bIEX\b|Invoke-Expression", re.I)
 
 # Dangerous shell patterns inside a lifecycle script. (pattern, label, severity).
-_DANGER_PATTERNS: Tuple[Tuple[re.Pattern, str, str], ...] = (
-    (re.compile(r"(?:curl|wget)\b[^|&;]*\|\s*(?:sh|bash|node|python3?)\b", re.I),
-     "pipes a downloaded script straight into a shell/interpreter", "high"),
-    (re.compile(r"base64\b[^|&;]*(?:-d|--decode)\b[^|&;]*\|\s*(?:sh|bash|node|python3?)\b", re.I),
-     "decodes base64 and pipes it into a shell/interpreter", "high"),
+# ``None`` pattern entries are handled specially in ``_scan_scripts``.
+_DANGER_PATTERNS: Tuple[Tuple[Optional[re.Pattern], str, str], ...] = (
+    (re.compile(r"base64\b[^|&;]*(?:-d|--decode)\b", re.I),
+     "decodes base64 during install (common stager wrapper)", "high"),
     (re.compile(r"/dev/tcp/", re.I), "opens a raw TCP socket (reverse-shell shape)", "high"),
-    (re.compile(r"\beval\s*\(", re.I), "calls eval() during install", "high"),
-    (re.compile(r"\bnode\s+(?:-e|--eval)\b", re.I), "runs inline node -e code during install", "high"),
-    (re.compile(r"\bbun\s+(?:run|x|install|add)\b", re.I),
-     "invokes Bun during install (Shai-Hulud / Miasma stager pattern)", "medium"),
+    (re.compile(r"\beval\s*\(|\bnode\s+(?:-e|--eval)\b", re.I),
+     "runs inline eval / node -e code during install", "high"),
+    (re.compile(r"\b(?:powershell|pwsh)\b.*(?:IEX|Invoke-Expression|downloadString|FromBase64String)", re.I),
+     "runs a PowerShell download-and-execute stager", "high"),
     (re.compile(r"\b(?:tanstack_runner|router_init|router_runtime|environment_source|bun_installer)\b", re.I),
      "references a known supply-chain payload filename", "high"),
     (re.compile(r"\bnpm_config_[a-z_]*registry\b|\bnpm\s+set\s+registry\b", re.I),
      "rewrites the npm registry during install (dependency-confusion shape)", "medium"),
+    # Bun is only suspicious WITH a network/payload co-signal — bare `bun run
+    # build` is a legitimate package-manager call (avoid FP on Bun shops).
+    (re.compile(r"\bbun\s+(?:run|x|install|add)\b(?=.*(?:curl|wget|http|base64|eval|\.js))", re.I),
+     "invokes Bun alongside a download/payload (Shai-Hulud / Miasma stager shape)", "high"),
 )
 
-# A dependency value that is a git ref rather than a registry version.
-_GIT_REF_RE = re.compile(r"^(?:github:|gitlab:|bitbucket:|git\+|git://|[\w.-]+/[\w.-]+#)", re.I)
+# A dependency value that is NOT a registry version: a git ref, github shorthand,
+# or a remote tarball — all bypass registry provenance.
+_GIT_REF_RE = re.compile(
+    r"^(?:github:|gitlab:|bitbucket:|git\+|git://"          # explicit VCS schemes
+    r"|[\w.-]+/[\w.-]+(?:#.+)?$"                             # bare `user/repo[#ref]` github shorthand
+    r"|https?://.*\.(?:tgz|tar\.gz)(?:[?#].*)?$)",          # remote tarball
+    re.I,
+)
 
 
-def _iter_manifests(root: Path) -> List[Path]:
-    """Root package.json + every package.json under node_modules (capped)."""
+def _iter_manifests(root: Path) -> Tuple[List[Path], bool]:
+    """Root package.json + every package.json under ANY node_modules dir in the
+    tree (handles nested monorepo node_modules). Returns (paths, truncated)."""
     out: List[Path] = []
+    truncated = False
     root_pkg = root / "package.json"
     if root_pkg.is_file():
         out.append(root_pkg)
-    nm = root / "node_modules"
-    if nm.is_dir():
-        for dirpath, dirnames, filenames in os.walk(nm):
-            if "package.json" in filenames:
-                out.append(Path(dirpath) / "package.json")
-                if len(out) >= MAX_MANIFESTS:
-                    return out
-    return out
+    for dirpath, dirnames, filenames in os.walk(root):
+        # Prune VCS/cache dirs for speed; keep walking into node_modules.
+        dirnames[:] = [d for d in dirnames if d not in {".git", ".hg", ".svn"}]
+        if "node_modules" not in Path(dirpath).parts:
+            continue
+        if "package.json" in filenames:
+            out.append(Path(dirpath) / "package.json")
+            if len(out) >= MAX_MANIFESTS:
+                truncated = True
+                return out, truncated
+    return out, truncated
 
 
 def _package_label(manifest: Path, data: Dict) -> str:
@@ -84,8 +107,19 @@ def _scan_scripts(manifest: Path, data: Dict, *, is_root: bool) -> List[Finding]
         cmd = scripts.get(hook)
         if not isinstance(cmd, str) or not cmd.strip():
             continue
-        for pattern, label, severity in _DANGER_PATTERNS:
-            if pattern.search(cmd):
+        # Download-and-execute co-signal: a script that both fetches remote
+        # content AND pipes/feeds it to an interpreter (any order/form: pipe,
+        # ;-chained, `sh -c "$(curl ...)"`, PowerShell IEX downloadString).
+        matched: Optional[Tuple[str, str]] = None
+        if _DOWNLOAD_RE.search(cmd) and _EXEC_RE.search(cmd):
+            matched = ("downloads remote content and pipes it into a shell/interpreter", "high")
+        else:
+            for pattern, label, severity in _DANGER_PATTERNS:
+                if pattern is not None and pattern.search(cmd):
+                    matched = (label, severity)
+                    break
+        if matched:
+                label, severity = matched
                 where = "the project" if is_root else f"dependency '{pkg}'"
                 findings.append(
                     Finding(
@@ -118,7 +152,6 @@ def _scan_scripts(manifest: Path, data: Dict, *, is_root: bool) -> List[Finding]
                         ],
                     )
                 )
-                break  # one finding per hook is enough
     return findings
 
 
@@ -168,13 +201,23 @@ def _scan_git_ref_deps(manifest: Path, data: Dict) -> List[Finding]:
 
 
 def audit_node_dependencies(root: str, *, max_manifests: int = MAX_MANIFESTS) -> List[Finding]:
-    """Audit a project's npm manifests (root + node_modules) for dangerous
-    lifecycle hooks and git-ref dependencies. Read-only; runs nothing."""
+    """Audit a project's npm manifests (root + every nested node_modules) for
+    dangerous lifecycle hooks and non-registry (git-ref / tarball) dependencies.
+    Read-only; runs nothing. Bounded by ``max_manifests`` and a per-file size cap.
+
+    Coverage is heuristic, not exhaustive — it catches the common stager shapes
+    (pipe / ;-chained / command-substitution download-and-exec, base64, eval,
+    PowerShell IEX, known payload filenames, Bun-with-payload) and non-registry
+    deps; bespoke obfuscation can still evade it.
+    """
     root_path = Path(root).expanduser().resolve()
     findings: List[Finding] = []
-    manifests = _iter_manifests(root_path)[:max_manifests]
+    manifests, truncated = _iter_manifests(root_path)
+    manifests = manifests[:max_manifests]
     for manifest in manifests:
         try:
+            if manifest.stat().st_size > MAX_MANIFEST_BYTES:
+                continue  # skip implausibly large manifest (DoS guard)
             data = json.loads(manifest.read_text(encoding="utf-8", errors="replace"))
         except (ValueError, OSError):
             continue
@@ -183,4 +226,23 @@ def audit_node_dependencies(root: str, *, max_manifests: int = MAX_MANIFESTS) ->
         is_root = manifest.parent == root_path
         findings.extend(_scan_scripts(manifest, data, is_root=is_root))
         findings.extend(_scan_git_ref_deps(manifest, data))
+    if truncated:
+        # Fail loud, not silent: tell the user coverage was capped.
+        findings.append(
+            Finding(
+                type="lifecycle_audit_truncated",
+                severity="info",
+                confidence=0.5,
+                detector_id="leak.lifecycle_audit_truncated",
+                source=str(root_path),
+                evidence=Evidence(source=str(root_path), redacted_value=f"capped at {MAX_MANIFESTS} manifests"),
+                risk_reason=(
+                    f"The dependency lifecycle audit stopped after {MAX_MANIFESTS} package.json files; "
+                    f"some node_modules manifests were NOT scanned. Coverage is incomplete."
+                ),
+                remediation="Run the audit on subtrees, or raise the cap, to cover the full dependency tree.",
+                validation_status="lead",
+                category="leak",
+            )
+        )
     return findings
