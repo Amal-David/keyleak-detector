@@ -212,11 +212,30 @@ class ScanReport:
     @property
     def verdict(self) -> Dict[str, str]:
         counts = self.summary
-        if counts["critical_severity"] or counts["high_severity"]:
+        blocking = counts["critical_severity"] + counts["high_severity"]
+        if blocking:
+            # Honest reason (audit W10): the gate is severity-based — a leaked
+            # secret is high-severity and must block even though it is a static
+            # "lead", so we do NOT require active confirmation to block. But we
+            # report HOW MANY were actively confirmed vs. are static leads, instead
+            # of falsely claiming a "high-confidence" gate.
+            confirmed = sum(
+                1 for f in self.findings
+                if f.severity in ("critical", "high")
+                and f.validation_status in ("confirmed", "validated")
+            )
+            leads = blocking - confirmed
+            parts = [f"{blocking} high/critical exposure(s)"]
+            if confirmed and leads:
+                parts.append(f"{confirmed} actively confirmed, {leads} static lead(s) to verify")
+            elif confirmed:
+                parts.append(f"all {confirmed} actively confirmed")
+            else:
+                parts.append("static leads — verify before relying on them")
             return {
                 "status": VERDICT_BLOCK,
                 "label": "BLOCK SHIP",
-                "reason": "Critical or high-confidence exposures need fixing before release.",
+                "reason": f"{'; '.join(parts)}. Fix before release.",
             }
         if counts["medium_severity"]:
             return {

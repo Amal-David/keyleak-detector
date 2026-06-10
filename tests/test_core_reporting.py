@@ -569,6 +569,34 @@ def _detector(detector_id):
     raise AssertionError(f"missing detector {detector_id}")
 
 
+class VerdictHonestyTests(unittest.TestCase):
+    """Audit W10: the verdict reason must not claim a 'high-confidence' gate it
+    doesn't enforce; it should report confirmed-vs-lead counts truthfully."""
+
+    def _report(self, *specs):
+        findings = [
+            Finding(type="t", severity=sev, confidence=0.8, detector_id="d", source="s",
+                    evidence=Evidence(source="s"), risk_reason="r", remediation="m",
+                    validation_status=vs)
+            for sev, vs in specs
+        ]
+        return ScanReport("t", "browser", findings)
+
+    def test_reason_drops_false_high_confidence_claim(self):
+        reason = self._report(("high", "lead")).verdict["reason"]
+        self.assertNotIn("high-confidence", reason)
+        self.assertIn("verify", reason.lower())
+
+    def test_reason_reports_confirmed_and_leads(self):
+        reason = self._report(("critical", "confirmed"), ("high", "lead")).verdict["reason"]
+        self.assertIn("confirmed", reason)
+        self.assertIn("lead", reason)
+
+    def test_still_blocks_on_severity_regardless_of_confidence(self):
+        # A leaked secret (a static lead) must still BLOCK — severity is the gate.
+        self.assertEqual(self._report(("high", "lead")).verdict["status"], "BLOCK_SHIP")
+
+
 class PrivacyChokepointTests(unittest.TestCase):
     """Audit W7: PII scrubbing must apply to every scan mode, not just local
     files. A browser/BaaS-style Finding built directly (never through
