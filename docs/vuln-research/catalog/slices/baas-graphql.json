@@ -75,9 +75,9 @@
       "Supabase"
     ],
     "description": "Supabase RPC functions (PostgreSQL functions exposed via `/rest/v1/rpc/<fn>`) execute with the permissions of the defining role. If EXECUTE is granted to `anon` and the function body does not verify `auth.uid()`, unauthenticated callers can trigger mutations, admin operations, or cross-user data access that RLS would otherwise block.",
-    "runtime_discovery": "Enumerate RPC function names from JS bundle network calls or the PostgREST OpenAPI spec at /rest/v1/. POST /rest/v1/rpc/<function_name> with empty body `{}` and the anon key. A non-403 response (200, 400 with schema error, 500 with internal error) indicates the function is reachable. Cross-reference with the function's JS invocation context to assess impact.",
-    "detection_signal": "POST /rest/v1/rpc/<fn> with anon credentials returns HTTP 200, 400, or 500 instead of HTTP 403. Function names containing 'admin', 'delete', 'update', 'transfer', or 'bulk' are highest priority.",
-    "active_probe": true,
+    "runtime_discovery": "Enumerate RPC function names from JS bundle network calls or the PostgREST OpenAPI spec at /rest/v1/. Surface each function as a lead without POSTing to /rest/v1/rpc/<function_name>, because POSTing would execute the function. Cross-reference with the function's JS invocation context to assess impact.",
+    "detection_signal": "Client bundle or OpenAPI schema exposes an RPC function name reachable from browser code. Function names containing 'admin', 'delete', 'update', 'transfer', or 'bulk' are highest priority. No confirmation request is sent by default; treat as a lead until explicit authorized testing confirms EXECUTE exposure.",
+    "active_probe": false,
     "severity": "high",
     "prevalence": "common",
     "slice": "baas-graphql",
@@ -226,7 +226,7 @@
     "prevalence": "common",
     "slice": "baas-graphql",
     "uid": "baas-graphql__graphql-query-batching-dos",
-    "class_hint": "cmd-injection"
+    "class_hint": "dos"
   },
   {
     "id": "hasura-admin-secret-exposed",
@@ -260,6 +260,6 @@
     "prevalence": "occasional",
     "slice": "baas-graphql",
     "uid": "baas-graphql__appwrite-collection-guest-permission",
-    "class_hint": "cmd-injection"
+    "class_hint": "broken-access-control"
   }
 ]

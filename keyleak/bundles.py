@@ -123,8 +123,8 @@ BUNDLES: Dict[str, Bundle] = {
             ("passive", "authz_diff", "baas_probe"), _PROBE,
         ),
         Bundle(
-            "injection", "Injection (active)",
-            "Input-validation fuzzing: SQLi/NoSQLi/SSTI/command/SSRF/open-redirect/traversal.",
+            "injection", "Injection scaffold",
+            "Planned input-validation fuzzing bundle; no runnable detectors until injection/api packs land.",
             ("injection", "api"), ("passive", "crawl", "forms", "fuzz"), _PROBE,
         ),
         Bundle(

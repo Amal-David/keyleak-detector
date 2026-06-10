@@ -36,7 +36,7 @@
     "prevalence": "ubiquitous",
     "slice": "react-spa",
     "uid": "react-spa__react-client-side-authz-ui-only",
-    "class_hint": "cmd-injection"
+    "class_hint": "bfla"
   },
   {
     "id": "react-redux-state-exposure",
@@ -186,7 +186,7 @@
     "prevalence": "common",
     "slice": "react-spa",
     "uid": "react-spa__react-source-map-exposed",
-    "class_hint": "cmd-injection"
+    "class_hint": "exposed-source-maps"
   },
   {
     "id": "react-graphql-introspection-enabled",
@@ -243,7 +243,7 @@
     "prevalence": "occasional",
     "slice": "react-spa",
     "uid": "react-spa__react-postmessage-origin-wildcard",
-    "class_hint": "cmd-injection"
+    "class_hint": "xss"
   },
   {
     "id": "react-feature-flags-client-bypass",
@@ -281,6 +281,6 @@
     "prevalence": "ubiquitous",
     "slice": "react-spa",
     "uid": "react-spa__react-third-party-script-supply-chain",
-    "class_hint": "cmd-injection"
+    "class_hint": "supply-chain"
   }
 ]

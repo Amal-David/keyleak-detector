@@ -882,7 +882,7 @@
   {
     "rank": 34,
     "tier": "top51",
-    "merge_key": "baas-config-exposed-storage",
+    "merge_key": "open-cloud-storage-bucket",
     "name": "open-cloud-storage-bucket",
     "canonical_class": "exposed-storage",
     "pack": "baas",
@@ -896,11 +896,17 @@
       "agnostic"
     ],
     "why": "Net-new from runtime lens (open-cloud-storage-bucket) folded in here as an extension of the BaaS prober: storage-list/public-bucket probe is the same confirmed-active shape baas_validator already uses for Supabase storage. High prevalence, reuses existing engine, low-FP. Promoted into Top 51 as a genuine implemented-adjacent strength.",
-    "runtime_discovery": "",
-    "detection_signal": "",
-    "active_probe": null,
-    "member_count": 0,
-    "references": []
+    "runtime_discovery": "Extract bucket names from browser-visible BaaS/cloud storage configuration, then perform anonymous read-only list/read probes against Supabase Storage, Firebase Storage, S3, GCS, and Azure Blob endpoints.",
+    "detection_signal": "Anonymous bucket list/read returns HTTP 200 with bucket metadata or object names; protected buckets return 401/403/404 or an empty denied response. Supabase/Firebase storage probes reuse the BaaS storage-list path.",
+    "active_probe": true,
+    "member_count": 1,
+    "references": [
+      "https://supabase.com/docs/guides/storage/security/access-control",
+      "https://firebase.google.com/docs/storage/security",
+      "https://docs.aws.amazon.com/AmazonS3/latest/userguide/access-control-block-public-access.html",
+      "https://cloud.google.com/storage/docs/access-control",
+      "https://learn.microsoft.com/azure/storage/blobs/anonymous-read-access-configure"
+    ]
   },
   {
     "rank": 35,
@@ -1346,28 +1352,6 @@
     "references": []
   },
   {
-    "rank": 54,
-    "tier": "addition",
-    "merge_key": null,
-    "name": "open-cloud-storage-bucket",
-    "canonical_class": "exposed-storage",
-    "pack": "baas",
-    "severity": "high",
-    "frameworks": [
-      "AWS S3",
-      "GCS",
-      "Azure Blob",
-      "Firebase Storage",
-      "agnostic"
-    ],
-    "why": "Runtime lens add; reuses the confirmed-active BaaS prober (baas_validator storage-list). Generic public S3/GCS/Azure-blob enumeration is high-prevalence, low-FP, and one of the few genuinely active checks the scanner can already perform. Folded into Top 51 at #34 as it is implemented-adjacent.",
-    "runtime_discovery": "active anon request, same engine as Supabase storage probe",
-    "detection_signal": "anonymous LIST/GET on bucket URLs extracted from bundles/config; 200 + object listing = open",
-    "active_probe": null,
-    "member_count": 0,
-    "references": []
-  },
-  {
     "rank": 55,
     "tier": "addition",
     "merge_key": null,
@@ -1609,7 +1593,7 @@
     ],
     "why": "",
     "runtime_discovery": "Fetch the app root and any authenticated page with a plain GET. Inspect all response headers for presence and correct values of the standard defensive set.",
-    "detection_signal": "Absence of Content-Security-Policy header, or X-Frame-Options missing/set to ALLOWALL, or X-Content-Type-Options not set to 'nosniff', or Strict-Transport-Security absent on HTTPS responses, or Server header exposing exact version string (e.g., 'Apache/2.4.51').",
+    "detection_signal": "Absence of Content-Security-Policy header, or X-Frame-Options missing or set to an invalid value such as 'ALLOWALL', or X-Content-Type-Options not set to 'nosniff', or Strict-Transport-Security absent on HTTPS responses, or Server header exposing exact version string (e.g., 'Apache/2.4.51').",
     "active_probe": false,
     "member_count": 8,
     "references": []
@@ -1684,7 +1668,7 @@
     ],
     "why": "",
     "runtime_discovery": "For every page returned with HTTP 200, inspect the X-Frame-Options header (must be DENY or SAMEORIGIN) and the Content-Security-Policy header for a frame-ancestors directive. Attempt to embed the target URL in a data-URI iframe from the scanner's headless browser context and observe whether the frame loads.",
-    "detection_signal": "Response header X-Frame-Options is absent or set to ALLOWALL; CSP frame-ancestors is absent or set to *; headless browser successfully renders the target page inside a cross-origin iframe without error. Pages containing form[action] or button[type=submit] that load in the iframe are higher priority.",
+    "detection_signal": "Response header X-Frame-Options is absent or set to an invalid value such as 'ALLOWALL'; CSP frame-ancestors is absent or set to *; headless browser successfully renders the target page inside a cross-origin iframe without error. Pages containing form[action] or button[type=submit] that load in the iframe are higher priority.",
     "active_probe": true,
     "member_count": 1,
     "references": []

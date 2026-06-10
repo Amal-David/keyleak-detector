@@ -42,7 +42,7 @@ class BaaSConfig:
 class BaaSProbeResult:
     probe_type: str
     target: str
-    status: str  # "confirmed", "denied", "error"
+    status: str  # "confirmed", "denied", "error", "empty", "lead"
     http_status: Optional[int] = None
     row_count: Optional[int] = None
     columns: Optional[List[str]] = None
@@ -555,11 +555,11 @@ _SENSITIVE_TABLE_PREFIXES = (
 
 
 def _table_severity(table: str) -> str:
-    # Match sensitive keywords on token boundaries, so 'authors' is not escalated
-    # by 'auth' and 'reporting' is not escalated by 'report'.
+    # Match sensitive keywords on token boundaries, including common plural
+    # table names, without escalating near-misses like 'authors' or 'reporting'.
     lower = table.lower()
     for keyword in _SENSITIVE_TABLE_PREFIXES:
-        if re.search(r"(?:^|[^a-z0-9])" + re.escape(keyword) + r"(?:[^a-z0-9]|$)", lower):
+        if re.search(r"(?:^|[^a-z0-9])" + re.escape(keyword) + r"(?:s|es)?(?:[^a-z0-9]|$)", lower):
             return "critical"
     return "high"
 

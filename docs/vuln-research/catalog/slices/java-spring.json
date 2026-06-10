@@ -33,7 +33,7 @@
     "prevalence": "common",
     "slice": "java-spring",
     "uid": "java-spring__spring-actuator-env-secrets",
-    "class_hint": "cmd-injection"
+    "class_hint": "debug-endpoint"
   },
   {
     "id": "spring-security-method-bypass-idor",
@@ -160,7 +160,7 @@
     "prevalence": "occasional",
     "slice": "java-spring",
     "uid": "java-spring__spring-data-jpql-injection",
-    "class_hint": "cmd-injection"
+    "class_hint": "sqli"
   },
   {
     "id": "spring-cors-wildcard",
@@ -268,6 +268,6 @@
     "prevalence": "occasional",
     "slice": "java-spring",
     "uid": "java-spring__spring-data-rest-exposure",
-    "class_hint": "cmd-injection"
+    "class_hint": "spring-data-rest-exposure"
   }
 ]

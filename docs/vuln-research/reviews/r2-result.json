@@ -1,0 +1,315 @@
+{
+  "round": 2,
+  "scores": [
+    {
+      "lens": "security-correctness",
+      "score": 88
+    },
+    {
+      "lens": "architecture-grounding",
+      "score": 90
+    },
+    {
+      "lens": "code-quality",
+      "score": 90
+    },
+    {
+      "lens": "product-usefulness",
+      "score": 86
+    }
+  ],
+  "reviews": [
+    {
+      "lens": "security-correctness",
+      "overall_score": 88,
+      "verdict": "All 10 round-1 blocking issues are genuinely resolved in the current files — verified at code/test level, not just claimed. The headline safety fix (write-probe gating) is real: _probe_write_access is gated behind allow_write_probe=True (default off), the production browser_scanner path never passes it, a spy test asserts no POST by default, and docs dropped the false 'never destructive' claim. All correlation/RLS/blast_radius doc claims now match real symbols in the code. 88/88 tests pass. Two residual DOCUMENTATION inaccuracies remain (architecture-map mislabels the write probe 'read-only'; rls-deepdive over-claims that _probe_rpcs POSTs) — same grounding-error class round 1 flagged, but doc-only and non-blocking for the code safety invariant. Above the 85 bar; fix the two doc lines for full credit.",
+      "r1_items_resolved": [
+        {
+          "item": 1,
+          "resolved": true,
+          "note": "baas_validator.py:285,363-364: validate_baas_config(allow_write_probe=False) and _validate_supabase gate `if allow_write_probe: _probe_write_access(...)`. Production caller browser_scanner._run_baas_validation (line 468) calls validate_baas_config WITHOUT allow_write_probe -> read-only. No prod code passes True (grep: only the docstring + the explicit write-test test). test_write_probe_skipped_by_default_sends_no_post asserts 'POST' not in methods AND writable_tables==[] on the default call — a real intent-check. Docstring + docs now describe the POST insert and tx=rollback caveat instead of claiming 'never destructive'."
+        },
+        {
+          "item": 2,
+          "resolved": true,
+          "note": "correlation-engine.md:43 references canonical_class ONLY to state it 'does not exist in the codebase'. The mapping table (lines 98-108) uses real strings verified in code: baas_open_table/baas_writable_table/baas_open_storage/baas_service_role_exposed/baas_cors_wildcard (baas_validator.py), supabase_url/supabase_publishable_key/firebase_client_config (detectors.py:775-810), idor + detector_id access-control.two_user_comparison (access_control.py:73-76). Legs match finding.type/detector_id, which exist."
+        },
+        {
+          "item": 3,
+          "resolved": true,
+          "note": "correlation-engine.md:32-38 attributes provenance to site_scanner._merge_findings, NOT build_report — confirmed: site_scanner.py:436-462 builds provenance {finding.id -> sorted URLs} and is the only producer; reporting.build_report has no provenance logic. Doc's single-URL fallback (provenance.get(id) else host from evidence.request_url/source) is necessary because _merge_findings also sets request_url fallback (line 450-451) and single-URL browser/BaaS findings get no provenance entry. Accurate."
+        },
+        {
+          "item": 4,
+          "resolved": true,
+          "note": "reporting.py:14-21 build_report has attack_vectors param; _attack_vector_findings (line 363-374) only reads attack_vectors.get('subdomains') with {host,findings} shape and flattens to category='access-control' — exactly as the doc warns. correlation-engine.md:27-30 specifies a NEW attack_chains param + dedicated _attack_vector_section serializer rather than reusing attack_vectors. Correct."
+        },
+        {
+          "item": 5,
+          "resolved": true,
+          "note": "blast_radius.py:186-191 signature is compute_blast_radius(finding, raw_value=None, *, probes=None) — matches the claimed compute_blast_radius(finding, raw_value=None, *, probes) verbatim, cited correctly in architecture-map.md:32."
+        },
+        {
+          "item": 6,
+          "resolved": true,
+          "note": "detectors.py:105-110 registers injection/authn/client/api/recon/headers in DETECTOR_PACKS. normalize_packs (1032-1038) only rejects correctness/housekeeping for surface in {extension,web}. test_every_bundle_resolves_through_normalize_packs (test_bundles.py:58-67) filters REPO_ONLY_PACKS then asserts normalize_packs(runtime, surface='web') accepts each pack — passes. Verified manually: deep bundle's 10 packs all normalize under surface='web'."
+        },
+        {
+          "item": 7,
+          "resolved": true,
+          "note": "bundles.py:32-38 defines PASSIVE_PHASES/NAVIGATION_PHASES(crawl,subdomain)/PROBING_PHASES; properties sends_requests (nav OR probing) and is_probing (probing only) at lines 63-71. scan-bundles.md:28-31 documents the same three-class taxonomy. Crawl/subdomain are navigation (send real read-only GETs) distinct from passive and from crafted probing — unambiguous."
+        },
+        {
+          "item": 8,
+          "resolved": true,
+          "note": "validate_bundles(bundles=None) (bundles.py:154-179) takes a candidate registry; enforces unknown packs/phases, sends_requests=>max_requests>0, is_probing=>policy.probing, policy.probing=>rate_per_sec>0, allow_write_probe=>probing, scope in ALLOWED_SCOPES. No global mutation. Tests test_validate_rejects_* pass candidate dicts {**BUNDLES, bad.id: bad} and test_global_registry_unmutated_by_validation confirms BUNDLES untouched."
+        },
+        {
+          "item": 9,
+          "resolved": true,
+          "note": "test_deep_covers_every_real_runtime_pack (test_bundles.py:41-50) derives expected = set(DETECTOR_PACKS) - REPO_ONLY_PACKS (source of truth, not web_packs helper) so a forgotten real pack fails. validate tests pass candidate dicts not the global. Not tautological."
+        },
+        {
+          "item": 10,
+          "resolved": true,
+          "note": "cli.py:39-40 dispatches `bundles` subcommand to _print_bundles; lines 42-44 apply --bundle via _apply_bundle_selection which sets args.packs (line 597) from runtime packs and flows into normalize_packs. --bundle registered on scan (line 324) and local (line 339). Verified end-to-end: `keyleak bundles` rc=0, and deep --bundle -> packs that pass normalize_packs(surface='web'). test_cli_bundles (5 tests) pass."
+        }
+      ],
+      "must_fix": [
+        {
+          "artifact": "docs/vuln-research/design/architecture-map.md:26",
+          "issue": "Labels _probe_write_access a 'read-only test'. It POSTs an insert (POST /rest/v1/{table} with a probe body) — it is the single MUTATING probe. This contradicts the same repo's supabase-rls-deepdive.md, which correctly calls it opt-in/mutating, and re-introduces a (smaller) version of the round-1 false read-only claim.",
+          "suggested_fix": "Change to '`_probe_write_access` mutating insert probe (opt-in via allow_write_probe, off by default)'."
+        },
+        {
+          "artifact": "docs/vuln-research/design/supabase-rls-deepdive.md:25,62",
+          "issue": "Claims _probe_rpcs does 'POST /rest/v1/rpc/{fn} with empty args' (active call). The actual code (baas_validator.py:538-572) does NOT POST — it surfaces each RPC as a 'lead' without executing it, and test_rpc_surfaced_as_lead asserts no POST to /rpc/. The doc over-states the probe's network aggression (the inverse of the code's deliberate safety choice).",
+          "suggested_fix": "Reword to: '_probe_rpcs surfaces client-referenced RPC functions as leads WITHOUT calling them (no POST), because POSTing executes the function.' Remove the '(high, active read-only call with empty args)' line at 62."
+        }
+      ],
+      "strengths": [
+        "Write-probe safety invariant is real and defense-in-depth: gated at the API (allow_write_probe default False), never enabled by the production browser_scanner path, never set by any built-in bundle, and validate_bundles rejects allow_write_probe without a probing policy.",
+        "Tests verify intent rather than coverage: the spy-prober test asserts the literal absence of a POST method on the default path; the deep-bundle test derives its expectation from DETECTOR_PACKS (source of truth) so forgetting a real pack fails; validate tests pass candidate registries and a separate test proves the global is never mutated.",
+        "Design docs are now grounded in verifiable symbols — every cited finding.type, detector_id, function signature (compute_blast_radius, build_report, _merge_findings, _attack_vector_findings) matches the actual code; canonical_class is explicitly called out as non-existent.",
+        "End-to-end CLI wiring confirmed by execution, not just by reading: `keyleak bundles` runs and the deep bundle's resolved packs pass normalize_packs(surface='web'). 88/88 tests green."
+      ]
+    },
+    {
+      "lens": "architecture-grounding",
+      "overall_score": 90,
+      "verdict": "PASS. All 10 round-1 blocking issues are genuinely resolved in the current files — verified by opening source, not trusting docs. The mutating BaaS write probe is gated behind allow_write_probe=True (default off), browser_scanner calls it without that arg (read-only), and a spy-prober test asserts no POST by default on an open table. All six previously-phantom packs (injection/authn/client/api/recon/headers) are now registered in DETECTOR_PACKS and resolve through normalize_packs(surface=\"web\"); a test iterates every bundle to prove it. The correlation-engine doc matches on real finding.type/detector_id strings that I confirmed are emitted by the code (baas_open_table, baas_writable_table, supabase_publishable_key, idor + detector_id access-control.two_user_comparison) and explicitly disavows the non-existent canonical_class. Provenance is correctly attributed to site_scanner._merge_findings (which I read — it returns finding.id->[urls]) with the single-URL evidence.request_url/source fallback. compute_blast_radius(finding, raw_value=None, *, probes) and build_report's attack_vectors-only-understands-{subdomains} shape both match the real signatures; the docs propose a NEW attack_chains param (confirmed absent from reporting.py today). validate_bundles takes a bundles arg and does not mutate the global; the deep test derives expected from DETECTOR_PACKS not web_packs. CLI exposes the bundles subcommand and --bundle on scan/local. 88/88 target tests pass; the only full-suite failures are 4 unrelated ImportErrors from a missing optional dep (tldextract). Score capped below 95 because the correlation/attack_chains feature itself is still design-only (no attack_chains.py, no wiring) — the grounding is now honest about that, but the flagship single-URL RLS chain remains unimplemented and untested against the fallback it depends on.",
+      "r1_items_resolved": [
+        {
+          "item": 1,
+          "resolved": true,
+          "note": "baas_validator.py:363 — _probe_write_access (the POST insert at :604) only runs `if allow_write_probe:`; validate_baas_config default is allow_write_probe=False (:285). browser_scanner.py:468 calls validate_baas_config(...) WITHOUT the flag, so runtime is read-only. test_baas_validator.py:454 test_write_probe_skipped_by_default_sends_no_post uses a spy_prober where `users` returns a 200 body (=> marked open table), then asserts `'POST' not in methods` and writable_tables==[]; test_writable_table_confirmed requires explicit allow_write_probe=True to fire. Docs (bundles.py header, supabase-rls-deepdive.md:16-47) no longer claim never-destructive; they state the probe is opt-in only."
+        },
+        {
+          "item": 2,
+          "resolved": true,
+          "note": "correlation-engine.md:43-45 matches on finding.type and detector_id and states canonical_class 'does not exist in the codebase'. The concrete strings it cites are real: baas_open_table/baas_writable_table/baas_open_storage/baas_service_role_exposed/baas_cors_wildcard exist in baas_validator.py; supabase_publishable_key/supabase_url/firebase_client_config/source_map_reference in detectors.py; idor + detector_id access-control.two_user_comparison in access_control.py:73-76. Remaining canonical_class hits are only in the research catalog JSON (master.json/p3-result.json) and the r1 review log — not in the matching mechanism."
+        },
+        {
+          "item": 3,
+          "resolved": true,
+          "note": "site_scanner.py:436 _merge_findings returns (findings, provenance) where provenance = {finding.id: sorted(urls)} (:457) and is stored at report extra['provenance'] (:691). correlation-engine.md:32-38 attributes provenance to _merge_findings (NOT build_report), states single-URL browser_scan/BaaS findings have no entry, and mandates a fallback host from evidence.request_url/source so the single-URL RLS chain still fires. architecture-map.md:73-75 says the same."
+        },
+        {
+          "item": 4,
+          "resolved": true,
+          "note": "Verified reporting.py:14-23: build_report's attack_vectors arg is only consumed by _attack_vector_findings (:363) which iterates attack_vectors.get('subdomains', []) and flattens to category='access-control' — exactly the fixed shape. correlation-engine.md:26-29 and architecture-map.md:70-72 both specify a NEW attack_chains param (list[AttackVector]) plus a dedicated _attack_vector_section serializer, explicitly NOT reusing attack_vectors. grep confirms attack_chains is not yet present in reporting.py, consistent with it being a proposed-new param."
+        },
+        {
+          "item": 5,
+          "resolved": true,
+          "note": "blast_radius.py:186 actual signature is compute_blast_radius(finding, raw_value=None, *, probes: Optional[Dict[str, Prober]]=None). architecture-map.md:32 and integration-plan.md:33 both cite compute_blast_radius(finding, raw_value=None, *, probes: dict[str, Prober]) — exact match including the keyword-only probes dict."
+        },
+        {
+          "item": 6,
+          "resolved": true,
+          "note": "detectors.py:95-111 DETECTOR_PACKS now registers injection, authn, client, api, recon, headers (in addition to leak/appsec/access-control/baas/correctness/housekeeping). normalize_packs(surface='web') (:1035) only rejects correctness/housekeeping, which bundles exclude via REPO_ONLY_PACKS. test_bundles.py:58 test_every_bundle_resolves_through_normalize_packs iterates every bundle's runtime packs through normalize_packs(surface='web') and asserts each resolves. 88 tests pass."
+        },
+        {
+          "item": 7,
+          "resolved": true,
+          "note": "bundles.py:32-38 defines PASSIVE_PHASES / NAVIGATION_PHASES (crawl, subdomain) / PROBING_PHASES explicitly. Bundle.sends_requests (:64) true for navigation OR probing; Bundle.is_probing (:69) true only for crafted PROBING_PHASES. crawl/subdomain are classed as navigation (read-only GETs/CT logs), not probing. test_bundles.py PhaseSplitTests verifies passive sends 0, navigation (quick) sends requests but is_probing=False, and every probing bundle has a consistent policy."
+        },
+        {
+          "item": 8,
+          "resolved": true,
+          "note": "bundles.py:154 validate_bundles(bundles: Optional[Mapping]=None) takes a registry arg (defaults to global but never mutates it). Enforces: unknown packs (:163), unknown phases (:166), sends_requests => max_requests>0 (:170), is_probing => policy.probing (:172), probing => rate_per_sec>0 (:174), allow_write_probe => probing (:176), scope in ALLOWED_SCOPES (:178). Tests pass candidate dicts {**BUNDLES, bad.id: bad} so no global mutation."
+        },
+        {
+          "item": 9,
+          "resolved": true,
+          "note": "test_bundles.py:41 test_deep_covers_every_real_runtime_pack derives expected = set(DETECTOR_PACKS) - set(REPO_ONLY_PACKS) from the source-of-truth registry (comment explicitly notes this is NOT web_packs() which deep also uses), so a forgotten real pack fails. The validate tests (:110-131) pass candidate registries and a separate test_global_registry_unmutated_by_validation asserts 'bad'/'bad2' never leaked into BUNDLES. Non-tautological."
+        },
+        {
+          "item": 10,
+          "resolved": true,
+          "note": "cli.py:316 registers the 'bundles' subcommand (dispatched at :39-40 -> _print_bundles, ran successfully). --bundle flag added to scan (:324) and local (:339). _apply_bundle_selection (:587) resolves the bundle, sets args.packs to runtime packs (excluding REPO_ONLY_PACKS), and prints loud notes for unpopulated packs and not-yet-orchestrated active phases. test_cli_bundles.py covers apply/override/deep-excludes-repo-only/unknown-error/print. All pass."
+        }
+      ],
+      "strengths": [
+        "Read-only safety invariant is now real and defended at three layers: source gating (allow_write_probe default False), the actual caller (browser_scanner omits the flag), and a meaningful test that sets up an open table so the POST would fire if ungated.",
+        "Every concrete string the correlation doc relies on was traced to a real emission site in the code (baas_open_table, baas_writable_table, idor + access-control.two_user_comparison, supabase_publishable_key) — the grounding is verifiable, not aspirational class names.",
+        "Real function signatures (compute_blast_radius keyword-only probes dict, build_report's subdomains-only attack_vectors shape) match the docs exactly, and the docs correctly flag attack_chains as a NEW param rather than reusing the incompatible existing one.",
+        "validate_bundles takes a registry arg and the safety tests prove the global is never mutated; the deep-coverage test derives its expectation from DETECTOR_PACKS, not the helper deep itself uses, so it can actually catch a missing pack.",
+        "Phase taxonomy (passive/navigation/probing via sends_requests vs is_probing) is explicit and consistently enforced by validate_bundles and exercised across every bundle in tests.",
+        "88/88 target tests pass; full-suite failures isolated to a missing optional dep (tldextract), not to any reviewed change."
+      ],
+      "must_fix": []
+    },
+    {
+      "lens": "code-quality",
+      "overall_score": 90,
+      "verdict": "All 10 round-1 BLOCKING issues are genuinely resolved in the current files — verified against real code/signatures, not just doc prose. The SEC fixes (write-probe gating, correlation matching real finding.type/detector_id, provenance from _merge_findings) are wired through actual callers and the cited symbols all exist. The 88 tests in the four modules pass, and the rewritten tests now verify intent (non-tautological deep-coverage derivation, candidate-dict validation with no global mutation, a spy-prober that proves the default scan issues no POST). One fresh, non-blocking finding: validate_bundles only enforces rate_per_sec>0 for probing bundles, so a navigation bundle with rate_per_sec<=0 would pass validation (no shipped bundle hits this). Ships as-is; the rate gap is a tidy-up, not a blocker.",
+      "r1_items_resolved": [
+        {
+          "item": 1,
+          "resolved": true,
+          "note": "VERIFIED. baas_validator._probe_write_access is now gated: _validate_supabase only calls it when allow_write_probe=True (line 363), default False through validate_baas_config (line 285). The sole production caller browser_scanner._run_baas_validation (line 468) does NOT pass allow_write_probe, so default off. test_write_probe_skipped_by_default_sends_no_post uses a spy prober on a config whose 'users' table IS open (GET returns 200) — so a POST would fire if ungated — and asserts 'POST' not in methods and writable_tables == []. supabase-rls-deepdive.md explicitly documents the opt-in gating and discloses the tx=rollback caveat; no surviving 'never destructive' claim (only the corrective canonical_class note remains in docs)."
+        },
+        {
+          "item": 2,
+          "resolved": true,
+          "note": "VERIFIED. correlation-engine.md lines 42-52 state legs match on real finding.type and detector_id, explicitly 'NOT a canonical_class taxonomy (which does not exist)'. The concrete strings cited are all real in code: baas_open_table (baas_validator.py:405), supabase_publishable_key (detectors.py:799 finding_type), idor (access_control.py:73 type), firebase_client_config (detectors.py:810)."
+        },
+        {
+          "item": 3,
+          "resolved": true,
+          "note": "VERIFIED against code. site_scanner._merge_findings (lines 436-462) returns provenance as {finding.id: sorted(urls)} and exposes it via report extra['provenance'] (site_scanner.py:691). Docs (correlation-engine.md 32-38, architecture-map.md 73-75) correctly attribute provenance to _merge_findings (NOT build_report) and specify the single-URL fallback to evidence.request_url/source. Finding.id (models.py:122), Evidence.request_url (models.py:83) and Evidence.source (models.py:80) all exist, so the fallback is implementable and single-URL RLS chains can fire."
+        },
+        {
+          "item": 4,
+          "resolved": true,
+          "note": "VERIFIED. build_report (reporting.py:14-21) takes attack_vectors (a dict consumed by _attack_vector_findings which reads attack_vectors.get('subdomains', []) at reporting.py:365) — confirming the fixed {subdomains:[...]} shape. Docs (correlation-engine.md 27-28, architecture-map.md 66-71) specify a NEW attack_chains param plus a dedicated section and explicitly warn not to reuse attack_vectors. Code change itself is deferred to M-phase, but the design correction is accurate."
+        },
+        {
+          "item": 5,
+          "resolved": true,
+          "note": "VERIFIED. blast_radius.compute_blast_radius signature is exactly compute_blast_radius(finding, raw_value=None, *, probes: Optional[Dict[str, Prober]]=None) at blast_radius.py:186-191. architecture-map.md:32 cites this signature verbatim including the {detector_id: Prober} dict + raw token note."
+        },
+        {
+          "item": 6,
+          "resolved": true,
+          "note": "VERIFIED. All six previously-phantom packs are registered in DETECTOR_PACKS (detectors.py:105-110): injection, authn, client, api, recon, headers. test_every_bundle_resolves_through_normalize_packs runs normalize_packs(runtime, surface='web') for every bundle and asserts each pack resolves — matching the actual scan path which uses surface='web' (cli.py:525). Confirmed at runtime: all bundles resolve, no ValueError."
+        },
+        {
+          "item": 7,
+          "resolved": true,
+          "note": "VERIFIED. bundles.py defines explicit PASSIVE_PHASES/NAVIGATION_PHASES(crawl,subdomain)/PROBING_PHASES taxonomy (lines 33-37) with sends_requests (navigation OR probing) vs is_probing (probing only) properties (lines 63-71). PhaseSplitTests covers passive=no requests, navigation=requests-but-not-probing, and probing-policy consistency across every probing bundle."
+        },
+        {
+          "item": 8,
+          "resolved": true,
+          "note": "MOSTLY VERIFIED with one gap. validate_bundles(bundles=None) takes an optional candidate mapping (no global mutation) and enforces: unknown packs, unknown phases, sends_requests=>budget>0, is_probing=>policy.probing, allow_write_probe=>probing, scope in ALLOWED_SCOPES. GAP: rate_per_sec>0 is only checked when policy.probing (line 174), so a navigation bundle with rate<=0 passes — the 'rate>0' claim is not fully enforced. No shipped bundle triggers it (all use rate>=3.0)."
+        },
+        {
+          "item": 9,
+          "resolved": true,
+          "note": "VERIFIED non-tautological. test_deep_covers_every_real_runtime_pack derives expected = set(DETECTOR_PACKS) - REPO_ONLY_PACKS independently from the source-of-truth dict, NOT from web_packs() (which deep also uses) — so a divergence in the helper would fail. The validate tests pass candidate dicts {**BUNDLES, bad.id: bad} and test_global_registry_unmutated_by_validation asserts 'bad'/'bad2' not in BUNDLES, proving no global mutation."
+        },
+        {
+          "item": 10,
+          "resolved": true,
+          "note": "VERIFIED. main() handles 'bundles' subcommand -> _print_bundles (cli.py:39-40) and applies --bundle via _apply_bundle_selection before running (cli.py:42-44). Both scan (line 324) and local (line 339) register --bundle. _apply_bundle_selection sets args.packs to runtime packs (excluding REPO_ONLY), prints phase/unpopulated notes to stderr, and returns 1 on unknown bundle. test_cli_bundles covers known/override/deep-exclusions/unknown/print paths."
+        }
+      ],
+      "strengths": [
+        "The write-probe SEC fix is conservative and correct end-to-end: gated by default, the only production caller never enables it, and the orchestration that could enable it is explicitly deferred (M3+) so the mutating path is genuinely unreachable in production today.",
+        "Tests now encode WHY behavior matters: the spy-prober test sets up a table that IS open so a POST would fire if ungated, making the no-POST assertion meaningful rather than vacuous; the deep-coverage test derives expected from the source-of-truth dict so it catches helper drift.",
+        "validate_bundles takes a candidate mapping instead of mutating the module global, and a dedicated test proves the global registry stays clean — a clean fix to the prior global-mutation anti-pattern.",
+        "Design docs were corrected to cite real symbols and signatures (compute_blast_radius, build_report/attack_vectors shape, _merge_findings provenance, real finding.type/detector_id strings) — every cited symbol was confirmed to exist in code, so the docs are now executable specs, not fiction."
+      ],
+      "must_fix": [
+        {
+          "artifact": "/Users/amal/experiments/keyleak-vuln-program/keyleak/bundles.py",
+          "issue": "validate_bundles only enforces rate_per_sec>0 when policy.probing is true (line 174: `if policy.probing and policy.rate_per_sec <= 0`). A navigation bundle (sends_requests true, probing false) with rate_per_sec<=0 passes validation, contradicting the round-1 claim that the validator enforces rate>0. No shipped bundle triggers this (all use rate>=3.0), so it is not a live bug — but the invariant is incomplete and could let a future zero-rate navigation bundle through.",
+          "suggested_fix": "Make the rate check apply to any request-sending bundle, e.g. add `if bundle.sends_requests and policy.rate_per_sec <= 0: raise ValueError(...)` (or change line 174's guard from `policy.probing` to `bundle.sends_requests`). Add a regression test that a navigation bundle with rate_per_sec=0 is rejected."
+        }
+      ]
+    },
+    {
+      "lens": "product-usefulness",
+      "overall_score": 86,
+      "verdict": "All 10 round-1 blocking issues are genuinely resolved in the current files (verified against code, not just claims) and all 88 tests pass. The two SEC-critical items are real fixes: the mutating write probe is now gated behind allow_write_probe (default off), the browser scanner calls validate_baas_config without that flag so the default scan is provably read-only, and a spy-prober test asserts no POST is issued by default. The design docs are now grounded in real code: build_report's attack_vectors arg is correctly identified as the wrong channel (only reads {subdomains:[...]}), correlation matches on real finding.type/detector_id strings, provenance is correctly attributed to site_scanner._merge_findings with a single-URL evidence.request_url/source fallback, and compute_blast_radius(finding, raw_value=None, *, probes) is cited exactly. All six new packs (injection/authn/client/api/recon/headers) are registered in DETECTOR_PACKS, and every bundle resolves through normalize_packs on the web surface end-to-end.\\n\\nOn the product questions: --bundle is useful as a pack SELECTOR today (secrets/quick/baas/authz/recon yield real detectors) and the skip-loudly behavior is genuinely honest — both _print_bundles and _apply_bundle_selection print to stderr exactly which packs are unpopulated AND that active phases are not yet orchestrated. But the honesty cuts both ways: the 'injection' bundle resolves to ZERO detectors and runs none of its advertised fuzz phases, so 'keyleak scan --bundle injection' does nothing; quick/recon advertise headers/client packs that are empty. And the deeper structural gap (loudly disclosed, not hidden) is that NO active phase is wired into any orchestrator — --bundle only ever sets args.packs, so every 'probing' bundle silently degrades to passive pack selection until M3+. Bundles are an honest, well-tested M1 scaffold, not yet a working active scanner. Just over the 85 bar because the blocking items are real and the dishonesty (false read-only claim, phantom packs) is gone; held back from higher by titles/descriptions that over-promise vs. what M1 delivers and one stale doc claim.",
+      "r1_items_resolved": [
+        {
+          "item": 1,
+          "resolved": true,
+          "note": "Verified in baas_validator.py: validate_baas_config has allow_write_probe=False default (line 285); _validate_supabase only calls _probe_write_access when allow_write_probe is True (lines 363-364). browser_scanner._run_baas_validation (line 468) calls validate_baas_config WITHOUT allow_write_probe, so the default runtime scan never POSTs. test_baas_validator.py:454 test_write_probe_skipped_by_default_sends_no_post asserts 'POST' not in methods. The 'never destructive'/'read-only invariant' language now appears ONLY in the archived review log/r1-result.json, not in bundles.py, scan-bundles.md, integration-plan.md, or supabase-rls-deepdive.md (which now says 'read-only by default after review R1')."
+        },
+        {
+          "item": 2,
+          "resolved": true,
+          "note": "correlation-engine.md line 43 explicitly states matching is on finding.type/finding.detector_id, NOT canonical_class 'which does not exist in the codebase'. The seed table (lines 98-108) maps shorthand to real concrete strings: baas_open_table, baas_writable_table, baas_open_storage, baas_service_role_exposed, supabase_publishable_key, idor, source_map_reference, baas_cors_wildcard. Grep confirms canonical_class appears only in a catalog/p3-result.json fixture, never in detector or Finding models."
+        },
+        {
+          "item": 3,
+          "resolved": true,
+          "note": "correlation-engine.md lines 32-38 and architecture-map.md lines 73-75 both attribute provenance to site_scanner._merge_findings (not build_report) and specify a single-URL fallback: provenance.get(finding.id) else host from evidence.request_url/source. Verified in site_scanner.py:457-458 that _merge_findings builds provenance = {kept[key].id: sorted(urls)}; models.py confirms Finding has .id, evidence.request_url, and .source."
+        },
+        {
+          "item": 4,
+          "resolved": true,
+          "note": "correlation-engine.md lines 26-30 and architecture-map.md lines 70-72 specify a NEW attack_chains param (not reuse of attack_vectors) plus a dedicated _attack_vector_section serializer, explicitly because _attack_vector_findings only understands {subdomains:[{host,findings}]}. Verified in reporting.py: build_report's param is attack_vectors: Optional[Dict] (line 18) and _attack_vector_findings only reads attack_vectors.get('subdomains', []) (line 365). The doc's claim is accurate."
+        },
+        {
+          "item": 5,
+          "resolved": true,
+          "note": "architecture-map.md line 32 and integration-plan.md line 33 both cite compute_blast_radius(finding, raw_value=None, *, probes: dict[str, Prober]). Verified the actual signature in blast_radius.py:186-191 is exactly that, including the {detector_id: Prober} dict semantics (probes.get(finding.detector_id) at line 200)."
+        },
+        {
+          "item": 6,
+          "resolved": true,
+          "note": "detectors.py DETECTOR_PACKS (lines 95-111) now registers injection, authn, client, api, recon, headers. normalize_packs (lines 1025-1039) accepts them on web surface (none are in the repo-only {correctness, housekeeping} set). test_bundles.py:58 test_every_bundle_resolves_through_normalize_packs asserts it. Ran a live check: all 7 bundles resolve cleanly on the web surface end-to-end."
+        },
+        {
+          "item": 7,
+          "resolved": true,
+          "note": "bundles.py defines explicit PASSIVE_PHASES={passive}, NAVIGATION_PHASES={crawl,subdomain}, PROBING_PHASES={probe,forms,fuzz,authz_diff,baas_probe,mitm} (lines 33-37) with two clean properties: sends_requests (navigation OR probing) and is_probing (probing only) at lines 63-71. test_bundles.py PhaseSplitTests verifies a navigation bundle (quick) sends_requests=True but is_probing=False. Crawl/subdomain are no longer mislabeled as passive."
+        },
+        {
+          "item": 8,
+          "resolved": true,
+          "note": "validate_bundles(bundles=None) (lines 154-179) takes an optional mapping arg (no global mutation) and enforces: unknown packs, unknown phases, sends_requests implies max_requests>0, is_probing implies policy.probing, probing implies rate_per_sec>0, allow_write_probe implies probing, and scope in ALLOWED_SCOPES={same-registrable-domain, same-origin}. Multiple SafetyTests pass candidate registries {**BUNDLES, bad.id: bad} to confirm rejection without mutating the global."
+        },
+        {
+          "item": 9,
+          "resolved": true,
+          "note": "test_bundles.py:41-50 test_deep_covers_every_real_runtime_pack derives expected from set(DETECTOR_PACKS) - set(REPO_ONLY_PACKS) (the source of truth), NOT from web_packs() which deep also uses, so a forgotten real pack fails. test_validate_rejects_* tests pass candidate dicts {**BUNDLES, bad.id: bad}, and test_global_registry_unmutated_by_validation asserts 'bad'/'bad2' never leaked into BUNDLES. Not tautological."
+        },
+        {
+          "item": 10,
+          "resolved": true,
+          "note": "cli.py wires a 'bundles' subcommand (line 316, dispatched at line 39-40 -> _print_bundles) and a --bundle flag on both 'scan' (line 324) and 'local' (line 339), applied via _apply_bundle_selection (line 42-44). Verified end-to-end: --bundle deep resolves to packs that normalize_packs accepts. CAVEAT: docs (scan-bundles.md:73, architecture-map.md:77) claim --bundle is also on site-scan/browser-scan, but it is NOT — only scan and local. The item-10 claim itself (scan/local) is accurate."
+        }
+      ],
+      "strengths": [
+        "SEC fixes are real and test-enforced, not cosmetic: the default runtime path (browser_scanner._run_baas_validation) calls validate_baas_config with no allow_write_probe, so it provably never POSTs; test_write_probe_skipped_by_default_sends_no_post is a genuine guard that fails if a POST is ever issued by default.",
+        "Skip-loudly is honest. _apply_bundle_selection prints to stderr both the unpopulated packs ('skipped; land in later milestones') AND the blunt admission that active phases 'are not yet orchestrated by the CLI (M3+); selecting pack detectors for now'. No silent zero-coverage.",
+        "Design docs are now grounded in the actual code: build_report's attack_vectors shape, _merge_findings provenance, compute_blast_radius signature, and finding.type/detector_id matching were all spot-checked against source and match exactly. The false 'read-only invariant'/'never destructive' language is gone from shipped code and docs.",
+        "bundles.py is clean and self-consistent: frozen dataclasses, import-time validate_bundles() that couples probing phases to probing policy and budget>0, case-insensitive resolve with a helpful error listing available bundles, and a three-class passive/navigation/probing taxonomy that fixes the muddy semantics.",
+        "All 6 new packs are registered so every bundle resolves through normalize_packs on the web surface end-to-end (verified live), closing the phantom-pack integration defect that made the old validator give false confidence."
+      ],
+      "must_fix": [
+        {
+          "artifact": "/Users/amal/experiments/keyleak-vuln-program/keyleak/bundles.py",
+          "issue": "The 'injection' bundle resolves to ZERO detectors today (packs injection+api are both empty) and its only value-add phases (forms/fuzz) are not orchestrated, so 'keyleak scan --bundle injection' runs nothing useful. The bundle title 'Injection (active)' and description 'Input-validation fuzzing: SQLi/NoSQLi/...' materially over-promise versus a no-op. quick/recon similarly advertise empty headers/client packs in their descriptions.",
+          "suggested_fix": "Either hold injection (and the empty-pack portions of quick/recon) out of the shipped BUNDLES registry until M2/M3 land detectors, or make _print_bundles/_apply_bundle_selection flag a bundle whose ENTIRE detector yield is zero as '(no checks yet)' in the title line, not just a trailing note — so a user cannot select a bundle that does literally nothing without it being unmistakable up front."
+        },
+        {
+          "artifact": "/Users/amal/experiments/keyleak-vuln-program/docs/vuln-research/design/supabase-rls-deepdive.md",
+          "issue": "Line 25 still claims _probe_rpcs does 'POST /rest/v1/rpc/{fn} with empty args', but the code was deliberately changed to NOT execute RPCs — _probe_rpcs (baas_validator.py:538-572) emits each RPC as a lead and never calls the prober, and test_baas_validator.py:278 asserts no POST to /rpc/. This stale claim overstates what the tool sends, which directly undercuts the 'is the safety story honest' question this review exists to answer.",
+          "suggested_fix": "Update the deepdive to say _probe_rpcs surfaces client-referenced RPCs as leads WITHOUT calling them (no POST), matching the docstring and test. Removes the last place a doc claims an active POST the code intentionally avoids."
+        },
+        {
+          "artifact": "/Users/amal/experiments/keyleak-vuln-program/docs/vuln-research/design/scan-bundles.md",
+          "issue": "Doc/code drift in the --bundle wiring and bundle composition. scan-bundles.md:73 and architecture-map.md:77 say --bundle is on scan/site-scan/browser-scan, but it is only on scan and local. The bundle table (scan-bundles.md:61) lists authz packs as 'access-control, authn, api' while the code ships ('access-control','authn','api','baas'); injection phases listed as 'crawl, forms, fuzz' vs code's 'passive, crawl, forms, fuzz'.",
+          "suggested_fix": "Reconcile the docs to the shipped code: list --bundle only on scan/local (or wire it onto site-scan/browser-scan if that was the intent), and correct the authz pack list and injection phase list in the bundle table so the design doc is not a second source of truth that disagrees with bundles.py."
+        }
+      ]
+    }
+  ]
+}

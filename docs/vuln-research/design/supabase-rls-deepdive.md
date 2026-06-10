@@ -59,10 +59,13 @@ Each maps to a `baas` detector or an active probe result. Severity in (), probe 
    `GET /storage/v1/object/list/{bucket}` → 200 with a non-empty object list.
 6. **Public storage upload** — anon upload allowed. (critical) Signal:
    bucket `public=true` + permissive policy; infer from bucket metadata, don't upload.
-7. **Callable RPC with side effects** — `POST /rest/v1/rpc/{fn}` reachable by anon;
-   some RPCs wrap privileged SQL. (high — surfaced as a **lead without execution**;
-   KeyLeak does not POST to `/rpc/{fn}` because that would run the function)
-   Signal: 200/204 (vs 404/401). Never pass crafted args.
+7. **Callable RPC with side effects** — some RPCs wrap privileged SQL.
+   **Current behavior:** KeyLeak surfaces client-referenced RPCs as a **lead
+   without execution**. It does not POST to `/rest/v1/rpc/{fn}` or `/rpc/{fn}`,
+   does not pass crafted args, and does not attempt to run functions by default.
+   **Future opt-in confirmation:** an explicit RPC execution mode may POST to
+   `/rest/v1/rpc/{fn}` or `/rpc/{fn}` and compare 200/204 versus 404/401 response
+   signals, but that must remain a separate, flagged workflow.
 8. **Exposed auth settings / signup enabled** — `GET /auth/v1/settings` reveals
    external providers, `mailer_autoconfirm`, `disable_signup=false`. (medium)
    Open signup + open tables = account-driven data harvesting.

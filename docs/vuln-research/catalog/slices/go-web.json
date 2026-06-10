@@ -89,7 +89,7 @@
     "prevalence": "occasional",
     "slice": "go-web",
     "uid": "go-web__go-http-host-header-injection",
-    "class_hint": "cmd-injection"
+    "class_hint": "host-header-injection"
   },
   {
     "id": "go-open-redirect",
@@ -203,7 +203,7 @@
     "prevalence": "occasional",
     "slice": "go-web",
     "uid": "go-web__go-gin-path-traversal",
-    "class_hint": "cmd-injection"
+    "class_hint": "path-traversal"
   },
   {
     "id": "go-missing-csrf-protection",
@@ -258,7 +258,7 @@
     "prevalence": "ubiquitous",
     "slice": "go-web",
     "uid": "go-web__go-rate-limit-absence",
-    "class_hint": "cmd-injection"
+    "class_hint": "rate-limit"
   },
   {
     "id": "go-echo-bind-mass-assignment",

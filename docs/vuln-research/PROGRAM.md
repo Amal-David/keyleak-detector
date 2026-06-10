@@ -1,7 +1,7 @@
 # KeyLeak Runtime-Vulnerability Expansion Program
 
 Autonomous program kicked off 2026-06-02. Branch: `feat/runtime-vuln-program`
-(worktree `/Users/amal/experiments/keyleak-vuln-program`, off `origin/main`).
+(worktree `<project-root>`, off `origin/main`).
 
 ## My interpretation of the goal (correct me if wrong)
 
@@ -101,7 +101,7 @@ Proof, not assertion: code must show passing tests; designs must cite real
 
 ## Status snapshot (for resume)
 
-**Branch:** `feat/runtime-vuln-program` (worktree `/Users/amal/experiments/keyleak-vuln-program`).
+**Branch:** `feat/runtime-vuln-program` (worktree `<project-root>`).
 **Tests:** all green (`PYTHONPATH=. python3 -m unittest tests.test_bundles tests.test_cli_bundles tests.test_baas_validator tests.test_core_reporting`).
 
 | Phase / Milestone | State |

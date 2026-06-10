@@ -52,7 +52,7 @@
     "prevalence": "occasional",
     "slice": "node-express",
     "uid": "node-express__express-directory-listing",
-    "class_hint": "cmd-injection"
+    "class_hint": "directory-listing"
   },
   {
     "id": "express-body-parser-json-prototype-pollution",
@@ -71,7 +71,7 @@
     "prevalence": "common",
     "slice": "node-express",
     "uid": "node-express__express-body-parser-json-prototype-pollution",
-    "class_hint": "cmd-injection"
+    "class_hint": "prototype-pollution"
   },
   {
     "id": "express-mass-assignment-req-body",
@@ -261,7 +261,7 @@
     "prevalence": "common",
     "slice": "node-express",
     "uid": "node-express__express-rate-limit-bypass",
-    "class_hint": "cmd-injection"
+    "class_hint": "rate-limit-enum"
   },
   {
     "id": "express-ssrf-axios-got",

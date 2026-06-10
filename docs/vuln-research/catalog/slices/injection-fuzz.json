@@ -181,7 +181,7 @@
     "prevalence": "common",
     "slice": "injection-fuzz",
     "uid": "injection-fuzz__path-traversal",
-    "class_hint": "cmd-injection"
+    "class_hint": "path-traversal"
   },
   {
     "id": "mass-assignment",
@@ -220,7 +220,7 @@
     "prevalence": "common",
     "slice": "injection-fuzz",
     "uid": "injection-fuzz__host-header-injection",
-    "class_hint": "cmd-injection"
+    "class_hint": "host-header-injection"
   },
   {
     "id": "ssrf-cloud-metadata",

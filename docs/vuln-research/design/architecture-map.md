@@ -76,7 +76,9 @@ Condensed from a full-codebase map. File:line refs are approximate.
    single-URL scans) provides host co-location, with a fallback to the host parsed
    from `evidence.request_url`/`source` so single-URL RLS chains still fire.
 4. **Bundles** → `keyleak/bundles.py` (Bundle = packs + active_phases + probe_policy);
-   `--bundle` CLI flag resolves to packs+phases; `deep` runs everything + correlate.
+   current `--bundle` CLI support selects runnable packs and prints the declared
+   phases; phase orchestration and `deep` correlation remain planned extension
+   work rather than shipped behavior.
 
 ## Reconciliation note
 

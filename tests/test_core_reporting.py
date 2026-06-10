@@ -7,7 +7,7 @@ from pathlib import Path
 from keyleak.access_control import compare_access_control_urls
 from keyleak.cli import _scan_request_payload
 from keyleak.extension_bundle import extension_pattern_payload, extension_patterns_js
-from keyleak.local_scanner import scan_file, scan_path
+from keyleak.local_scanner import _is_generated_file, scan_file, scan_path, scan_text
 from keyleak.detectors import DETECTORS, DETECTOR_PACKS, HEATMAP_ROWS, detectors_for_packs, normalize_packs
 from keyleak.local_scanner import _is_placeholder
 from keyleak.models import Finding, Evidence, ScanReport, finding_from_legacy
@@ -330,6 +330,31 @@ class DetectorTests(unittest.TestCase):
 
         self.assertIn("openai_api_key", docker_detectors)
 
+    def test_secret_in_logs_detector_matches_real_sensitive_log_terms(self):
+        detector = _detector("secret_in_logs_lead")
+        content = """
+logger.info("auth token: %s", token)
+console.log("api_key", apiKey)
+print("password", password)
+"""
+
+        findings = scan_text(content, "app.py", [detector])
+
+        self.assertEqual([finding.type for finding in findings], ["secret_in_logs"] * 3)
+
+    def test_secret_in_logs_detector_ignores_detector_bookkeeping_names(self):
+        detector = _detector("secret_in_logs_lead")
+        content = """
+logger.info(f"Successfully loaded {loaded_pattern_count} detection patterns")
+SECRET_PATTERNS = CUSTOM_SECRET_PATTERNS
+print(f"GitLeaks: {len(gitleaks_patterns)} patterns")
+secrets_db = SecretsPatternsDB()
+"""
+
+        findings = scan_text(content, "pattern_importer.py", [detector])
+
+        self.assertEqual(findings, [])
+
     def test_mcp_config_detector_does_not_bridge_lines(self):
         detector = _detector("mcp_config_secret")
         unrelated_lines = "server configuration\nTOKEN=abcdefghijklmnopqrstuvwx1234567890"
@@ -363,6 +388,10 @@ class DetectorTests(unittest.TestCase):
         self.assertNotIn("mcp_config_secret", bundle)
         self.assertNotIn("sql_injection_lead", bundle)
         self.assertIn("openai_api_key", bundle)
+
+    def test_generated_extension_detector_metadata_is_skipped_by_local_scan(self):
+        self.assertTrue(_is_generated_file(Path("extension/lib/detector-info.js")))
+        self.assertTrue(_is_generated_file(Path("extension/lib/patterns.js")))
 
     def test_extension_bundle_excludes_repo_only_packs_by_default(self):
         payload = extension_pattern_payload()

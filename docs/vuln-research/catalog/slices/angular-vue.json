@@ -32,7 +32,7 @@
     "prevalence": "common",
     "slice": "angular-vue",
     "uid": "angular-vue__angular-bypass-route-guard",
-    "class_hint": "cmd-injection"
+    "class_hint": "client-side-authz"
   },
   {
     "id": "vue-csti-v-html-xss",
@@ -243,7 +243,7 @@
     "prevalence": "occasional",
     "slice": "angular-vue",
     "uid": "angular-vue__angular-httpinterceptor-token-log",
-    "class_hint": "cmd-injection"
+    "class_hint": "secrets-exposure"
   },
   {
     "id": "spa-prototype-pollution",

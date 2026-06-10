@@ -983,7 +983,7 @@ export const DETECTOR_INFO = {
     "validation_status": "validated"
   },
   "shai_hulud_c2_domain": {
-    "attack_scenario": "The Mini Shai-Hulud worm sends stolen credentials to the Session/Oxen messenger network (`filev2.getsession.org`, `seed{1,2,3}.getsession.org`) and uses `api.masscan.cloud` and `git-tanstack.com` for C2. If your code, logs, or build artifacts mention any of these, an installed dependency is already exfiltrating data.",
+    "attack_scenario": "The Mini Shai-Hulud worm sends stolen credentials to known Session/Oxen messenger, mass-scan, and fake TanStack infrastructure endpoints. If code, logs, or build artifacts mention the IOC domains matched by this detector, treat the installed dependency or host as already exfiltrating data.",
     "categories": [
       "env",
       "ci",

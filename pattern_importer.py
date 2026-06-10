@@ -81,7 +81,7 @@ class SecretsPatternsDB:
             Dictionary of {pattern_name: regex_string}
         """
         try:
-            logger.info("Fetching patterns from secrets-patterns-db...")
+            logger.info("Fetching external pattern database...")
             response = requests.get(self.DB_URL, timeout=10)
             response.raise_for_status()
             
@@ -105,11 +105,11 @@ class SecretsPatternsDB:
                     if regex_pattern and pattern_id:
                         patterns[pattern_id] = regex_pattern
             
-            logger.info(f"Loaded {len(patterns)} patterns from secrets-patterns-db (min confidence: {min_confidence})")
+            logger.info(f"Loaded {len(patterns)} patterns from external database (min confidence: {min_confidence})")
             return patterns
             
         except (requests.RequestException, ValueError, KeyError) as e:
-            logger.exception(f"Failed to fetch secrets-patterns-db: {e}")
+            logger.exception(f"Failed to fetch external pattern database: {e}")
             return {}
 
 
@@ -146,12 +146,12 @@ class PatternManager:
         
         patterns = {}
         
-        # 1. Load from secrets-patterns-db (optional, but comprehensive)
+        # 1. Load from external pattern database (optional, but comprehensive)
         if include_secrets_db:
             db_importer = SecretsPatternsDB()
             db_patterns = db_importer.fetch_patterns(min_confidence='high')
             patterns.update(db_patterns)
-            logger.info(f"Added {len(db_patterns)} patterns from secrets-patterns-db")
+            logger.info(f"Added {len(db_patterns)} patterns from external database")
         
         # 2. Load from GitLeaks (industry standard)
         gitleaks_importer = GitleaksPatternImporter()
@@ -313,10 +313,10 @@ if __name__ == '__main__':
     print(f"✓ GitLeaks: {len(gitleaks_patterns)} patterns")
     print(f"  Sample: {list(gitleaks_patterns.keys())[:5]}\n")
     
-    # Test secrets-patterns-db
+    # Test external pattern database
     secrets_db = SecretsPatternsDB()
     db_patterns = secrets_db.fetch_patterns(min_confidence='high')
-    print(f"✓ Secrets-patterns-db: {len(db_patterns)} patterns")
+    print(f"✓ External pattern database: {len(db_patterns)} patterns")
     print(f"  Sample: {list(db_patterns.keys())[:5]}\n")
     
     # Test merged

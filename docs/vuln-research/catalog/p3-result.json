@@ -2519,7 +2519,7 @@
       },
       {
         "rank": 34,
-        "merge_key": "baas-config-exposed-storage",
+        "merge_key": "open-cloud-storage-bucket",
         "canonical_name": "open-cloud-storage-bucket",
         "canonical_class": "exposed-storage",
         "frameworks": [

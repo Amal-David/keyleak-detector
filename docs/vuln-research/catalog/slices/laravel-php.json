@@ -32,7 +32,7 @@
     "prevalence": "common",
     "slice": "laravel-php",
     "uid": "laravel-php__laravel-mass-assignment",
-    "class_hint": "bfla"
+    "class_hint": "mass-assignment"
   },
   {
     "id": "laravel-debug-bar-exposed",
@@ -152,7 +152,7 @@
     "prevalence": "occasional",
     "slice": "laravel-php",
     "uid": "laravel-php__php-deserialization-phar",
-    "class_hint": "cmd-injection"
+    "class_hint": "deserialization"
   },
   {
     "id": "laravel-sanctum-token-response-leak",
@@ -204,7 +204,7 @@
     "prevalence": "common",
     "slice": "laravel-php",
     "uid": "laravel-php__laravel-forced-browsing-backup-files",
-    "class_hint": "cmd-injection"
+    "class_hint": "secrets-exposure"
   },
   {
     "id": "laravel-idor-eloquent-id",
@@ -239,7 +239,7 @@
     "prevalence": "occasional",
     "slice": "laravel-php",
     "uid": "laravel-php__php-file-upload-unrestricted",
-    "class_hint": "cmd-injection"
+    "class_hint": "file-upload"
   },
   {
     "id": "laravel-session-fixation-cookie",

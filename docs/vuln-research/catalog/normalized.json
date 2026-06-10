@@ -42,7 +42,7 @@
     ],
     "slice": "java-spring",
     "uid": "java-spring__spring-actuator-env-secrets",
-    "class_hint": "cmd-injection"
+    "class_hint": "debug-endpoint"
   },
   {
     "id": "spring-security-method-bypass-idor",
@@ -199,7 +199,7 @@
     ],
     "slice": "java-spring",
     "uid": "java-spring__spring-data-jpql-injection",
-    "class_hint": "cmd-injection"
+    "class_hint": "sqli"
   },
   {
     "id": "spring-cors-wildcard",
@@ -333,7 +333,7 @@
     ],
     "slice": "java-spring",
     "uid": "java-spring__spring-data-rest-exposure",
-    "class_hint": "cmd-injection"
+    "class_hint": "spring-data-rest-exposure"
   },
   {
     "id": "express-x-powered-by-disclosure",
@@ -400,7 +400,7 @@
     ],
     "slice": "node-express",
     "uid": "node-express__express-directory-listing",
-    "class_hint": "cmd-injection"
+    "class_hint": "directory-listing"
   },
   {
     "id": "express-body-parser-json-prototype-pollution",
@@ -424,7 +424,7 @@
     ],
     "slice": "node-express",
     "uid": "node-express__express-body-parser-json-prototype-pollution",
-    "class_hint": "cmd-injection"
+    "class_hint": "prototype-pollution"
   },
   {
     "id": "express-mass-assignment-req-body",
@@ -661,7 +661,7 @@
     ],
     "slice": "node-express",
     "uid": "node-express__express-rate-limit-bypass",
-    "class_hint": "cmd-injection"
+    "class_hint": "rate-limit-enum"
   },
   {
     "id": "express-ssrf-axios-got",
@@ -813,7 +813,7 @@
     ],
     "slice": "nextjs",
     "uid": "nextjs__nextjs-open-redirect-redirect-api",
-    "class_hint": "cmd-injection"
+    "class_hint": "open-redirect"
   },
   {
     "id": "nextjs-ssrf-via-server-side-fetch",
@@ -918,7 +918,7 @@
     ],
     "slice": "nextjs",
     "uid": "nextjs__nextjs-debug-error-overlay-in-prod",
-    "class_hint": "cmd-injection"
+    "class_hint": "debug-endpoint"
   },
   {
     "id": "nextjs-server-action-csrf",
@@ -962,7 +962,7 @@
     ],
     "slice": "nextjs",
     "uid": "nextjs__nextjs-prototype-pollution-query-parser",
-    "class_hint": "cmd-injection"
+    "class_hint": "prototype-pollution"
   },
   {
     "id": "nextjs-i18n-route-auth-bypass",
@@ -1051,7 +1051,7 @@
     ],
     "slice": "react-spa",
     "uid": "react-spa__react-client-side-authz-ui-only",
-    "class_hint": "cmd-injection"
+    "class_hint": "bfla"
   },
   {
     "id": "react-redux-state-exposure",
@@ -1237,7 +1237,7 @@
     ],
     "slice": "react-spa",
     "uid": "react-spa__react-source-map-exposed",
-    "class_hint": "cmd-injection"
+    "class_hint": "exposed-source-maps"
   },
   {
     "id": "react-graphql-introspection-enabled",
@@ -1307,7 +1307,7 @@
     ],
     "slice": "react-spa",
     "uid": "react-spa__react-postmessage-origin-wildcard",
-    "class_hint": "cmd-injection"
+    "class_hint": "xss"
   },
   {
     "id": "react-feature-flags-client-bypass",
@@ -1354,7 +1354,7 @@
     ],
     "slice": "react-spa",
     "uid": "react-spa__react-third-party-script-supply-chain",
-    "class_hint": "cmd-injection"
+    "class_hint": "supply-chain"
   },
   {
     "id": "angular-csti-double-curly",
@@ -1398,7 +1398,7 @@
     ],
     "slice": "angular-vue",
     "uid": "angular-vue__angular-bypass-route-guard",
-    "class_hint": "cmd-injection"
+    "class_hint": "client-side-authz"
   },
   {
     "id": "vue-csti-v-html-xss",
@@ -1665,7 +1665,7 @@
     ],
     "slice": "angular-vue",
     "uid": "angular-vue__angular-httpinterceptor-token-log",
-    "class_hint": "cmd-injection"
+    "class_hint": "secrets-exposure"
   },
   {
     "id": "spa-prototype-pollution",
@@ -1734,7 +1734,7 @@
     ],
     "slice": "flask",
     "uid": "flask__flask-debug-mode-exposed",
-    "class_hint": "cmd-injection"
+    "class_hint": "debug-endpoint"
   },
   {
     "id": "flask-session-cookie-unsigned",
@@ -2046,7 +2046,7 @@
     ],
     "slice": "django-drf",
     "uid": "django-drf__django-admin-exposed",
-    "class_hint": "cmd-injection"
+    "class_hint": "debug-endpoint"
   },
   {
     "id": "drf-browsable-api-exposed",
@@ -2305,7 +2305,7 @@
     ],
     "slice": "django-drf",
     "uid": "django-drf__drf-host-header-injection",
-    "class_hint": "cmd-injection"
+    "class_hint": "host-header-injection"
   },
   {
     "id": "drf-verbose-400-orm-field-leak",
@@ -2549,7 +2549,7 @@
     ],
     "slice": "fastapi",
     "uid": "fastapi__fastapi-pydantic-validation-bypass-coercion",
-    "class_hint": "cmd-injection"
+    "class_hint": "input-validation-bypass"
   },
   {
     "id": "fastapi-ssrf-httpx-requests",
@@ -2618,7 +2618,7 @@
     ],
     "slice": "fastapi",
     "uid": "fastapi__fastapi-rate-limit-absent",
-    "class_hint": "cmd-injection"
+    "class_hint": "rate-limit"
   },
   {
     "id": "fastapi-token-in-query-string",
@@ -2971,7 +2971,7 @@
     ],
     "slice": "rails",
     "uid": "rails__rails-verbose-error-pages-in-production",
-    "class_hint": "cmd-injection"
+    "class_hint": "debug-endpoint"
   },
   {
     "id": "rails-exposed-rails-routes-endpoint",
@@ -3058,7 +3058,7 @@
     ],
     "slice": "laravel-php",
     "uid": "laravel-php__laravel-mass-assignment",
-    "class_hint": "bfla"
+    "class_hint": "mass-assignment"
   },
   {
     "id": "laravel-debug-bar-exposed",
@@ -3208,7 +3208,7 @@
     ],
     "slice": "laravel-php",
     "uid": "laravel-php__php-deserialization-phar",
-    "class_hint": "cmd-injection"
+    "class_hint": "deserialization"
   },
   {
     "id": "laravel-sanctum-token-response-leak",
@@ -3273,7 +3273,7 @@
     ],
     "slice": "laravel-php",
     "uid": "laravel-php__laravel-forced-browsing-backup-files",
-    "class_hint": "cmd-injection"
+    "class_hint": "secrets-exposure"
   },
   {
     "id": "laravel-idor-eloquent-id",
@@ -3318,7 +3318,7 @@
     ],
     "slice": "laravel-php",
     "uid": "laravel-php__php-file-upload-unrestricted",
-    "class_hint": "cmd-injection"
+    "class_hint": "file-upload"
   },
   {
     "id": "laravel-session-fixation-cookie",
@@ -3383,7 +3383,7 @@
     ],
     "slice": "aspnet",
     "uid": "aspnet__aspnet-viewstate-mac-disabled",
-    "class_hint": "bfla"
+    "class_hint": "insecure-deserialization"
   },
   {
     "id": "aspnet-debug-pages-yellow-screen",
@@ -3428,7 +3428,7 @@
     ],
     "slice": "aspnet",
     "uid": "aspnet__aspnet-forms-auth-cookie-insecure",
-    "class_hint": "xss"
+    "class_hint": "insecure-cookie"
   },
   {
     "id": "aspnet-open-redirect-returnurl",
@@ -3566,7 +3566,7 @@
     ],
     "slice": "aspnet",
     "uid": "aspnet__aspnet-session-fixation-sessionid",
-    "class_hint": "xss"
+    "class_hint": "session-fixation"
   },
   {
     "id": "aspnet-cors-wildcard-credentialed",
@@ -3788,7 +3788,7 @@
     ],
     "slice": "go-web",
     "uid": "go-web__go-http-host-header-injection",
-    "class_hint": "cmd-injection"
+    "class_hint": "host-header-injection"
   },
   {
     "id": "go-open-redirect",
@@ -3926,7 +3926,7 @@
     ],
     "slice": "go-web",
     "uid": "go-web__go-gin-path-traversal",
-    "class_hint": "cmd-injection"
+    "class_hint": "path-traversal"
   },
   {
     "id": "go-missing-csrf-protection",
@@ -3993,7 +3993,7 @@
     ],
     "slice": "go-web",
     "uid": "go-web__go-rate-limit-absence",
-    "class_hint": "cmd-injection"
+    "class_hint": "rate-limit"
   },
   {
     "id": "go-echo-bind-mass-assignment",
@@ -4110,9 +4110,9 @@
       "Supabase"
     ],
     "description": "Supabase RPC functions (PostgreSQL functions exposed via `/rest/v1/rpc/<fn>`) execute with the permissions of the defining role. If EXECUTE is granted to `anon` and the function body does not verify `auth.uid()`, unauthenticated callers can trigger mutations, admin operations, or cross-user data access that RLS would otherwise block.",
-    "runtime_discovery": "Enumerate RPC function names from JS bundle network calls or the PostgREST OpenAPI spec at /rest/v1/. POST /rest/v1/rpc/<function_name> with empty body `{}` and the anon key. A non-403 response (200, 400 with schema error, 500 with internal error) indicates the function is reachable. Cross-reference with the function's JS invocation context to assess impact.",
-    "detection_signal": "POST /rest/v1/rpc/<fn> with anon credentials returns HTTP 200, 400, or 500 instead of HTTP 403. Function names containing 'admin', 'delete', 'update', 'transfer', or 'bulk' are highest priority.",
-    "active_probe": true,
+    "runtime_discovery": "Enumerate RPC function names from JS bundle network calls or the PostgREST OpenAPI spec at /rest/v1/. Surface each function as a lead without POSTing to /rest/v1/rpc/<function_name>, because POSTing would execute the function. Cross-reference with the function's JS invocation context to assess impact.",
+    "detection_signal": "Client bundle or OpenAPI schema exposes an RPC function name reachable from browser code. Function names containing 'admin', 'delete', 'update', 'transfer', or 'bulk' are highest priority. No confirmation request is sent by default; treat as a lead until explicit authorized testing confirms EXECUTE exposure.",
+    "active_probe": false,
     "severity": "high",
     "prevalence": "common",
     "references": [
@@ -4298,7 +4298,7 @@
     ],
     "slice": "baas-graphql",
     "uid": "baas-graphql__graphql-query-batching-dos",
-    "class_hint": "cmd-injection"
+    "class_hint": "dos"
   },
   {
     "id": "hasura-admin-secret-exposed",
@@ -4340,7 +4340,7 @@
     ],
     "slice": "baas-graphql",
     "uid": "baas-graphql__appwrite-collection-guest-permission",
-    "class_hint": "cmd-injection"
+    "class_hint": "broken-access-control"
   },
   {
     "id": "idor-bola-numeric-id",
@@ -4470,7 +4470,7 @@
     ],
     "slice": "authn-authz",
     "uid": "authn-authz__jwt-secret-weak",
-    "class_hint": "cmd-injection"
+    "class_hint": "jwt"
   },
   {
     "id": "oauth-open-redirect-code-leak",
@@ -4536,7 +4536,7 @@
     ],
     "slice": "authn-authz",
     "uid": "authn-authz__session-fixation",
-    "class_hint": "cmd-injection"
+    "class_hint": "session-fixation"
   },
   {
     "id": "password-reset-token-predictable",
@@ -4557,7 +4557,7 @@
     ],
     "slice": "authn-authz",
     "uid": "authn-authz__password-reset-token-predictable",
-    "class_hint": "cmd-injection"
+    "class_hint": "weak-token"
   },
   {
     "id": "password-reset-host-header-injection",
@@ -4578,7 +4578,7 @@
     ],
     "slice": "authn-authz",
     "uid": "authn-authz__password-reset-host-header-injection",
-    "class_hint": "cmd-injection"
+    "class_hint": "host-header-injection"
   },
   {
     "id": "otp-in-response",
@@ -4642,7 +4642,7 @@
     ],
     "slice": "authn-authz",
     "uid": "authn-authz__2fa-otp-no-rate-limit",
-    "class_hint": "cmd-injection"
+    "class_hint": "rate-limit"
   },
   {
     "id": "oidc-id-token-email-claim-trust",
@@ -4897,7 +4897,7 @@
     ],
     "slice": "injection-fuzz",
     "uid": "injection-fuzz__path-traversal",
-    "class_hint": "cmd-injection"
+    "class_hint": "path-traversal"
   },
   {
     "id": "mass-assignment",
@@ -4946,7 +4946,7 @@
     ],
     "slice": "injection-fuzz",
     "uid": "injection-fuzz__host-header-injection",
-    "class_hint": "cmd-injection"
+    "class_hint": "host-header-injection"
   },
   {
     "id": "ssrf-cloud-metadata",
@@ -5173,7 +5173,7 @@
     ],
     "slice": "client-browser",
     "uid": "client-browser__exposed-source-maps",
-    "class_hint": "cmd-injection"
+    "class_hint": "exposed-source-maps"
   },
   {
     "id": "clickjacking",
@@ -5184,7 +5184,7 @@
     ],
     "description": "Pages that handle sensitive actions (fund transfers, settings changes, account deletion, OAuth confirmation) can be embedded in cross-origin iframes because they lack X-Frame-Options or a restrictive frame-ancestors CSP directive, enabling UI redress attacks.",
     "runtime_discovery": "For every page returned with HTTP 200, inspect the X-Frame-Options header (must be DENY or SAMEORIGIN) and the Content-Security-Policy header for a frame-ancestors directive. Attempt to embed the target URL in a data-URI iframe from the scanner's headless browser context and observe whether the frame loads.",
-    "detection_signal": "Response header X-Frame-Options is absent or set to ALLOWALL; CSP frame-ancestors is absent or set to *; headless browser successfully renders the target page inside a cross-origin iframe without error. Pages containing form[action] or button[type=submit] that load in the iframe are higher priority.",
+    "detection_signal": "Response header X-Frame-Options is absent or set to an invalid value such as 'ALLOWALL'; CSP frame-ancestors is absent or set to *; headless browser successfully renders the target page inside a cross-origin iframe without error. Pages containing form[action] or button[type=submit] that load in the iframe are higher priority.",
     "active_probe": true,
     "severity": "medium",
     "prevalence": "common",
@@ -5287,7 +5287,7 @@
     ],
     "slice": "client-browser",
     "uid": "client-browser__js-framework-debug-mode",
-    "class_hint": "cmd-injection"
+    "class_hint": "debug-endpoint"
   },
   {
     "id": "cors-wildcard-sensitive-api",
@@ -5331,7 +5331,7 @@
     ],
     "slice": "client-browser",
     "uid": "client-browser__subresource-integrity-missing",
-    "class_hint": "cmd-injection"
+    "class_hint": "missing-sri"
   },
   {
     "id": "api-excessive-data-exposure",
@@ -5415,7 +5415,7 @@
     ],
     "slice": "api-rest",
     "uid": "api-rest__missing-rate-limiting-auth",
-    "class_hint": "cmd-injection"
+    "class_hint": "rate-limit"
   },
   {
     "id": "missing-rate-limiting-business",
@@ -5436,7 +5436,7 @@
     ],
     "slice": "api-rest",
     "uid": "api-rest__missing-rate-limiting-business",
-    "class_hint": "cmd-injection"
+    "class_hint": "rate-limit"
   },
   {
     "id": "user-enumeration-api",
@@ -5478,7 +5478,7 @@
     ],
     "slice": "api-rest",
     "uid": "api-rest__resource-id-enumeration",
-    "class_hint": "cmd-injection"
+    "class_hint": "resource-enumeration"
   },
   {
     "id": "improper-api-inventory-old-versions",
@@ -5499,7 +5499,7 @@
     ],
     "slice": "api-rest",
     "uid": "api-rest__improper-api-inventory-old-versions",
-    "class_hint": "cmd-injection"
+    "class_hint": "api-inventory"
   },
   {
     "id": "verbose-api-errors",
@@ -5547,7 +5547,7 @@
     ],
     "slice": "api-rest",
     "uid": "api-rest__graphql-introspection-enabled",
-    "class_hint": "cmd-injection"
+    "class_hint": "graphql-introspection"
   },
   {
     "id": "graphql-field-suggestion-enumeration",
@@ -5631,7 +5631,7 @@
     ],
     "slice": "api-rest",
     "uid": "api-rest__api-missing-auth-on-write",
-    "class_hint": "cmd-injection"
+    "class_hint": "broken-access-control"
   },
   {
     "id": "graphql-batching-dos",
@@ -5653,7 +5653,7 @@
     ],
     "slice": "api-rest",
     "uid": "api-rest__graphql-batching-dos",
-    "class_hint": "cmd-injection"
+    "class_hint": "dos"
   },
   {
     "id": "exposed-git-repository",
@@ -5674,7 +5674,7 @@
     ],
     "slice": "ethical-recon",
     "uid": "ethical-recon__exposed-git-repository",
-    "class_hint": "cmd-injection"
+    "class_hint": "exposed-vcs"
   },
   {
     "id": "exposed-env-file",
@@ -5724,7 +5724,7 @@
     ],
     "slice": "ethical-recon",
     "uid": "ethical-recon__directory-listing-enabled",
-    "class_hint": "cmd-injection"
+    "class_hint": "directory-listing"
   },
   {
     "id": "stack-trace-disclosure",
@@ -5762,7 +5762,7 @@
     ],
     "description": "The application does not set one or more defensive HTTP response headers (Content-Security-Policy, X-Frame-Options, X-Content-Type-Options, Strict-Transport-Security, Referrer-Policy, Permissions-Policy), leaving it open to clickjacking, MIME-sniffing, protocol downgrade, and data-leakage attacks.",
     "runtime_discovery": "Fetch the app root and any authenticated page with a plain GET. Inspect all response headers for presence and correct values of the standard defensive set.",
-    "detection_signal": "Absence of Content-Security-Policy header, or X-Frame-Options missing/set to ALLOWALL, or X-Content-Type-Options not set to 'nosniff', or Strict-Transport-Security absent on HTTPS responses, or Server header exposing exact version string (e.g., 'Apache/2.4.51').",
+    "detection_signal": "Absence of Content-Security-Policy header, or X-Frame-Options missing or set to an invalid value such as 'ALLOWALL', or X-Content-Type-Options not set to 'nosniff', or Strict-Transport-Security absent on HTTPS responses, or Server header exposing exact version string (e.g., 'Apache/2.4.51').",
     "active_probe": false,
     "severity": "medium",
     "prevalence": "ubiquitous",
@@ -5977,7 +5977,7 @@
     ],
     "slice": "ethical-recon",
     "uid": "ethical-recon__sourcemap-exposure",
-    "class_hint": "cmd-injection"
+    "class_hint": "exposed-source-maps"
   },
   {
     "id": "robots-sitemap-path-disclosure",

@@ -1,6 +1,6 @@
 # Ranked runtime-vulnerability catalog (P3: scored, deduped, adversarially reviewed)
 
-From 269 raw entries → 266 scored → 66 distinct clusters → **Top 51** + 7 adversarial-panel additions + 16 extended. Panel lenses: bug-bounty-realist, runtime-detectability, coverage-gaps. 0 removed.
+From 269 raw entries → 266 scored → 66 distinct clusters → **Top 51** + 6 adversarial-panel additions + 16 extended. Panel lenses: bug-bounty-realist, runtime-detectability, coverage-gaps. 0 removed.
 
 ## Top 51 (ranked)
 
@@ -64,7 +64,6 @@ From 269 raw entries → 266 scored → 66 distinct clusters → **Top 51** + 7 
 |------|------|-----|-----|
 | **exposed-git-directory** | leak | 🔴 critical | Realist add + coverage-gaps confirm the gap is real (verified: no .git/config, backup, or .DS_Store probe exis |
 | **web-cache-deception-poisoning** | appsec | 🟠 high | Named independently by all three lenses (realist 'cache-deception-poisoning', coverage-gaps 'web-cache-decepti |
-| **open-cloud-storage-bucket** | baas | 🟠 high | Runtime lens add; reuses the confirmed-active BaaS prober (baas_validator storage-list). Generic public S3/GCS |
 | **http-request-smuggling** | injection | 🔴 critical | Coverage-gaps: top-tier class with ZERO cluster representation. Genuine high-impact gap, black-box detectable  |
 | **insecure-deserialization** | injection | 🔴 critical | Coverage-gaps: generic insecure deserialization has no cluster (aspnet-viewstate is the only narrow representa |
 | **account-takeover-chain** | authn | 🔴 critical | Realist add: explicit ATO-chain class fusing reset-token + response-leaked-OTP + identity-claim confusion (the |
@@ -74,14 +73,14 @@ From 269 raw entries → 266 scored → 66 distinct clusters → **Top 51** + 7 
 
 - 🟡 **OpenAPI / Swagger Docs Exposed (FastAPI /docs)** (debug-endpoint-exposure)
 - 🟠 **GraphQL Query Batching / Aliasing DoS Amplification** (graphql-batching-amplification)
-- 🔴 **ASP.NET ViewState MAC Disabled (deserialization integrity by** (deserialization-integrity-bypass)
+- 🔴 **ASP.NET ViewState MAC Disabled (deserialization integrity bypass)** (deserialization-integrity-bypass)
 - 🟡 **phpinfo() Page Exposed** (debug-endpoint-exposure)
-- 🟠 **Auth Token Logged to Telemetry / Console (Angular intercepto** (secrets-exposure)
+- 🟠 **Auth Token Logged to Telemetry / Console (Angular interceptor leakage)** (secrets-exposure)
 - 🟠 **Session Fixation (no session ID rotation on login)** (session-fixation)
 - 🟠 **Missing/Disabled CSRF Protection (incl. OAuth state)** (csrf)
 - 🟡 **Missing Security Headers / CSP (HSTS, X-Frame, CSP)** (security-headers)
 - 🟡 **Missing Subresource Integrity on Third-Party Scripts** (missing-sri)
-- ⚪ **Server / Tech / Version Disclosure (Server, X-Powered-By hea** (version-disclosure)
+- ⚪ **Server / Tech / Version Disclosure (Server, X-Powered-By headers)** (version-disclosure)
 - ⚪ **robots.txt / sitemap Path Disclosure** (information-disclosure)
 - 🟡 **Clickjacking (missing X-Frame-Options / frame-ancestors)** (clickjacking)
 - 🟠 **Rails Default Catch-All Route / Action Exposure** (debug-endpoint-exposure)

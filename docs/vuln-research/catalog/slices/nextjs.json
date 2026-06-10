@@ -99,7 +99,7 @@
     "prevalence": "common",
     "slice": "nextjs",
     "uid": "nextjs__nextjs-open-redirect-redirect-api",
-    "class_hint": "cmd-injection"
+    "class_hint": "open-redirect"
   },
   {
     "id": "nextjs-ssrf-via-server-side-fetch",
@@ -184,7 +184,7 @@
     "prevalence": "occasional",
     "slice": "nextjs",
     "uid": "nextjs__nextjs-debug-error-overlay-in-prod",
-    "class_hint": "cmd-injection"
+    "class_hint": "debug-endpoint"
   },
   {
     "id": "nextjs-server-action-csrf",
@@ -220,7 +220,7 @@
     "prevalence": "occasional",
     "slice": "nextjs",
     "uid": "nextjs__nextjs-prototype-pollution-query-parser",
-    "class_hint": "cmd-injection"
+    "class_hint": "prototype-pollution"
   },
   {
     "id": "nextjs-i18n-route-auth-bypass",

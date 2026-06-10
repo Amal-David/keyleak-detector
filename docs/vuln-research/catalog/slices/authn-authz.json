@@ -99,7 +99,7 @@
     "prevalence": "common",
     "slice": "authn-authz",
     "uid": "authn-authz__jwt-secret-weak",
-    "class_hint": "cmd-injection"
+    "class_hint": "jwt"
   },
   {
     "id": "oauth-open-redirect-code-leak",
@@ -150,7 +150,7 @@
     "prevalence": "occasional",
     "slice": "authn-authz",
     "uid": "authn-authz__session-fixation",
-    "class_hint": "cmd-injection"
+    "class_hint": "session-fixation"
   },
   {
     "id": "password-reset-token-predictable",
@@ -167,7 +167,7 @@
     "prevalence": "common",
     "slice": "authn-authz",
     "uid": "authn-authz__password-reset-token-predictable",
-    "class_hint": "cmd-injection"
+    "class_hint": "weak-token"
   },
   {
     "id": "password-reset-host-header-injection",
@@ -184,7 +184,7 @@
     "prevalence": "common",
     "slice": "authn-authz",
     "uid": "authn-authz__password-reset-host-header-injection",
-    "class_hint": "cmd-injection"
+    "class_hint": "host-header-injection"
   },
   {
     "id": "otp-in-response",
@@ -235,7 +235,7 @@
     "prevalence": "common",
     "slice": "authn-authz",
     "uid": "authn-authz__2fa-otp-no-rate-limit",
-    "class_hint": "cmd-injection"
+    "class_hint": "rate-limit"
   },
   {
     "id": "oidc-id-token-email-claim-trust",

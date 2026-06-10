@@ -33,7 +33,7 @@
     "prevalence": "occasional",
     "slice": "flask",
     "uid": "flask__flask-debug-mode-exposed",
-    "class_hint": "cmd-injection"
+    "class_hint": "debug-endpoint"
   },
   {
     "id": "flask-session-cookie-unsigned",

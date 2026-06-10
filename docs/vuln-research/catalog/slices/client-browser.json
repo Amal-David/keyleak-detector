@@ -133,7 +133,7 @@
     "prevalence": "common",
     "slice": "client-browser",
     "uid": "client-browser__exposed-source-maps",
-    "class_hint": "cmd-injection"
+    "class_hint": "exposed-source-maps"
   },
   {
     "id": "clickjacking",
@@ -144,7 +144,7 @@
     ],
     "description": "Pages that handle sensitive actions (fund transfers, settings changes, account deletion, OAuth confirmation) can be embedded in cross-origin iframes because they lack X-Frame-Options or a restrictive frame-ancestors CSP directive, enabling UI redress attacks.",
     "runtime_discovery": "For every page returned with HTTP 200, inspect the X-Frame-Options header (must be DENY or SAMEORIGIN) and the Content-Security-Policy header for a frame-ancestors directive. Attempt to embed the target URL in a data-URI iframe from the scanner's headless browser context and observe whether the frame loads.",
-    "detection_signal": "Response header X-Frame-Options is absent or set to ALLOWALL; CSP frame-ancestors is absent or set to *; headless browser successfully renders the target page inside a cross-origin iframe without error. Pages containing form[action] or button[type=submit] that load in the iframe are higher priority.",
+    "detection_signal": "Response header X-Frame-Options is absent or set to an invalid value such as 'ALLOWALL'; CSP frame-ancestors is absent or set to *; headless browser successfully renders the target page inside a cross-origin iframe without error. Pages containing form[action] or button[type=submit] that load in the iframe are higher priority.",
     "active_probe": true,
     "severity": "medium",
     "prevalence": "common",
@@ -222,7 +222,7 @@
     "prevalence": "occasional",
     "slice": "client-browser",
     "uid": "client-browser__js-framework-debug-mode",
-    "class_hint": "cmd-injection"
+    "class_hint": "debug-endpoint"
   },
   {
     "id": "cors-wildcard-sensitive-api",
@@ -256,6 +256,6 @@
     "prevalence": "ubiquitous",
     "slice": "client-browser",
     "uid": "client-browser__subresource-integrity-missing",
-    "class_hint": "cmd-injection"
+    "class_hint": "missing-sri"
   }
 ]

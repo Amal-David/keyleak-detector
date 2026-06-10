@@ -663,6 +663,20 @@ class OpenApiTableEnumerationTests(unittest.TestCase):
         self.assertEqual(_table_severity("reporting"), "high")      # not 'report'
         self.assertEqual(_table_severity("payout_ledger"), "critical")
         self.assertEqual(_table_severity("admin"), "critical")
+        for table in (
+            "payments",
+            "payouts",
+            "invoices",
+            "subscriptions",
+            "admins",
+            "tokens",
+            "credentials",
+            "secrets",
+            "reports",
+            "user_blocks",
+            "support_tickets",
+        ):
+            self.assertEqual(_table_severity(table), "critical", table)
 
     def test_definitions_only_table_is_not_misclassified_as_view(self):
         """Regression: a base table from a paths-less OpenAPI body must get table

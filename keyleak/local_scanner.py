@@ -47,6 +47,7 @@ SKIP_DIRS = {
     "venv",
 }
 SKIP_GENERATED_FILE_SUFFIXES = {
+    "extension/lib/detector-info.js",
     "extension/lib/patterns.js",
 }
 

@@ -32,7 +32,7 @@
     "prevalence": "occasional",
     "slice": "aspnet",
     "uid": "aspnet__aspnet-viewstate-mac-disabled",
-    "class_hint": "bfla"
+    "class_hint": "insecure-deserialization"
   },
   {
     "id": "aspnet-debug-pages-yellow-screen",
@@ -69,7 +69,7 @@
     "prevalence": "common",
     "slice": "aspnet",
     "uid": "aspnet__aspnet-forms-auth-cookie-insecure",
-    "class_hint": "xss"
+    "class_hint": "insecure-cookie"
   },
   {
     "id": "aspnet-open-redirect-returnurl",
@@ -183,7 +183,7 @@
     "prevalence": "occasional",
     "slice": "aspnet",
     "uid": "aspnet__aspnet-session-fixation-sessionid",
-    "class_hint": "xss"
+    "class_hint": "session-fixation"
   },
   {
     "id": "aspnet-cors-wildcard-credentialed",

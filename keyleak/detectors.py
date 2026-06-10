@@ -529,7 +529,7 @@ DETECTORS = [
         "validated",
         ("https://www.stepsecurity.io/blog/mini-shai-hulud-is-back-a-self-spreading-supply-chain-attack-hits-the-npm-ecosystem", "https://tanstack.com/blog/npm-supply-chain-compromise-postmortem"),
         True,
-        "The Mini Shai-Hulud worm sends stolen credentials to the Session/Oxen messenger network (`filev2.getsession.org`, `seed{1,2,3}.getsession.org`) and uses `api.masscan.cloud` and `git-tanstack.com` for C2. If your code, logs, or build artifacts mention any of these, an installed dependency is already exfiltrating data.",
+        "The Mini Shai-Hulud worm sends stolen credentials to known Session/Oxen messenger, mass-scan, and fake TanStack infrastructure endpoints. If code, logs, or build artifacts mention the IOC domains matched by this detector, treat the installed dependency or host as already exfiltrating data.",
     ),
     Detector(
         "npm_prepare_bun_payload",
@@ -565,7 +565,7 @@ DETECTORS = [
     ),
     Detector(
         "secret_in_logs_lead",
-        r"(?:console\.log|logger\.(?:debug|info|warn|error)|print\s*\()[\s\S]{0,120}(?:api[_-]?key|secret|token|password|authorization|cookie)",
+        r"(?:console\.log|logger\.(?:debug|info|warn|error)|print\s*\()[\s\S]{0,120}?(?<![a-z0-9_])(?:api[_-]?key|secret|token|password|authorization|cookie)(?![a-z0-9_])",
         "medium",
         "Secret-in-logs lead found.",
         "Remove secrets from logs, redact sensitive fields at the logger boundary, and rotate any value that may already have been written.",

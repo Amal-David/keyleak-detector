@@ -218,7 +218,7 @@
     "prevalence": "occasional",
     "slice": "rails",
     "uid": "rails__rails-verbose-error-pages-in-production",
-    "class_hint": "cmd-injection"
+    "class_hint": "debug-endpoint"
   },
   {
     "id": "rails-exposed-rails-routes-endpoint",

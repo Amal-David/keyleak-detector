@@ -104,7 +104,7 @@ def main(argv: Optional[List[str]] = None) -> int:
 
         canonical_id = args.detector_id
         if not canonical_id:
-            print("explain requires a detector canonical_id (e.g. leak.openai_api_key)", file=sys.stderr)
+            print("explain requires a detector canonical_id (e.g. leak.source_map_reference)", file=sys.stderr)
             return 1
         detector = find_detector(canonical_id)
         if detector is None:

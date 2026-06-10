@@ -58,8 +58,8 @@ A **Bundle** = `{ id, title, description, packs[], phases[], probe_policy }`
 |-----------|-------|---------------|----------|
 | `secrets` | leak | passive | "just find leaked keys" (today's launch-gate) |
 | `quick` | leak, headers, client | passive, crawl | fast hygiene pass, no crafted requests |
-| `authz` | access-control, authn, api | passive, authz_diff, baas_probe | needs 2 users / anon key; RLS + IDOR focus |
-| `injection` | injection, api | crawl, forms, fuzz | active input fuzzing (opt-in) |
+| `authz` | access-control, authn, api, baas | passive, authz_diff, baas_probe | needs 2 users / anon key; RLS + IDOR focus |
+| `injection` | injection, api | passive, crawl, forms, fuzz | planned active input fuzzing; currently skip-loudly until packs/phases land |
 | `recon` | recon, leak, headers | passive, subdomain, crawl | external attack-surface mapping |
 | `baas` | baas | passive, baas_probe | Supabase/Firebase RLS deep probe |
 | `deep` (everything) | ALL packs | ALL phases incl. mitm | the full deep scan + correlation engine |
@@ -81,8 +81,9 @@ union of findings to surface chained attack vectors.
   subdomain, probe, fuzz, authz_diff, baas_probe, mitm). Today `--bundle` selects
   packs; the active phases a bundle declares are not yet executed by the CLI.
 - `keyleak scan <url> --bundle deep --bearer $A --bearer-b $B --proxy warp` — the
-  full active run. Active phases require their inputs (two bearers, proxy, explicit
-  `--active` ack); a missing input degrades loudly (no silent coverage loss).
+  planned full active run once phase orchestration lands. Today this selects the
+  runnable detector packs and prints the declared phases; active phases that are
+  not yet wired degrade loudly (no silent coverage loss).
 
 ## Implementation shape (P7)
 

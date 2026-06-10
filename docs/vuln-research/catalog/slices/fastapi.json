@@ -162,7 +162,7 @@
     "prevalence": "common",
     "slice": "fastapi",
     "uid": "fastapi__fastapi-pydantic-validation-bypass-coercion",
-    "class_hint": "cmd-injection"
+    "class_hint": "input-validation-bypass"
   },
   {
     "id": "fastapi-ssrf-httpx-requests",
@@ -219,7 +219,7 @@
     "prevalence": "common",
     "slice": "fastapi",
     "uid": "fastapi__fastapi-rate-limit-absent",
-    "class_hint": "cmd-injection"
+    "class_hint": "rate-limit"
   },
   {
     "id": "fastapi-token-in-query-string",

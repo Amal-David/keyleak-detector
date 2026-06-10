@@ -15,7 +15,7 @@
   {
     "uid": "java-spring__spring-actuator-env-secrets",
     "name": "Actuator /env Leaks Credentials via Partial Masking Bypass",
-    "class_hint": "cmd-injection",
+    "class_hint": "debug-endpoint",
     "slice": "java-spring",
     "frameworks": [
       "Spring Boot",
@@ -106,7 +106,7 @@
   {
     "uid": "java-spring__spring-data-jpql-injection",
     "name": "JPQL / HQL Injection via Spring Data @Query",
-    "class_hint": "cmd-injection",
+    "class_hint": "sqli",
     "slice": "java-spring",
     "frameworks": [
       "Spring Boot",
@@ -185,7 +185,7 @@
   {
     "uid": "java-spring__spring-data-rest-exposure",
     "name": "Spring Data REST Auto-Exports All Repositories as Unauthenticated HATEOAS Endpoints",
-    "class_hint": "cmd-injection",
+    "class_hint": "spring-data-rest-exposure",
     "slice": "java-spring",
     "frameworks": [
       "Spring Boot",
@@ -225,7 +225,7 @@
   {
     "uid": "node-express__express-directory-listing",
     "name": "serve-static / express.static Directory Listing Enabled",
-    "class_hint": "cmd-injection",
+    "class_hint": "directory-listing",
     "slice": "node-express",
     "frameworks": [
       "express",
@@ -238,7 +238,7 @@
   {
     "uid": "node-express__express-body-parser-json-prototype-pollution",
     "name": "JSON Body Prototype Pollution via body-parser",
-    "class_hint": "cmd-injection",
+    "class_hint": "prototype-pollution",
     "slice": "node-express",
     "frameworks": [
       "express",
@@ -378,7 +378,7 @@
   {
     "uid": "node-express__express-rate-limit-bypass",
     "name": "Rate Limiting Absent or Bypassable on Sensitive Endpoints",
-    "class_hint": "cmd-injection",
+    "class_hint": "rate-limit-enum",
     "slice": "node-express",
     "frameworks": [
       "express",
@@ -468,7 +468,7 @@
   {
     "uid": "nextjs__nextjs-open-redirect-redirect-api",
     "name": "Next.js Open Redirect in API Route or `next.config.js` Redirects",
-    "class_hint": "cmd-injection",
+    "class_hint": "open-redirect",
     "slice": "nextjs",
     "frameworks": [
       "Next.js"
@@ -528,7 +528,7 @@
   {
     "uid": "nextjs__nextjs-debug-error-overlay-in-prod",
     "name": "Next.js Error Overlay / Stack Trace Exposure in Production",
-    "class_hint": "cmd-injection",
+    "class_hint": "debug-endpoint",
     "slice": "nextjs",
     "frameworks": [
       "Next.js"
@@ -552,7 +552,7 @@
   {
     "uid": "nextjs__nextjs-prototype-pollution-query-parser",
     "name": "Next.js / Node.js Prototype Pollution via Query String Parsing",
-    "class_hint": "cmd-injection",
+    "class_hint": "prototype-pollution",
     "slice": "nextjs",
     "frameworks": [
       "Next.js",
@@ -605,7 +605,7 @@
   {
     "uid": "react-spa__react-client-side-authz-ui-only",
     "name": "Client-Side-Only Authorization (Hidden Route / Conditional Render Bypass)",
-    "class_hint": "cmd-injection",
+    "class_hint": "bfla",
     "slice": "react-spa",
     "frameworks": [
       "React",
@@ -714,7 +714,7 @@
   {
     "uid": "react-spa__react-source-map-exposed",
     "name": "Production Source Maps Publicly Accessible",
-    "class_hint": "cmd-injection",
+    "class_hint": "exposed-source-maps",
     "slice": "react-spa",
     "frameworks": [
       "React",
@@ -758,7 +758,7 @@
   {
     "uid": "react-spa__react-postmessage-origin-wildcard",
     "name": "Insecure postMessage Origin Validation (Wildcard or Missing)",
-    "class_hint": "cmd-injection",
+    "class_hint": "xss",
     "slice": "react-spa",
     "frameworks": [
       "React",
@@ -786,7 +786,7 @@
   {
     "uid": "react-spa__react-third-party-script-supply-chain",
     "name": "Third-Party Script Loaded Without SRI / From Uncontrolled CDN",
-    "class_hint": "cmd-injection",
+    "class_hint": "supply-chain",
     "slice": "react-spa",
     "frameworks": [
       "React",
@@ -812,7 +812,7 @@
   {
     "uid": "angular-vue__angular-bypass-route-guard",
     "name": "Angular Client-Side Route Guard Bypass",
-    "class_hint": "cmd-injection",
+    "class_hint": "client-side-authz",
     "slice": "angular-vue",
     "frameworks": [
       "Angular"
@@ -963,7 +963,7 @@
   {
     "uid": "angular-vue__angular-httpinterceptor-token-log",
     "name": "Auth Token Leaked in Angular Error Logs / Sentry Breadcrumbs",
-    "class_hint": "cmd-injection",
+    "class_hint": "secrets-exposure",
     "slice": "angular-vue",
     "frameworks": [
       "Angular"
@@ -1001,7 +1001,7 @@
   {
     "uid": "flask__flask-debug-mode-exposed",
     "name": "Flask Werkzeug Debugger Exposed in Production",
-    "class_hint": "cmd-injection",
+    "class_hint": "debug-endpoint",
     "slice": "flask",
     "frameworks": [
       "Flask",
@@ -1178,7 +1178,7 @@
   {
     "uid": "django-drf__django-admin-exposed",
     "name": "Django Admin Interface Publicly Accessible",
-    "class_hint": "cmd-injection",
+    "class_hint": "debug-endpoint",
     "slice": "django-drf",
     "frameworks": [
       "Django"
@@ -1324,7 +1324,7 @@
   {
     "uid": "django-drf__drf-host-header-injection",
     "name": "Django Password-Reset Poisoning via Host Header Injection",
-    "class_hint": "cmd-injection",
+    "class_hint": "host-header-injection",
     "slice": "django-drf",
     "frameworks": [
       "Django"
@@ -1467,7 +1467,7 @@
   {
     "uid": "fastapi__fastapi-pydantic-validation-bypass-coercion",
     "name": "Pydantic Type Coercion Bypasses Semantic Validation",
-    "class_hint": "cmd-injection",
+    "class_hint": "input-validation-bypass",
     "slice": "fastapi",
     "frameworks": [
       "FastAPI",
@@ -1509,7 +1509,7 @@
   {
     "uid": "fastapi__fastapi-rate-limit-absent",
     "name": "No Rate Limiting on Authentication / Sensitive Endpoints",
-    "class_hint": "cmd-injection",
+    "class_hint": "rate-limit",
     "slice": "fastapi",
     "frameworks": [
       "FastAPI",
@@ -1707,7 +1707,7 @@
   {
     "uid": "rails__rails-verbose-error-pages-in-production",
     "name": "Rails Verbose Error Pages Enabled in Production (config.consider_all_requests_local)",
-    "class_hint": "cmd-injection",
+    "class_hint": "debug-endpoint",
     "slice": "rails",
     "frameworks": [
       "Ruby on Rails"
@@ -1756,7 +1756,7 @@
   {
     "uid": "laravel-php__laravel-mass-assignment",
     "name": "Eloquent Mass Assignment Privilege Escalation",
-    "class_hint": "bfla",
+    "class_hint": "mass-assignment",
     "slice": "laravel-php",
     "frameworks": [
       "Laravel"
@@ -1841,7 +1841,7 @@
   {
     "uid": "laravel-php__php-deserialization-phar",
     "name": "PHP Object Deserialization via unserialize()",
-    "class_hint": "cmd-injection",
+    "class_hint": "deserialization",
     "slice": "laravel-php",
     "frameworks": [
       "PHP"
@@ -1877,7 +1877,7 @@
   {
     "uid": "laravel-php__laravel-forced-browsing-backup-files",
     "name": "PHP/Laravel Backup and Config Files Accessible",
-    "class_hint": "cmd-injection",
+    "class_hint": "secrets-exposure",
     "slice": "laravel-php",
     "frameworks": [
       "Laravel",
@@ -1902,7 +1902,7 @@
   {
     "uid": "laravel-php__php-file-upload-unrestricted",
     "name": "Unrestricted PHP File Upload Leading to Webshell",
-    "class_hint": "cmd-injection",
+    "class_hint": "file-upload",
     "slice": "laravel-php",
     "frameworks": [
       "PHP",
@@ -1940,7 +1940,7 @@
   {
     "uid": "aspnet__aspnet-viewstate-mac-disabled",
     "name": "ASP.NET ViewState MAC Disabled / Weak Machine Key",
-    "class_hint": "bfla",
+    "class_hint": "insecure-deserialization",
     "slice": "aspnet",
     "frameworks": [
       "ASP.NET WebForms"
@@ -1966,7 +1966,7 @@
   {
     "uid": "aspnet__aspnet-forms-auth-cookie-insecure",
     "name": "ASP.NET Forms Authentication Ticket in Non-Secure Cookie",
-    "class_hint": "xss",
+    "class_hint": "insecure-cookie",
     "slice": "aspnet",
     "frameworks": [
       "ASP.NET WebForms",
@@ -2049,7 +2049,7 @@
   {
     "uid": "aspnet__aspnet-session-fixation-sessionid",
     "name": "ASP.NET Session Fixation (ASP.NET_SessionId Not Rotated on Auth)",
-    "class_hint": "xss",
+    "class_hint": "session-fixation",
     "slice": "aspnet",
     "frameworks": [
       "ASP.NET WebForms",
@@ -2181,7 +2181,7 @@
   {
     "uid": "go-web__go-http-host-header-injection",
     "name": "HTTP Host Header Injection (Password Reset / Redirect Poisoning)",
-    "class_hint": "cmd-injection",
+    "class_hint": "host-header-injection",
     "slice": "go-web",
     "frameworks": [
       "net/http",
@@ -2265,7 +2265,7 @@
   {
     "uid": "go-web__go-gin-path-traversal",
     "name": "Path Traversal in Static File Serving (gin Static / echo Static)",
-    "class_hint": "cmd-injection",
+    "class_hint": "path-traversal",
     "slice": "go-web",
     "frameworks": [
       "gin",
@@ -2305,7 +2305,7 @@
   {
     "uid": "go-web__go-rate-limit-absence",
     "name": "No Rate Limiting on Authentication and Sensitive Endpoints",
-    "class_hint": "cmd-injection",
+    "class_hint": "rate-limit",
     "slice": "go-web",
     "frameworks": [
       "net/http",
@@ -2387,7 +2387,7 @@
     ],
     "severity": "high",
     "prevalence": "common",
-    "active_probe": true
+    "active_probe": false
   },
   {
     "uid": "baas-graphql__supabase-storage-bucket-public",
@@ -2481,7 +2481,7 @@
   {
     "uid": "baas-graphql__graphql-query-batching-dos",
     "name": "GraphQL Query Batching / Alias Amplification (DoS / Brute-Force)",
-    "class_hint": "cmd-injection",
+    "class_hint": "dos",
     "slice": "baas-graphql",
     "frameworks": [
       "GraphQL",
@@ -2508,7 +2508,7 @@
   {
     "uid": "baas-graphql__appwrite-collection-guest-permission",
     "name": "Appwrite Collection With Guest Read/Write Permission",
-    "class_hint": "cmd-injection",
+    "class_hint": "broken-access-control",
     "slice": "baas-graphql",
     "frameworks": [
       "Appwrite"
@@ -2580,7 +2580,7 @@
   {
     "uid": "authn-authz__jwt-secret-weak",
     "name": "JWT Weak HMAC Secret (Brute-Forceable)",
-    "class_hint": "cmd-injection",
+    "class_hint": "jwt",
     "slice": "authn-authz",
     "frameworks": [
       "agnostic"
@@ -2616,7 +2616,7 @@
   {
     "uid": "authn-authz__session-fixation",
     "name": "Session Fixation",
-    "class_hint": "cmd-injection",
+    "class_hint": "session-fixation",
     "slice": "authn-authz",
     "frameworks": [
       "agnostic"
@@ -2628,7 +2628,7 @@
   {
     "uid": "authn-authz__password-reset-token-predictable",
     "name": "Predictable or Short-Lived Password Reset Token Brute-Force",
-    "class_hint": "cmd-injection",
+    "class_hint": "weak-token",
     "slice": "authn-authz",
     "frameworks": [
       "agnostic"
@@ -2640,7 +2640,7 @@
   {
     "uid": "authn-authz__password-reset-host-header-injection",
     "name": "Password Reset Poisoning via Host Header Injection",
-    "class_hint": "cmd-injection",
+    "class_hint": "host-header-injection",
     "slice": "authn-authz",
     "frameworks": [
       "agnostic"
@@ -2676,7 +2676,7 @@
   {
     "uid": "authn-authz__2fa-otp-no-rate-limit",
     "name": "2FA OTP Brute-Force \u2014 No Rate Limiting or Lockout",
-    "class_hint": "cmd-injection",
+    "class_hint": "rate-limit",
     "slice": "authn-authz",
     "frameworks": [
       "agnostic"
@@ -2822,7 +2822,7 @@
   {
     "uid": "injection-fuzz__path-traversal",
     "name": "Path Traversal (Directory Traversal)",
-    "class_hint": "cmd-injection",
+    "class_hint": "path-traversal",
     "slice": "injection-fuzz",
     "frameworks": [
       "agnostic"
@@ -2851,7 +2851,7 @@
   {
     "uid": "injection-fuzz__host-header-injection",
     "name": "Host Header Injection",
-    "class_hint": "cmd-injection",
+    "class_hint": "host-header-injection",
     "slice": "injection-fuzz",
     "frameworks": [
       "agnostic"
@@ -2979,7 +2979,7 @@
   {
     "uid": "client-browser__exposed-source-maps",
     "name": "Exposed JavaScript Source Maps with Embedded Secrets",
-    "class_hint": "cmd-injection",
+    "class_hint": "exposed-source-maps",
     "slice": "client-browser",
     "frameworks": [
       "agnostic"
@@ -3039,7 +3039,7 @@
   {
     "uid": "client-browser__js-framework-debug-mode",
     "name": "JavaScript Framework Debug / Development Mode Enabled in Production",
-    "class_hint": "cmd-injection",
+    "class_hint": "debug-endpoint",
     "slice": "client-browser",
     "frameworks": [
       "React",
@@ -3067,7 +3067,7 @@
   {
     "uid": "client-browser__subresource-integrity-missing",
     "name": "Missing Subresource Integrity (SRI) on Third-Party Scripts",
-    "class_hint": "cmd-injection",
+    "class_hint": "missing-sri",
     "slice": "client-browser",
     "frameworks": [
       "agnostic"
@@ -3115,7 +3115,7 @@
   {
     "uid": "api-rest__missing-rate-limiting-auth",
     "name": "Missing Rate Limiting on Authentication / Credential Endpoints",
-    "class_hint": "cmd-injection",
+    "class_hint": "rate-limit",
     "slice": "api-rest",
     "frameworks": [
       "agnostic"
@@ -3127,7 +3127,7 @@
   {
     "uid": "api-rest__missing-rate-limiting-business",
     "name": "Missing Rate Limiting on Business-Logic API Endpoints",
-    "class_hint": "cmd-injection",
+    "class_hint": "rate-limit",
     "slice": "api-rest",
     "frameworks": [
       "agnostic"
@@ -3151,7 +3151,7 @@
   {
     "uid": "api-rest__resource-id-enumeration",
     "name": "Resource/Object Enumeration via Predictable API Identifiers",
-    "class_hint": "cmd-injection",
+    "class_hint": "resource-enumeration",
     "slice": "api-rest",
     "frameworks": [
       "agnostic"
@@ -3163,7 +3163,7 @@
   {
     "uid": "api-rest__improper-api-inventory-old-versions",
     "name": "Improper API Inventory \u2014 Unretired Legacy API Versions",
-    "class_hint": "cmd-injection",
+    "class_hint": "api-inventory",
     "slice": "api-rest",
     "frameworks": [
       "agnostic"
@@ -3192,7 +3192,7 @@
   {
     "uid": "api-rest__graphql-introspection-enabled",
     "name": "GraphQL Introspection Enabled in Production",
-    "class_hint": "cmd-injection",
+    "class_hint": "graphql-introspection",
     "slice": "api-rest",
     "frameworks": [
       "GraphQL"
@@ -3240,7 +3240,7 @@
   {
     "uid": "api-rest__api-missing-auth-on-write",
     "name": "Missing Authentication on State-Mutating API Endpoints",
-    "class_hint": "cmd-injection",
+    "class_hint": "broken-access-control",
     "slice": "api-rest",
     "frameworks": [
       "agnostic"
@@ -3252,7 +3252,7 @@
   {
     "uid": "api-rest__graphql-batching-dos",
     "name": "GraphQL Query Batching / Alias Amplification Without Rate Limiting",
-    "class_hint": "cmd-injection",
+    "class_hint": "dos",
     "slice": "api-rest",
     "frameworks": [
       "GraphQL"
@@ -3264,7 +3264,7 @@
   {
     "uid": "ethical-recon__exposed-git-repository",
     "name": "Exposed .git Directory",
-    "class_hint": "cmd-injection",
+    "class_hint": "exposed-vcs",
     "slice": "ethical-recon",
     "frameworks": [
       "agnostic"
@@ -3293,7 +3293,7 @@
   {
     "uid": "ethical-recon__directory-listing-enabled",
     "name": "Directory Listing Enabled",
-    "class_hint": "cmd-injection",
+    "class_hint": "directory-listing",
     "slice": "ethical-recon",
     "frameworks": [
       "Apache",
@@ -3446,7 +3446,7 @@
   {
     "uid": "ethical-recon__sourcemap-exposure",
     "name": "JavaScript Source Map Files Publicly Accessible",
-    "class_hint": "cmd-injection",
+    "class_hint": "exposed-source-maps",
     "slice": "ethical-recon",
     "frameworks": [
       "React",

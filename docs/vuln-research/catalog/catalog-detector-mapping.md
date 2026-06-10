@@ -37,7 +37,7 @@ Shape: A=passive pattern (Detector), B=active probe (ActiveCheck), C=auth-differ
 | 31 | xss-reflected-stored-dom | appsec | B active-probe | M3 | `appsec.xss-reflected-stored-dom` |
 | 32 | excessive-data-exposure | api | A passive-pattern | M2 | `api.excessive-data-exposure` |
 | 33 | weak-session-secret | authn | B active-probe | M3 | `authn.weak-session-secret` |
-| 34 | open-cloud-storage-bucket | baas | D config+probe | M5 | `baas.baas-config-exposed-storage` |
+| 34 | open-cloud-storage-bucket | baas | D config+probe | M5 | `baas.open-cloud-storage-bucket` |
 | 35 | client-side-only-authz | access-control | C auth-diff | M4 | `access-control.client-side-only-authz` |
 | 36 | graphql-introspection-exposed | api | B active-probe | M3 | `api.graphql-introspection-exposed` |
 | 37 | insecure-cookie-flags | headers | A passive-pattern | M2 | `headers.insecure-cookie-flags` |
@@ -57,10 +57,9 @@ Shape: A=passive pattern (Detector), B=active probe (ActiveCheck), C=auth-differ
 | 51 | password-reset-token-predictable | authn | B active-probe | M3 | `authn.password-reset-token-predictable` |
 | + | exposed-git-directory | leak | A passive-pattern | M2 | `leak.exposed-git-directory` |
 | + | web-cache-deception-poisoning | appsec | B active-probe | M3 | `appsec.web-cache-deception-poisoning` |
-| + | open-cloud-storage-bucket | baas | D config+probe | M5 | `baas.open-cloud-storage-bucket` |
 | + | http-request-smuggling | injection | B active-probe | M7 | `injection.http-request-smuggling` |
 | + | insecure-deserialization | injection | B active-probe | M7 | `injection.insecure-deserialization` |
 | + | account-takeover-chain | authn | B active-probe | M3 | `authn.account-takeover-chain` |
 | + | websocket-auth-origin-bypass | appsec | B active-probe | M3 | `appsec.websocket-auth-origin-bypass` |
 
-Milestone load (Top51+additions): {'M4': 5, 'M2': 13, 'M5': 4, 'M3': 24, 'M7': 12}
+Milestone load (Top51+additions): {'M4': 5, 'M2': 13, 'M5': 3, 'M3': 24, 'M7': 12}

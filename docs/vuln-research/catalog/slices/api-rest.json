@@ -65,7 +65,7 @@
     "prevalence": "common",
     "slice": "api-rest",
     "uid": "api-rest__missing-rate-limiting-auth",
-    "class_hint": "cmd-injection"
+    "class_hint": "rate-limit"
   },
   {
     "id": "missing-rate-limiting-business",
@@ -82,7 +82,7 @@
     "prevalence": "common",
     "slice": "api-rest",
     "uid": "api-rest__missing-rate-limiting-business",
-    "class_hint": "cmd-injection"
+    "class_hint": "rate-limit"
   },
   {
     "id": "user-enumeration-api",
@@ -116,7 +116,7 @@
     "prevalence": "ubiquitous",
     "slice": "api-rest",
     "uid": "api-rest__resource-id-enumeration",
-    "class_hint": "cmd-injection"
+    "class_hint": "resource-enumeration"
   },
   {
     "id": "improper-api-inventory-old-versions",
@@ -133,7 +133,7 @@
     "prevalence": "common",
     "slice": "api-rest",
     "uid": "api-rest__improper-api-inventory-old-versions",
-    "class_hint": "cmd-injection"
+    "class_hint": "api-inventory"
   },
   {
     "id": "verbose-api-errors",
@@ -172,7 +172,7 @@
     "prevalence": "common",
     "slice": "api-rest",
     "uid": "api-rest__graphql-introspection-enabled",
-    "class_hint": "cmd-injection"
+    "class_hint": "graphql-introspection"
   },
   {
     "id": "graphql-field-suggestion-enumeration",
@@ -240,7 +240,7 @@
     "prevalence": "occasional",
     "slice": "api-rest",
     "uid": "api-rest__api-missing-auth-on-write",
-    "class_hint": "cmd-injection"
+    "class_hint": "broken-access-control"
   },
   {
     "id": "graphql-batching-dos",
@@ -257,6 +257,6 @@
     "prevalence": "common",
     "slice": "api-rest",
     "uid": "api-rest__graphql-batching-dos",
-    "class_hint": "cmd-injection"
+    "class_hint": "dos"
   }
 ]
