@@ -222,11 +222,23 @@ async function fetchAndAnalyzeRemote(tabId, { url, source, pageUrl, captureType 
   const resolvedUrl = resolveUrl(url, pageUrl);
   if (!canScanUrl(resolvedUrl, pageUrl)) return { ok: false, skipped: true, reason: 'unsupported_url' };
 
+  // redirect: 'manual' — a service worker cannot read a cross-origin redirect's
+  // Location to re-validate it, so we refuse to follow redirects at all rather
+  // than let a guard-approved public host 302 the fetch into an internal target
+  // (gate MF-2). Legit sub-resources are served directly, not via redirects.
   const response = await fetch(resolvedUrl, {
     cache: 'force-cache',
     credentials: 'omit',
-    redirect: 'follow',
+    redirect: 'manual',
   });
+
+  if (response.type === 'opaqueredirect' || (response.status >= 300 && response.status < 400)) {
+    return { ok: false, skipped: true, reason: 'redirect_not_followed' };
+  }
+  // Defense in depth: if the final URL somehow differs and is internal, drop it.
+  if (response.url && !canScanUrl(response.url, pageUrl)) {
+    return { ok: false, skipped: true, reason: 'redirected_to_blocked_host' };
+  }
 
   const contentType = response.headers.get('content-type') || '';
   const contentLength = Number(response.headers.get('content-length') || 0);

@@ -30,8 +30,16 @@ def compare_access_control_urls(
     if not _has_auth(user_a_auth) or not _has_auth(user_b_auth or {}):
         return []
 
+    # Guard the real-network fetch against SSRF (candidate URLs are crawl-derived
+    # and so attacker-influenceable). Injected probers (tests) are trusted and
+    # never hit the network, so they bypass the guard.
+    guard_hosts = fetch is requests.get
+    from .net_guard import url_block_reason
+
     findings: List[Finding] = []
     for url in _candidate_object_urls(candidate_urls)[:max_urls]:
+        if guard_hosts and url_block_reason(url):
+            continue
         try:
             response_a = fetch(
                 url,

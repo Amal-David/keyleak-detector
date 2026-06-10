@@ -23,9 +23,13 @@ _PATTERNS: List[Tuple[re.Pattern[str], str]] = [
     # Email addresses.
     (re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}"), "[email]"),
     # US-style phone numbers like +1 555-123-4567 or (555) 123-4567.
+    # The leading ``(?<![\w])`` stops the pattern from starting *inside* a longer
+    # alphanumeric token — without it, a secret like ``sk_live_4242424242424242``
+    # had its embedded digits masked as ``[phone]``, corrupting the evidence
+    # (audit gate FIX1-MF2).
     (
         re.compile(
-            r"(?:\+\d{1,3}[\s.-]?)?(?:\(?\d{3}\)?[\s.-]?)\d{3}[\s.-]?\d{4}\b"
+            r"(?<![\w])(?:\+\d{1,3}[\s.-]?)?(?:\(?\d{3}\)?[\s.-]?)\d{3}[\s.-]?\d{4}\b"
         ),
         "[phone]",
     ),

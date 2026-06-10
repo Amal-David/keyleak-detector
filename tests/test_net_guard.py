@@ -7,7 +7,31 @@ from __future__ import annotations
 
 import unittest
 
-from keyleak.net_guard import scan_target_block_reason as block
+from keyleak.net_guard import (
+    SSRFBlocked,
+    guarded_request,
+    scan_target_block_reason as block,
+    url_block_reason,
+)
+
+
+class _FakeResp:
+    def __init__(self, status_code, headers=None, text=""):
+        self.status_code = status_code
+        self.headers = headers or {}
+        self.text = text
+
+
+class _FakeSession:
+    """Records requests and returns canned responses in order."""
+
+    def __init__(self, responses):
+        self._responses = list(responses)
+        self.calls = []
+
+    def request(self, method, url, **kwargs):
+        self.calls.append((method, url, kwargs.get("allow_redirects")))
+        return self._responses.pop(0)
 
 
 class NetGuardTests(unittest.TestCase):
@@ -33,6 +57,50 @@ class NetGuardTests(unittest.TestCase):
     def test_empty_host_blocked(self):
         self.assertIsNotNone(block(""))
         self.assertIsNotNone(block(None))
+
+
+class GuardedRequestTests(unittest.TestCase):
+    """guarded_request must (a) never auto-follow redirects, and (b) re-validate
+    every redirect Location so a public host cannot 302 into an internal one
+    (audit gate MF-1)."""
+
+    def test_blocks_redirect_to_internal_host(self):
+        # Public first hop redirects to cloud metadata → must raise, and must
+        # NOT issue a second request to the internal target.
+        sess = _FakeSession([
+            _FakeResp(302, {"location": "http://169.254.169.254/latest/meta-data/"}),
+        ])
+        with self.assertRaises(SSRFBlocked):
+            guarded_request("GET", "https://93.184.216.34/", session=sess)
+        # Only the first hop was attempted; the internal redirect was refused.
+        self.assertEqual(len(sess.calls), 1)
+        # And auto-redirects were disabled on the request we did make.
+        self.assertEqual(sess.calls[0][2], False)
+
+    def test_blocks_initial_internal_target_without_request(self):
+        sess = _FakeSession([_FakeResp(200)])
+        with self.assertRaises(SSRFBlocked):
+            guarded_request("GET", "http://10.0.0.5/x", session=sess)
+        self.assertEqual(sess.calls, [])  # never even issued
+
+    def test_follows_public_redirect_chain(self):
+        sess = _FakeSession([
+            _FakeResp(301, {"location": "https://93.184.216.34/v2"}),
+            _FakeResp(200, text="ok"),
+        ])
+        resp = guarded_request("GET", "https://93.184.216.34/v1", session=sess)
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(len(sess.calls), 2)
+
+    def test_too_many_redirects_raises(self):
+        sess = _FakeSession([_FakeResp(302, {"location": "https://93.184.216.34/next"}) for _ in range(10)])
+        with self.assertRaises(SSRFBlocked):
+            guarded_request("GET", "https://93.184.216.34/", session=sess, max_redirects=2)
+
+    def test_url_block_reason_parses_host(self):
+        self.assertIsNone(url_block_reason("https://93.184.216.34/path"))
+        self.assertIsNotNone(url_block_reason("http://169.254.169.254/"))
+        self.assertIsNotNone(url_block_reason("notaurl"))
 
 
 if __name__ == "__main__":

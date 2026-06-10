@@ -36,3 +36,23 @@ test('canScanUrl permits internal target that matches the page origin (localhost
 test('canScanUrl allows ordinary public sub-resource fetches', () => {
   assert.equal(canScanUrl('https://cdn.example.com/app.js', 'https://example.com/'), true);
 });
+
+test('blocks IPv4-mapped IPv6 (gate MF-1): loopback and cloud metadata', () => {
+  // The WHATWG URL parser normalizes [::ffff:127.0.0.1] → [::ffff:7f00:1].
+  assert.equal(isBlockedScanHost(new URL('http://[::ffff:127.0.0.1]/').hostname), true);
+  assert.equal(isBlockedScanHost(new URL('http://[::ffff:169.254.169.254]/').hostname), true);
+  assert.equal(isBlockedScanHost(new URL('http://[::ffff:10.0.0.1]/').hostname), true);
+  // End to end through canScanUrl from a hostile page.
+  assert.equal(canScanUrl('http://[::ffff:169.254.169.254]/latest/meta-data/', 'https://evil.com/'), false);
+  assert.equal(canScanUrl('http://[::ffff:127.0.0.1]/', 'https://evil.com/'), false);
+});
+
+test('same-origin allowance is port-bound (gate MF-3)', () => {
+  // A page on localhost:8080 must NOT unlock fetches to other localhost ports.
+  assert.equal(canScanUrl('http://127.0.0.1:6379/', 'http://127.0.0.1:8080/'), false);
+  assert.equal(canScanUrl('http://localhost:22/', 'http://localhost:3000/'), false);
+  // Exact same origin (host+port) is still allowed (localhost dev sourcemap).
+  assert.equal(canScanUrl('http://127.0.0.1:8080/app.js.map', 'http://127.0.0.1:8080/'), true);
+  // Different protocol is a different origin → blocked.
+  assert.equal(canScanUrl('https://localhost:3000/x', 'http://localhost:3000/'), false);
+});

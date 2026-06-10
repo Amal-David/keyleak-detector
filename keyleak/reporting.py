@@ -16,11 +16,19 @@ def _scrub_finding_pii(finding: Finding) -> Finding:
     """Mask adjacent PII in a finding's evidence snippet, preserving the matched
     (already-redacted) secret token.
 
-    This is the single chokepoint that enforces KeyLeak's privacy promise for
-    *every* scan mode: previously only ``local_scanner`` scrubbed, so live
-    browser/BaaS/site findings could carry third-party emails/phones/cards into
-    a report (audit W7). Idempotent — re-scrubbing already-scrubbed text is a
-    no-op — so local_scanner's earlier pass is unaffected.
+    Single chokepoint for the **Python report path**: every scan mode that builds
+    a report through ``build_report`` (local, CLI browser, site, BaaS) is scrubbed
+    here. Previously only ``local_scanner`` scrubbed, so CLI browser/BaaS/site
+    findings carried third-party emails/phones/cards into a report (audit W7).
+    Idempotent — re-scrubbing is a no-op — so local_scanner's earlier pass is
+    unaffected. The browser *extension* serializes findings client-side and
+    scrubs in its own ``extension/lib/reporting.js`` (parity, not this path).
+
+    Scope note: only ``evidence.snippet`` is scrubbed. ``source`` and
+    ``request_url`` are URLs already redacted via ``redact_url`` upstream; the
+    free-text ``risk_reason``/``remediation`` are tool-authored, not scanned
+    content, so they are not a PII vector. Snippet is the only field that carries
+    adjacent scanned content.
     """
     ev = finding.evidence
     if ev is not None and ev.snippet:

@@ -57,20 +57,27 @@ def _probe_host(host: str, proxy: Optional[str], timeout: int) -> Optional[Findi
     """Fetch ``host`` and return a Finding if its body matches a takeover
     fingerprint, else None. Network/TLS errors are treated as "no signal"."""
     import requests
+    from .net_guard import guarded_request, SSRFBlocked
 
     proxies = requests_proxies(proxy)
     body = None
     for scheme in ("https", "http"):
         try:
-            resp = requests.get(
+            # Subdomain names are partly sourced from CT logs (attacker-seedable),
+            # so the probe target is attacker-influenced: guard the host and
+            # re-validate redirect hops rather than following 3xx into an
+            # internal address.
+            resp = guarded_request(
+                "GET",
                 f"{scheme}://{host}",
                 timeout=timeout,
                 proxies=proxies,
-                allow_redirects=True,
                 headers={"User-Agent": "keyleak-detector/subdomain-takeover"},
             )
             body = resp.text or ""
             break
+        except SSRFBlocked:
+            return None
         except requests.RequestException:
             continue
     if not body:

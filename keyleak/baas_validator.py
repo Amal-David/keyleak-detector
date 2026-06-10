@@ -153,18 +153,24 @@ def make_default_prober(proxy: Optional[str] = None, *, allow_private: Optional[
     proxies = requests_proxies(proxy)
 
     def _prober(method: str, url: str, headers: Dict[str, str], body: Optional[str] = None) -> Dict[str, Any]:
+        # Fast path: refuse obviously-blocked targets without importing requests.
         reason = _probe_target_block_reason(url, allow_private=allow_private)
         if reason:
             return _blocked_response(reason)
 
-        import requests as _requests
+        from .net_guard import guarded_request, SSRFBlocked
 
         kwargs: Dict[str, Any] = {"headers": headers, "timeout": 10}
         if proxies:
             kwargs["proxies"] = proxies
         if body is not None and method.upper() in ("POST", "PUT", "PATCH"):
             kwargs["data"] = body
-        resp = _requests.request(method, url, **kwargs)
+        try:
+            # guarded_request disables auto-redirects and re-validates every
+            # redirect hop, so a public host cannot 302 us into an internal one.
+            resp = guarded_request(method, url, allow_private=allow_private, **kwargs)
+        except SSRFBlocked as exc:
+            return _blocked_response(str(exc))
         response_body: Any = None
         try:
             response_body = resp.json()
