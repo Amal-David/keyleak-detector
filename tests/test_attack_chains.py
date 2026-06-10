@@ -155,5 +155,43 @@ class EngineSemanticsTests(unittest.TestCase):
                 self.assertTrue(leg.types or leg.detector_globs, f"{rule.id} has an empty leg")
 
 
+class BuildReportWiringTests(unittest.TestCase):
+    """B1: correlate() must actually run inside build_report and surface in output
+    (it was dead code — defined and tested but never called by any scan path)."""
+
+    def _findings(self):
+        return [
+            mk("supabase_url", severity="info", status="lead"),
+            mk("baas_open_table", severity="high", status="confirmed"),
+        ]
+
+    def test_build_report_emits_attack_chains(self):
+        from keyleak.reporting import build_report
+        report = build_report("https://app.example.com", self._findings(), scan_mode="browser")
+        chains = report.extra.get("attack_chains")
+        self.assertTrue(chains, "build_report did not surface attack chains")
+        self.assertEqual(chains[0]["rule_id"], "rls-anon-fulldb")
+
+    def test_chains_render_in_all_serializers(self):
+        from keyleak.reporting import build_report, format_markdown, format_html, format_json
+        report = build_report("https://app.example.com", self._findings(), scan_mode="browser")
+        self.assertIn("## Attack chains", format_markdown(report))
+        self.assertIn("Attack chains", format_html(report))
+        self.assertIn("attack_chains", format_json(report))
+
+    def test_no_chains_no_section(self):
+        from keyleak.reporting import build_report, format_markdown
+        report = build_report("https://app.example.com", [mk("openai_api_key")], scan_mode="browser")
+        self.assertNotIn("attack_chains", report.extra)
+        self.assertNotIn("## Attack chains", format_markdown(report))
+
+    def test_chains_roundtrip_through_scanreport_from_dict(self):
+        from keyleak.reporting import build_report
+        from keyleak.models import ScanReport
+        report = build_report("https://app.example.com", self._findings(), scan_mode="browser")
+        restored = ScanReport.from_dict(report.to_dict())
+        self.assertEqual(restored.extra.get("attack_chains"), report.extra.get("attack_chains"))
+
+
 if __name__ == "__main__":
     unittest.main()

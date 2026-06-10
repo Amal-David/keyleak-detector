@@ -682,6 +682,7 @@ def scan_site(
         scan_mode="full-site",
         profile=launch_profile,
         packs=["leak", "appsec", "access-control", "baas"],
+        provenance=provenance,
     )
     report.extra.update({
         "subdomains": subdomains,

@@ -7,6 +7,7 @@ import json
 import shlex
 from typing import Any, Dict, Iterable, List, Optional
 
+from .attack_chains import correlate
 from .models import Finding, ScanReport, SEVERITY_ORDER, finding_from_legacy
 from .privacy_filter import scrub_snippet
 from .redaction import redact_url
@@ -43,22 +44,33 @@ def build_report(
     attack_vectors: Optional[Dict[str, Any]] = None,
     profile: str = "launch-gate",
     packs: Optional[Iterable[str]] = None,
+    provenance: Optional[Dict[str, List[str]]] = None,
 ) -> ScanReport:
     normalized = normalize_findings(findings)
     normalized.extend(_attack_vector_findings(attack_vectors or {}))
     normalized.sort(key=lambda finding: SEVERITY_ORDER.get(finding.severity, 0), reverse=True)
     selected_packs = list(packs or _packs_from_findings(normalized))
 
+    # Meta-analysis: correlate individual findings into chained attack vectors
+    # (e.g. published anon key + a table readable without RLS = unauthenticated
+    # data exfiltration). ``target`` anchors single-URL scans to one host;
+    # ``provenance`` (set by site_scanner) supplies host co-location for crawls.
+    chains = correlate(normalized, provenance=provenance, target=target)
+
+    extra: Dict[str, Any] = {
+        "profile": profile,
+        "packs": selected_packs,
+        "pack_summary": _pack_summary(normalized, selected_packs),
+    }
+    if chains:
+        extra["attack_chains"] = [vector.to_dict() for vector in chains]
+
     return ScanReport(
         target=target,
         scan_mode=scan_mode,
         findings=normalized,
         retest_command=_retest_command(target, scan_mode),
-        extra={
-            "profile": profile,
-            "packs": selected_packs,
-            "pack_summary": _pack_summary(normalized, selected_packs),
-        },
+        extra=extra,
     )
 
 
@@ -95,8 +107,31 @@ def format_markdown(report: ScanReport) -> str:
         f"- Reason: {payload['verdict']['reason']}",
         f"- Re-test: `{payload['retest_command']}`",
         "",
-        "## Findings",
     ]
+
+    chains = payload.get("attack_chains") or []
+    if chains:
+        lines.append("## Attack chains")
+        lines.append("")
+        lines.append(
+            "Individual findings correlated into exploitable paths "
+            "(this is what an attacker actually chains together):"
+        )
+        for chain in chains:
+            lines.extend(
+                [
+                    "",
+                    f"### {chain['severity'].upper()}: {chain['name']}",
+                    f"- Confidence: `{chain['confidence']}`",
+                    f"- Hosts: `{', '.join(chain.get('hosts') or []) or 'n/a'}`",
+                    f"- Chained from: {len(chain.get('member_finding_ids') or [])} finding(s)",
+                    f"- Path: {chain['narrative']}",
+                    f"- Fix: {chain['remediation']}",
+                ]
+            )
+        lines.append("")
+
+    lines.append("## Findings")
 
     if not report.findings:
         lines.append("No findings detected.")
@@ -183,6 +218,30 @@ def format_html(report: ScanReport) -> str:
         finding_cards.append(card)
 
     findings_html = "\n\n".join(finding_cards) if finding_cards else "    <p>No findings detected.</p>"
+
+    # --- attack-chain cards (meta-analysis) ---
+    chain_cards = []
+    for chain in payload.get("attack_chains") or []:
+        c_sev = str(chain.get("severity") or "").lower()
+        chain_cards.append(
+            f"""    <div class="finding {e(c_sev)}">
+      <div class="finding-head">
+        <span class="sev {e(c_sev)}">{e(c_sev.upper())}</span>
+        <span class="finding-type">{e(str(chain.get('name') or ''))}</span>
+        <span class="badge-confirmed">{e(str(chain.get('confidence') or ''))}</span>
+      </div>
+      <div class="finding-detail">{e(str(chain.get('narrative') or ''))}</div>
+      <div class="finding-fix">Fix: <code>{e(str(chain.get('remediation') or ''))}</code></div>
+    </div>"""
+        )
+    chains_section = ""
+    if chain_cards:
+        chains_section = (
+            '  <div class="section">\n'
+            '    <div class="section-title">Attack chains</div>\n\n'
+            + "\n\n".join(chain_cards)
+            + "\n  </div>\n\n"
+        )
 
     return f"""<!DOCTYPE html>
 <html lang="en">
@@ -294,7 +353,7 @@ def format_html(report: ScanReport) -> str:
     <div class="stat"><div class="stat-num low">{summary["low_severity"]}</div><div class="stat-label">Low</div></div>
   </div>
 
-  <div class="section">
+{chains_section}  <div class="section">
     <div class="section-title">Findings</div>
 
 {findings_html}
