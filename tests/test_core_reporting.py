@@ -587,14 +587,21 @@ class VerdictHonestyTests(unittest.TestCase):
         self.assertNotIn("high-confidence", reason)
         self.assertIn("verify", reason.lower())
 
-    def test_reason_reports_confirmed_and_leads(self):
-        reason = self._report(("critical", "confirmed"), ("high", "lead")).verdict["reason"]
-        self.assertIn("confirmed", reason)
-        self.assertIn("lead", reason)
+    def test_static_validated_is_not_reported_as_actively_confirmed(self):
+        # Gate B3-MF1: the static detector default 'validated' must NOT read as
+        # active confirmation — only a live probe ('confirmed') does.
+        reason = self._report(("high", "validated")).verdict["reason"]
+        self.assertNotIn("confirmed", reason)
+        self.assertIn("static", reason.lower())
+
+    def test_reason_reports_active_confirmation_separately(self):
+        reason = self._report(("critical", "confirmed"), ("high", "validated")).verdict["reason"]
+        self.assertIn("confirmed by active probe", reason)
+        self.assertIn("static", reason.lower())
 
     def test_still_blocks_on_severity_regardless_of_confidence(self):
-        # A leaked secret (a static lead) must still BLOCK — severity is the gate.
-        self.assertEqual(self._report(("high", "lead")).verdict["status"], "BLOCK_SHIP")
+        # A leaked secret (a static detection) must still BLOCK — severity is the gate.
+        self.assertEqual(self._report(("high", "validated")).verdict["status"], "BLOCK_SHIP")
 
 
 class PrivacyChokepointTests(unittest.TestCase):

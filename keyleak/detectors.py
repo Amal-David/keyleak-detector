@@ -549,10 +549,13 @@ DETECTORS = [
     ),
     Detector(
         "gh_actions_unpinned_action",
-        # `uses: org/repo@<ref>` where <ref> is NOT a 40-hex commit SHA.
-        r"uses:\s*['\"]?[A-Za-z0-9._-]+/[A-Za-z0-9._-]+@(?![0-9a-fA-F]{40}\b)[^\s'\"]+",
+        # `uses: org/repo[/sub/path][.yml]@<ref>` where <ref> is NOT a 40-hex SHA.
+        # The optional `(?:/[\w.-]+)*` segment covers reusable workflows
+        # (`org/repo/.github/workflows/x.yml@main`), which are a real supply-chain
+        # vector (gate D4-FN1).
+        r"uses:\s*['\"]?[A-Za-z0-9._-]+/[A-Za-z0-9._-]+(?:/[A-Za-z0-9._-]+)*@(?![0-9a-fA-F]{40}\b)[^\s'\"]+",
         "medium",
-        "GitHub Actions step pins a third-party action to a mutable tag/branch, not a full commit SHA. Tags can be moved to point at malicious code after you've reviewed them.",
+        "GitHub Actions step pins a third-party action or reusable workflow to a mutable tag/branch, not a full commit SHA. Tags can be moved to point at malicious code after you've reviewed them.",
         "Pin every `uses:` to a full 40-character commit SHA, e.g. `actions/checkout@<sha>  # v4.2.0`. Tags and branches are mutable; a compromised maintainer can repoint them.",
         ["ci"],
         12,
@@ -563,6 +566,23 @@ DETECTORS = [
         ("https://docs.github.com/en/actions/security-guides/security-hardening-for-github-actions#using-third-party-actions",),
         False,
         "Supply-chain worms (Shai-Hulud lineage, 2025-2026) and the 'Megalodon'/'prt-scan' campaigns repointed action tags at credential-stealing code. A SHA pin is immutable: even if the upstream tag is moved to malicious code, your workflow keeps running the reviewed commit.",
+    ),
+    Detector(
+        "gh_actions_unpinned_docker_action",
+        # `uses: docker://image:tag` with no `@sha256:` digest pin.
+        r"uses:\s*['\"]?docker://(?![^\s'\"]*@sha256:)[^\s'\"]+",
+        "medium",
+        "GitHub Actions step uses a `docker://` container action pinned by a mutable tag (or `latest`), not an immutable `@sha256:` digest.",
+        "Pin container actions by digest: `uses: docker://image@sha256:<digest>`. A tag can be repushed to malicious content; a digest cannot.",
+        ["ci"],
+        12,
+        0,
+        "leak",
+        "gh_actions_unpinned_docker_action",
+        "lead",
+        ("https://docs.github.com/en/actions/security-guides/security-hardening-for-github-actions#using-third-party-actions",),
+        False,
+        "A `docker://` image referenced by tag is repository-mutable: the registry can repush `:3.18` or `:latest` to a credential stealer between your review and the next run. Digest pinning (`@sha256:`) makes the pulled image bit-for-bit immutable.",
     ),
     Detector(
         "gh_actions_write_all_permissions",
