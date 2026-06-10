@@ -45,6 +45,9 @@ test('blocks IPv4-mapped IPv6 (gate MF-1): loopback and cloud metadata', () => {
   // End to end through canScanUrl from a hostile page.
   assert.equal(canScanUrl('http://[::ffff:169.254.169.254]/latest/meta-data/', 'https://evil.com/'), false);
   assert.equal(canScanUrl('http://[::ffff:127.0.0.1]/', 'https://evil.com/'), false);
+  // R2 hardening: translated (::ffff:0:x) and NAT64 (64:ff9b::x) trailing IPv4.
+  assert.equal(isBlockedScanHost(new URL('http://[::ffff:0:169.254.169.254]/').hostname), true);
+  assert.equal(isBlockedScanHost(new URL('http://[64:ff9b::127.0.0.1]/').hostname), true);
 });
 
 test('same-origin allowance is port-bound (gate MF-3)', () => {

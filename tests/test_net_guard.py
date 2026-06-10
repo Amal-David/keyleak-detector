@@ -102,6 +102,12 @@ class GuardedRequestTests(unittest.TestCase):
         self.assertIsNotNone(url_block_reason("http://169.254.169.254/"))
         self.assertIsNotNone(url_block_reason("notaurl"))
 
+    def test_url_block_reason_rejects_non_http_schemes(self):
+        # R2 hardening: only http(s) may egress (gopher/ftp/file/data blocked).
+        for url in ["gopher://93.184.216.34:6379/", "ftp://93.184.216.34/x",
+                    "file:///etc/passwd", "data:text/plain,hi"]:
+            self.assertIsNotNone(url_block_reason(url), url)
+
 
 if __name__ == "__main__":
     unittest.main()

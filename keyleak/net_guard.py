@@ -64,14 +64,20 @@ def scan_target_block_reason(hostname: Optional[str], *, allow_private: Optional
 
 
 def url_block_reason(url: str, *, allow_private: Optional[bool] = None) -> Optional[str]:
-    """Return a block reason for ``url`` (parses host, then applies the guard)."""
+    """Return a block reason for ``url`` (parses scheme+host, applies the guard)."""
     try:
-        host = urlparse(url).hostname
+        parsed = urlparse(url)
     except Exception:
         return "unparseable URL"
-    if not host:
+    # Only http(s) may egress. Without this, a redirect Location like
+    # ``gopher://host:6379/`` or ``ftp://host/`` would pass a host-only guard and
+    # be handed to the HTTP client — harmless today (no such adapter) but a latent
+    # vector if a caller mounts extra adapters (R2 hardening).
+    if parsed.scheme not in ("http", "https"):
+        return f"Refusing non-http(s) scheme {parsed.scheme!r}."
+    if not parsed.hostname:
         return "URL has no host"
-    return scan_target_block_reason(host, allow_private=allow_private)
+    return scan_target_block_reason(parsed.hostname, allow_private=allow_private)
 
 
 def guarded_request(

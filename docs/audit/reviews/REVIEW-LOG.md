@@ -60,3 +60,17 @@ Confirmed must-fixes:
 suite 220 Python + 20 extension green. One documented residual (DNS rebinding,
 medium, mitigations in place). **R2 re-review pending** to confirm the redirect and
 mapped-IPv6 closures hold.
+
+## R2 — re-review of R1 fixes: **88/100 (PASS, bar 85)**
+
+Re-reviewer reproduced every closure against HEAD and CONFIRMED all six must-fixes
+closed (redirect re-validation incl. protocol-relative/capital-Location; mapped-IPv6
+incl. fully-expanded/mixed-case; redirect:'manual'; full-origin compare; phone-regex;
+extension scrub). No working exploit remains; no overclaims; rebinding residual
+honestly documented. Two non-blocking hardening notes — both applied:
+- **http(s)-scheme check** added to `net_guard.url_block_reason` (blocks a redirect to
+  `gopher://`/`ftp://`/`file:` slipping the host-only guard). Test added.
+- **mapped-IPv6 regex broadened** to cover `::ffff:0:x.x.x.x` (translated) and
+  `64:ff9b::x.x.x.x` (NAT64) trailing IPv4. Test added.
+
+**Tier 0 LOCKED.** 221 Python + 20 extension tests green.

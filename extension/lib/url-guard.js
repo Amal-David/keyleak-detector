@@ -36,15 +36,17 @@ export function isBlockedScanHost(hostname) {
   if (host === '::1' || host === '::') return true;
   if (host.startsWith('fe80:') || host.startsWith('fc') || host.startsWith('fd')) return true;
 
-  // IPv4-mapped IPv6 (::ffff:x.x.x.x). The WHATWG URL parser normalizes the
-  // dotted form to hex (::ffff:a9fe:a9fe), so handle both — otherwise
+  // IPv4-mapped / -translated IPv6 and NAT64. The WHATWG URL parser normalizes
+  // the dotted form to hex (::ffff:a9fe:a9fe), so handle both — otherwise
   // http://[::ffff:169.254.169.254]/ would reach cloud metadata (gate MF-1).
-  if (host.includes('::ffff:') || host.includes(':ffff:')) {
-    const dotted = host.match(/:ffff:(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
+  // Also covers ::ffff:0:x.x.x.x (translated) and 64:ff9b::x.x.x.x (NAT64) by
+  // extracting any trailing 32-bit IPv4 (dotted or two hex groups).
+  if (host.includes(':') && (host.includes('ffff:') || host.startsWith('64:ff9b'))) {
+    const dotted = host.match(/:(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
     if (dotted) {
       if (isBlockedIpv4(Number(dotted[1]), Number(dotted[2]), Number(dotted[3]), Number(dotted[4]))) return true;
     }
-    const hex = host.match(/:ffff:([0-9a-f]{1,4}):([0-9a-f]{1,4})$/);
+    const hex = host.match(/:([0-9a-f]{1,4}):([0-9a-f]{1,4})$/);
     if (hex) {
       const hi = parseInt(hex[1], 16);
       const lo = parseInt(hex[2], 16);
