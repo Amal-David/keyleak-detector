@@ -85,3 +85,13 @@ Two must-fixes found and resolved:
 - **D4-FN (70→fixed):** unpinned reusable workflows + `docker://` tag actions
   slipped. Regex broadened + new `gh_actions_unpinned_docker_action`. Tests added.
 No false positives found in D4. E1 SHA pins API-verified. 237 Python + 20 extension green.
+
+## R4 — D2 lifecycle scanner + holistic branch pass: **86/100 (PASS)**
+
+Final holistic reviewer ran the full suite (243 green, no flakiness), confirmed
+Tier-0 safety intact, no regressions, and docs honest. Verdict: "sound to hand to
+a human reviewer." Flagged D2 as an honest-but-narrow first cut with confirmed FNs
+— all closed in R4 hardening:
+- nested-monorepo node_modules; sh -c "$(curl)" / ;-chained / PowerShell forms;
+  bare user/repo shorthand + remote tarball deps; per-file size cap; bun FP fix;
+  truncation info-finding. 11 D2 tests.
