@@ -74,3 +74,14 @@ honestly documented. Two non-blocking hardening notes — both applied:
   `64:ff9b::x.x.x.x` (NAT64) trailing IPv4. Test added.
 
 **Tier 0 LOCKED.** 221 Python + 20 extension tests green.
+
+## R3 — Tier 1 (B1/B2/B3) + D4 + E1: **82/100 → fixed**
+
+Reviewer ran the suite (234 green) and confirmed B1 (92), B2 (95), E1 (95) solid.
+Two must-fixes found and resolved:
+- **B3-MF1 (62→fixed):** verdict counted the static detector default `validated`
+  as "actively confirmed" (33/37 high-crit detectors). Now only `confirmed`
+  (live probe) counts; static matches say "static detections — verify". Tests updated.
+- **D4-FN (70→fixed):** unpinned reusable workflows + `docker://` tag actions
+  slipped. Regex broadened + new `gh_actions_unpinned_docker_action`. Tests added.
+No false positives found in D4. E1 SHA pins API-verified. 237 Python + 20 extension green.
