@@ -11,9 +11,9 @@ Legend: effort S(<2h) / M(half-day) / L(day+). Status ⬜ todo · 🔄 doing · 
 
 | ID | Item | Fixes | Effort | Status |
 |----|------|-------|--------|--------|
-| **A1** | **Fix S0 SSRF in BaaS probe.** Wrap every prober so each request URL is validated through `net_guard.scan_target_block_reason` (block loopback/link-local/private/metadata) **and** scope-checked to the scanned page's registrable domain. Applies whether the prober is default or injected. Thread the same guard from `app.py`/`browser_scanner` → `validate_baas_config`. | W1 | M | ⬜ |
-| A2 | **Extension remote-fetch SSRF guard** — private/link-local/loopback block in `service-worker.js fetchAndAnalyzeRemote`. | W11 | S | ⬜ |
-| A3 | **Single PII-scrub chokepoint** — redact in `Finding` construction so the privacy promise holds on browser/BaaS findings, not just local-file. | W7 | S | ⬜ |
+| **A1** | **Fix S0 SSRF in BaaS probe.** Wrap every prober so each request URL is validated through `net_guard.scan_target_block_reason` (block loopback/link-local/private/metadata) **and** scope-checked to the scanned page's registrable domain. Applies whether the prober is default or injected. Thread the same guard from `app.py`/`browser_scanner` → `validate_baas_config`. | W1 | M | ✅ |
+| A2 | **Extension remote-fetch SSRF guard** — private/link-local/loopback block in `service-worker.js fetchAndAnalyzeRemote`. | W11 | S | ✅ |
+| A3 | **Single PII-scrub chokepoint** — redact in `Finding` construction so the privacy promise holds on browser/BaaS findings, not just local-file. | W7 | S | ✅ |
 
 ## Tier 1 — Make the marquee features real (stop overclaiming)
 
