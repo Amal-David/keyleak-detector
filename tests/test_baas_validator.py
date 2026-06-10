@@ -715,6 +715,15 @@ class SSRFGuardTests(unittest.TestCase):
     All assertions use IP literals, so no DNS or network is exercised.
     """
 
+    def setUp(self):
+        # Make the default-blocking expectations independent of a preset env var.
+        self._env = mock.patch.dict(os.environ, {}, clear=False)
+        self._env.start()
+        os.environ.pop(ALLOW_PRIVATE_ENV, None)
+
+    def tearDown(self):
+        self._env.stop()
+
     INTERNAL = [
         "http://169.254.169.254/rest/v1/users",   # cloud metadata (link-local)
         "http://127.0.0.1:8000/rest/v1/users",     # loopback

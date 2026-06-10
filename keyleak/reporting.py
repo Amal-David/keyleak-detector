@@ -223,12 +223,16 @@ def format_html(report: ScanReport) -> str:
     chain_cards = []
     for chain in payload.get("attack_chains") or []:
         c_sev = str(chain.get("severity") or "").lower()
+        c_conf = str(chain.get("confidence") or "")
+        # Don't paint a lead-confidence chain green/"confirmed" (honesty: a chain
+        # whose members are static leads is not an actively-confirmed attack).
+        conf_cls = "badge-confirmed" if c_conf == "confirmed" else "badge-lead"
         chain_cards.append(
             f"""    <div class="finding {e(c_sev)}">
       <div class="finding-head">
         <span class="sev {e(c_sev)}">{e(c_sev.upper())}</span>
         <span class="finding-type">{e(str(chain.get('name') or ''))}</span>
-        <span class="badge-confirmed">{e(str(chain.get('confidence') or ''))}</span>
+        <span class="{e(conf_cls)}">{e(c_conf)}</span>
       </div>
       <div class="finding-detail">{e(str(chain.get('narrative') or ''))}</div>
       <div class="finding-fix">Fix: <code>{e(str(chain.get('remediation') or ''))}</code></div>
@@ -318,6 +322,7 @@ def format_html(report: ScanReport) -> str:
   .sev.medium {{ background: var(--yellow); color: #0a0a0f; }}
   .sev.low {{ background: var(--blue); color: #0a0a0f; }}
   .badge-confirmed {{ font-size: 10px; color: var(--green); border: 1px solid rgba(81,207,102,.3); padding: 1px 6px; border-radius: 3px; }}
+  .badge-lead {{ font-size: 10px; color: var(--yellow); border: 1px solid rgba(255,212,59,.35); padding: 1px 6px; border-radius: 3px; }}
   .finding-type {{ font-size: 14px; font-weight: 600; color: var(--text); }}
   .finding-detail {{ font-size: 13px; color: var(--text2); margin-bottom: 6px; }}
   .finding-evidence {{ font-family: var(--mono); font-size: 12px; background: var(--surface2); padding: 8px 12px; border-radius: 6px; color: var(--text); margin: 8px 0; overflow-x: auto; white-space: nowrap; }}

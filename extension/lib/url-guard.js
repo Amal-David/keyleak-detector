@@ -32,9 +32,13 @@ export function isBlockedScanHost(hostname) {
 
   if (host === 'localhost' || host.endsWith('.localhost')) return true;
 
-  // IPv6: loopback, unspecified, link-local (fe80::/10), unique-local (fc00::/7)
-  if (host === '::1' || host === '::') return true;
-  if (host.startsWith('fe80:') || host.startsWith('fc') || host.startsWith('fd')) return true;
+  // IPv6 literals only: loopback, unspecified, link-local (fe80::/10),
+  // unique-local (fc00::/7). Gate on a colon so public domains like
+  // 'fc-barcelona.com' or 'fd-foo.io' are NOT blocked.
+  if (host.includes(':')) {
+    if (host === '::1' || host === '::') return true;
+    if (host.startsWith('fe80:') || host.startsWith('fc') || host.startsWith('fd')) return true;
+  }
 
   // IPv4-mapped / -translated IPv6 and NAT64. The WHATWG URL parser normalizes
   // the dotted form to hex (::ffff:a9fe:a9fe), so handle both — otherwise

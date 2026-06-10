@@ -2,7 +2,7 @@
 
 Auditor stance: adversarial QA / release engineering. A green suite that doesn't
 verify intent is worse than no suite. All claims grounded in real files under
-`/Users/amal/experiments/keyleak-vuln-program`.
+`<repo>`.
 
 ## Real suite state (measured)
 

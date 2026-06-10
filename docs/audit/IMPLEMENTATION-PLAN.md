@@ -27,14 +27,14 @@ Legend: effort S(<2h) / M(half-day) / L(day+). Status ⬜ todo · 🔄 doing · 
 
 | ID | Item | Fixes | Effort | Status |
 |----|------|-------|--------|--------|
-| **C1** | **One front door:** `keyleak check [path|url]` — runs a real multi-pack profile, prints which packs ran/skipped, emits a **coverage-aware** verdict. Align `local`/`demo` defaults. | W6 | M | ⬜ |
+| **C1** | **One front door:** `keyleak check [path\|url]` — runs a real multi-pack profile, prints which packs ran/skipped, emits a **coverage-aware** verdict. Align `local`/`demo` defaults. | W6 | M | ⬜ |
 | C2 | **Surface unification** — shared evaluator so browser/extension apply the same FP guards + `min_entropy` + client-key downgrade + capture-group/multi-match as the CLI. Coverage-gate the extension verdict (no "SAFE TO SHIP" before real inspection). | W2, W9 | L | ⬜ |
 
 ## Tier 3 — Threat currency (the last-6-months "protect yourself" checks)
 
 | ID | Item | Source | Effort | Status |
 |----|------|--------|--------|--------|
-| **D1** | **Live deployed-surface probe** — read-only marker-confirmed GETs for `/.env`, `/.git/config`, `/.git/HEAD`, Spring `/actuator/env|heapdump`, unauth LLM `/api/tags`,`/v1/models`. Behind scope guard + caps. "Run this before you deploy." | gap #1,#3,#4 | M | ⬜ |
+| **D1** | **Live deployed-surface probe** — read-only marker-confirmed GETs for `/.env`, `/.git/config`, `/.git/HEAD`, Spring `/actuator/env\|heapdump`, unauth LLM `/api/tags`,`/v1/models`. Behind scope guard + caps. "Run this before you deploy." | gap #1,#3,#4 | M | ⬜ |
 | D2 | **Dependency lifecycle-hook scanner** — walk `node_modules/*/package.json` (+ root) for `pre/post/install`+`prepare` hooks invoking bun/curl/base64/git-ref; operationalizes this repo's CLAUDE.md supply-chain rules. | gap #2 | M | ✅ |
 | D3 | **Refresh Shai-Hulud IOCs** to 2.0 / Miasma (new C2 hosts, `environment_source.js`/`bun_installer.js`, repo-description markers). | gap #6 | S | ⬜ |
 | D4 | **GitHub Actions hardening detectors** — unpinned `uses:@tag`, `permissions: write-all`, secret echoed in `run:`. | gap #7 | S | ✅ |

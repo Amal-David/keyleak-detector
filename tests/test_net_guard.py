@@ -92,6 +92,36 @@ class GuardedRequestTests(unittest.TestCase):
         self.assertEqual(resp.status_code, 200)
         self.assertEqual(len(sess.calls), 2)
 
+    def test_strips_credentials_on_cross_host_redirect(self):
+        # An auth token must not be forwarded to a different host on redirect.
+        sess = _FakeSession([
+            _FakeResp(302, {"location": "https://8.8.8.8/v2"}),
+            _FakeResp(200),
+        ])
+
+        captured = []
+        orig = sess.request
+        def record(method, url, **kw):
+            captured.append(dict(kw.get("headers") or {}))
+            return orig(method, url, **kw)
+        sess.request = record
+
+        guarded_request("GET", "https://93.184.216.34/v1", session=sess,
+                        headers={"Authorization": "Bearer X", "Cookie": "s=1", "Accept": "*/*"})
+        self.assertIn("Authorization", captured[0])           # first hop keeps creds
+        self.assertNotIn("Authorization", captured[1])         # cross-host hop drops them
+        self.assertNotIn("Cookie", captured[1])
+        self.assertIn("Accept", captured[1])                   # non-cred headers survive
+
+    def test_post_downgrades_to_get_on_303(self):
+        sess = _FakeSession([
+            _FakeResp(303, {"location": "https://93.184.216.34/done"}),
+            _FakeResp(200),
+        ])
+        guarded_request("POST", "https://93.184.216.34/submit", session=sess, data="x=1")
+        self.assertEqual(sess.calls[0][0], "POST")
+        self.assertEqual(sess.calls[1][0], "GET")  # 303 → GET
+
     def test_too_many_redirects_raises(self):
         sess = _FakeSession([_FakeResp(302, {"location": "https://93.184.216.34/next"}) for _ in range(10)])
         with self.assertRaises(SSRFBlocked):

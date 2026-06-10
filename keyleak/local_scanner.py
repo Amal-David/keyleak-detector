@@ -91,7 +91,9 @@ def scan_path(
     # node_modules, so a malicious dependency's preinstall/postinstall is
     # otherwise invisible. Runs when the leak pack is active and a manifest is
     # present. Read-only.
-    if "leak" in active_packs and ((target / "package.json").is_file() or (target / "node_modules").is_dir()):
+    if "leak" in active_packs and target.is_dir():
+        # audit_node_dependencies walks for node_modules anywhere under target
+        # (incl. nested monorepo packages/*/node_modules) and no-ops if none.
         from .lifecycle_audit import audit_node_dependencies
         findings.extend(audit_node_dependencies(str(target)))
 

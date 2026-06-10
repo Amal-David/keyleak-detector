@@ -91,13 +91,14 @@ class PreflightTests(unittest.TestCase):
         self.assertIsNone(preflight(None))
 
     def test_unreachable_loopback_proxy_raises(self):
+        # Hold the bound (not listening) socket open while preflight runs, so the
+        # OS can't reassign the port mid-test (race) — connect is still refused.
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
             sock.bind(("127.0.0.1", 0))
             _, port = sock.getsockname()
-
-        with self.assertRaises(ProxyError) as ctx:
-            preflight(f"socks5://127.0.0.1:{port}", timeout=0.2)
-        self.assertIn("not reachable", str(ctx.exception))
+            with self.assertRaises(ProxyError) as ctx:
+                preflight(f"socks5://127.0.0.1:{port}", timeout=0.2)
+            self.assertIn("not reachable", str(ctx.exception))
 
     def test_unreachable_warp_gives_hint(self):
         with mock.patch.object(proxy.socket, "create_connection",

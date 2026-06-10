@@ -98,6 +98,25 @@ class LifecycleAuditTests(unittest.TestCase):
             r, "node_modules/p/package.json", {"name": "p", "scripts": {"postinstall": "bun run build"}}))
         self.assertEqual(findings, [])
 
+    def test_credentials_in_dep_spec_are_masked(self):
+        findings = self._audit(lambda r: _write(
+            r, "node_modules/p/package.json",
+            {"name": "p", "dependencies": {"x": "git+https://u:ghp_supersecrettoken@github.com/o/r.git"}}))
+        f = next(f for f in findings if f.type == "npm_git_ref_dependency")
+        blob = f.evidence.snippet + f.evidence.redacted_value + f.risk_reason
+        self.assertNotIn("ghp_supersecrettoken", blob)
+        self.assertIn("***", blob)
+
+    def test_max_manifests_param_reflected_in_truncation_notice(self):
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d)
+            for i in range(4):
+                _write(root, f"node_modules/p{i}/package.json", {"name": f"p{i}"})
+            findings = audit_node_dependencies(str(root), max_manifests=2)
+            note = next(f for f in findings if f.type == "lifecycle_audit_truncated")
+            self.assertIn("2", note.risk_reason)          # reports the applied cap, not 5000
+            self.assertNotIn("5000", note.risk_reason)
+
     def test_malformed_and_oversized_manifests_do_not_crash(self):
         with tempfile.TemporaryDirectory() as d:
             root = Path(d)

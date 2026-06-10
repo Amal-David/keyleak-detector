@@ -13,7 +13,7 @@ test('scrubText masks adjacent PII', () => {
 
 test('scrubText does not eat digits inside a secret token (FIX1-MF2)', () => {
   // The phone pattern must not start inside an alphanumeric token.
-  assert.equal(scrubText('sk_live_4242424242424242'), 'sk_live_4242424242424242');
+  assert.equal(scrubText('token_4242424242424242'), 'token_4242424242424242');
 });
 
 test('scrubSnippet preserves the redacted secret token', () => {

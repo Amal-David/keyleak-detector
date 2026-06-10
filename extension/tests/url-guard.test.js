@@ -17,6 +17,17 @@ test('allows public hosts', () => {
   }
 });
 
+test('fc/fd ULA checks apply to IPv6 literals only, not public domains', () => {
+  // Public domains starting with fc/fd must NOT be blocked (regression).
+  assert.equal(isBlockedScanHost('fc-barcelona.com'), false);
+  assert.equal(isBlockedScanHost('fd-foo.io'), false);
+  assert.equal(isBlockedScanHost('fcgroup.example'), false);
+  // Actual ULA / link-local IPv6 literals stay blocked.
+  assert.equal(isBlockedScanHost('fc00::1'), true);
+  assert.equal(isBlockedScanHost('fd12:3456::1'), true);
+  assert.equal(isBlockedScanHost('fe80::1'), true);
+});
+
 test('canScanUrl rejects non-http and internal cross-host targets', () => {
   assert.equal(canScanUrl('ftp://example.com/x'), false);
   assert.equal(canScanUrl('file:///etc/passwd'), false);

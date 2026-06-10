@@ -19,27 +19,40 @@ _OBJECT_ID_RE = re.compile(
 )
 
 
+def _guarded_requests_get(url: str, **kwargs: Any) -> Any:
+    """Default fetch: SSRF-guard the (crawl-derived, attacker-influenceable)
+    target host before issuing a real request. Raising a ``RequestException`` for
+    a blocked host makes the caller skip the URL via its existing handler."""
+    from .net_guard import url_block_reason
+
+    reason = url_block_reason(url)
+    if reason:
+        raise requests.RequestException(f"SSRF guard refused target: {reason}")
+    return requests.get(url, **kwargs)
+
+
 def compare_access_control_urls(
     candidate_urls: Iterable[str],
     user_a_auth: Dict[str, Any],
     user_b_auth: Optional[Dict[str, Any]],
-    fetch: Callable[..., Any] = requests.get,
+    fetch: Optional[Callable[..., Any]] = None,
     max_urls: int = 10,
 ) -> List[Finding]:
-    """Compare object-looking URLs with two explicit auth contexts."""
+    """Compare object-looking URLs with two explicit auth contexts.
+
+    The default fetch is SSRF-guarded at the egress point (see
+    ``_guarded_requests_get``), so the guard is not tied to a callable-identity
+    check — any real-network path goes through it. Injected fetches (tests) are
+    the caller's responsibility and never hit the real network.
+    """
     if not _has_auth(user_a_auth) or not _has_auth(user_b_auth or {}):
         return []
 
-    # Guard the real-network fetch against SSRF (candidate URLs are crawl-derived
-    # and so attacker-influenceable). Injected probers (tests) are trusted and
-    # never hit the network, so they bypass the guard.
-    guard_hosts = fetch is requests.get
-    from .net_guard import url_block_reason
+    if fetch is None:
+        fetch = _guarded_requests_get
 
     findings: List[Finding] = []
     for url in _candidate_object_urls(candidate_urls)[:max_urls]:
-        if guard_hosts and url_block_reason(url):
-            continue
         try:
             response_a = fetch(
                 url,

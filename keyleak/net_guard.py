@@ -110,13 +110,29 @@ def guarded_request(
     sess = session or _requests
     kwargs.pop("allow_redirects", None)  # we follow manually
     current = url
+    current_method = method.upper()
+    req_kwargs = dict(kwargs)
+    _CRED_HEADERS = {"authorization", "cookie", "proxy-authorization", "apikey", "x-api-key"}
     for _hop in range(max_redirects + 1):
         reason = url_block_reason(current, allow_private=allow_private)
         if reason:
             raise SSRFBlocked(reason)
-        resp = sess.request(method, current, allow_redirects=False, **kwargs)
+        resp = sess.request(current_method, current, allow_redirects=False, **req_kwargs)
         if resp.status_code in (301, 302, 303, 307, 308) and resp.headers.get("location"):
-            current = urljoin(current, resp.headers["location"])
+            nxt = urljoin(current, resp.headers["location"])
+            # On a cross-host redirect, strip credential-bearing headers so we
+            # never forward an auth token / cookie / api key to a different host.
+            if (urlparse(current).hostname or "").lower() != (urlparse(nxt).hostname or "").lower():
+                hdrs = {k: v for k, v in (req_kwargs.get("headers") or {}).items()
+                        if k.lower() not in _CRED_HEADERS}
+                req_kwargs["headers"] = hdrs
+            # HTTP semantics: 303 (and 301/302 for a non-idempotent verb) become a
+            # bodyless GET; 307/308 preserve method+body.
+            if resp.status_code == 303 or (resp.status_code in (301, 302) and current_method not in ("GET", "HEAD")):
+                current_method = "GET"
+                req_kwargs.pop("data", None)
+                req_kwargs.pop("json", None)
+            current = nxt
             continue
         return resp
     raise SSRFBlocked(f"Too many redirects (>{max_redirects}) starting from {url!r}.")

@@ -59,6 +59,16 @@ _DANGER_PATTERNS: Tuple[Tuple[Optional[re.Pattern], str, str], ...] = (
      "invokes Bun alongside a download/payload (Shai-Hulud / Miasma stager shape)", "high"),
 )
 
+# Credentials embedded in a dependency URL (e.g. https://user:token@host/...).
+# Dependency specs are emitted into findings, so mask userinfo before they land
+# in a report artifact (a git/https spec can carry a secret).
+_URL_AUTH_RE = re.compile(r"(?i)\b(https?|git|ssh)://([^/@\s]+)@")
+
+
+def _sanitize_spec(spec: str) -> str:
+    return _URL_AUTH_RE.sub(r"\1://***@", spec.strip())
+
+
 # A dependency value that is NOT a registry version: a git ref, github shorthand,
 # or a remote tarball — all bypass registry provenance.
 _GIT_REF_RE = re.compile(
@@ -69,9 +79,10 @@ _GIT_REF_RE = re.compile(
 )
 
 
-def _iter_manifests(root: Path) -> Tuple[List[Path], bool]:
+def _iter_manifests(root: Path, *, cap: int) -> Tuple[List[Path], bool]:
     """Root package.json + every package.json under ANY node_modules dir in the
-    tree (handles nested monorepo node_modules). Returns (paths, truncated)."""
+    tree (handles nested monorepo node_modules). Returns (paths, truncated),
+    where ``truncated`` reflects the *applied* ``cap``."""
     out: List[Path] = []
     truncated = False
     root_pkg = root / "package.json"
@@ -84,7 +95,7 @@ def _iter_manifests(root: Path) -> Tuple[List[Path], bool]:
             continue
         if "package.json" in filenames:
             out.append(Path(dirpath) / "package.json")
-            if len(out) >= MAX_MANIFESTS:
+            if len(out) >= cap:
                 truncated = True
                 return out, truncated
     return out, truncated
@@ -167,6 +178,7 @@ def _scan_git_ref_deps(manifest: Path, data: Dict) -> List[Finding]:
                 continue
             # optionalDependencies git-ref is the specific Shai-Hulud IOC.
             severity = "high" if dep_field == "optionalDependencies" else "medium"
+            safe_spec = _sanitize_spec(spec)  # mask any embedded credentials
             findings.append(
                 Finding(
                     type="npm_git_ref_dependency",
@@ -176,12 +188,12 @@ def _scan_git_ref_deps(manifest: Path, data: Dict) -> List[Finding]:
                     source=str(manifest),
                     evidence=Evidence(
                         source=str(manifest),
-                        snippet=f'"{dep_field}": {{ "{dep_name}": "{spec[:120]}" }}',
-                        redacted_value=f"{dep_name}={spec[:80]}",
+                        snippet=f'"{dep_field}": {{ "{dep_name}": "{safe_spec[:120]}" }}',
+                        redacted_value=f"{dep_name}={safe_spec[:80]}",
                     ),
                     risk_reason=(
                         f"'{pkg}' declares {dep_field} entry '{dep_name}' pinned to a git ref "
-                        f"({spec[:80]!r}) instead of a registry version. A git ref is mutable and "
+                        f"({safe_spec[:80]!r}) instead of a registry version. A git ref is mutable and "
                         f"bypasses registry provenance/scanning — Mini Shai-Hulud (2026) smuggled its "
                         f"payload through exactly an optionalDependencies git ref."
                     ),
@@ -212,8 +224,8 @@ def audit_node_dependencies(root: str, *, max_manifests: int = MAX_MANIFESTS) ->
     """
     root_path = Path(root).expanduser().resolve()
     findings: List[Finding] = []
-    manifests, truncated = _iter_manifests(root_path)
-    manifests = manifests[:max_manifests]
+    cap = min(max(1, int(max_manifests)), MAX_MANIFESTS)
+    manifests, truncated = _iter_manifests(root_path, cap=cap)
     for manifest in manifests:
         try:
             if manifest.stat().st_size > MAX_MANIFEST_BYTES:
@@ -235,9 +247,9 @@ def audit_node_dependencies(root: str, *, max_manifests: int = MAX_MANIFESTS) ->
                 confidence=0.5,
                 detector_id="leak.lifecycle_audit_truncated",
                 source=str(root_path),
-                evidence=Evidence(source=str(root_path), redacted_value=f"capped at {MAX_MANIFESTS} manifests"),
+                evidence=Evidence(source=str(root_path), redacted_value=f"capped at {cap} manifests"),
                 risk_reason=(
-                    f"The dependency lifecycle audit stopped after {MAX_MANIFESTS} package.json files; "
+                    f"The dependency lifecycle audit stopped after {cap} package.json files; "
                     f"some node_modules manifests were NOT scanned. Coverage is incomplete."
                 ),
                 remediation="Run the audit on subtrees, or raise the cap, to cover the full dependency tree.",

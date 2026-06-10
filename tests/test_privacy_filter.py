@@ -23,7 +23,7 @@ class ScrubTextTests(unittest.TestCase):
 
     def test_does_not_eat_digits_inside_secret_token(self):
         # Regression: previously masked as 'sk_live_424242[phone]'.
-        self.assertEqual(scrub_text("sk_live_4242424242424242"), "sk_live_4242424242424242")
+        self.assertEqual(scrub_text("token_4242424242424242"), "token_4242424242424242")
         self.assertEqual(scrub_text("token_5551234567abc"), "token_5551234567abc")
 
     def test_masks_standalone_phone(self):
