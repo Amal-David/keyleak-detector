@@ -153,7 +153,9 @@ The `--html` flag generates a self-contained dark-theme vulnerability report:
 | **Client-side auth** | `isAdmin === true` checks in browser JS | Pattern detection in bundles |
 | **Write access** | Tables accepting INSERT/UPDATE without auth | `Prefer: tx=rollback` probing (never creates data) |
 | **Auth config** | Missing email confirmation, exposed auth settings | Supabase auth endpoint probing |
-| **Supply chain** | npm lifecycle hooks, Git-ref optionalDeps, Pwn Request patterns | AST + fingerprint detection |
+| **Supply chain** | Malicious npm lifecycle hooks (download-and-exec, base64/PowerShell/Bun stagers), Git-ref/tarball deps — incl. inside `node_modules` | Structured manifest scan (Shai-Hulud / Miasma class) |
+| **Attack chains** | Individual findings correlated into real attack paths (e.g. anon key + RLS-less table = unauth exfil) | Correlation engine over the merged findings |
+| **CI/CD hardening** | Unpinned GitHub Actions / reusable workflows / `docker://` tags, `permissions: write-all`, secrets echoed in `run:` | Workflow-file detectors |
 | **Local files** | `.env`, MCP configs, CI workflows, Docker files, source maps | `keyleak local` scanner |
 
 ## Chrome Extension Features
@@ -165,6 +167,27 @@ The `--html` flag generates a self-contained dark-theme vulnerability report:
 - **AIza classification**: Distinguishes Google Maps keys (expected) from Gemini AI keys (leaked)
 - **87 vendor CDN suppression**: No false positives from Google Analytics, PostHog, Segment, etc.
 - **200+ first-party domains**: Google, Microsoft, AWS, Apple, Meta, Anthropic, Stripe -- their own keys on their own sites are never flagged
+
+## v0.6.0 -- What's New
+
+A security-and-usefulness release. Full notes in [CHANGELOG.md](CHANGELOG.md).
+
+- **Attack-chain correlation** -- KeyLeak now chains findings the way an attacker
+  does: a published anon key **+** a table readable without RLS is reported as one
+  unauthenticated-exfiltration path, in the JSON/Markdown/HTML report.
+- **Scan bundles** -- `keyleak bundles` and `--bundle <id>` run named groups of
+  checks (secrets, baas, authz, recon, deep, …) instead of "everything or nothing".
+- **Dependency lifecycle-hook scanner** -- catches malicious `preinstall`/
+  `postinstall`/`prepare` scripts and git-ref deps **inside `node_modules`** (the
+  Shai-Hulud / Miasma / Bitwarden-CLI supply-chain class) that the regex pack skips.
+- **GitHub Actions hardening detectors** -- unpinned actions, `write-all`, secret echo.
+- **Security hardening** -- fixed an SSRF in the active BaaS prober (page-controlled
+  URLs could reach internal/cloud-metadata hosts); redirect-revalidating egress
+  guard; PII scrubbing now spans **every** scan surface; confidence-aware ship verdict.
+- **CI** -- `pull_request`-triggered, SHA-pinned workflow running the test suites +
+  launch-gate.
+- **Chrome extension v1.2.0** -- PII scrubbing, JS-library CVE detection, and an
+  SSRF-guarded remote fetch (see [CHANGELOG.md](CHANGELOG.md#chrome-extension)).
 
 ## v0.5.0 -- What's New
 
