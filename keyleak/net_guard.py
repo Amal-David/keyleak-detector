@@ -109,6 +109,7 @@ def guarded_request(
 
     sess = session or _requests
     kwargs.pop("allow_redirects", None)  # we follow manually
+    kwargs.setdefault("timeout", 15)     # defensive ceiling so a probe can't hang
     current = url
     current_method = method.upper()
     req_kwargs = dict(kwargs)

@@ -28,6 +28,7 @@ def _guarded_requests_get(url: str, **kwargs: Any) -> Any:
     reason = url_block_reason(url)
     if reason:
         raise requests.RequestException(f"SSRF guard refused target: {reason}")
+    kwargs.setdefault("timeout", 15)  # defensive ceiling so a probe can't hang
     return requests.get(url, **kwargs)
 
 
