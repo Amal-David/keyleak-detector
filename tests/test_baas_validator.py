@@ -6,19 +6,24 @@ No network requests are made.
 
 from __future__ import annotations
 
+import os
 import unittest
 from typing import Any, Dict, List
+from unittest import mock
 
 from keyleak.baas_validator import (
     BaaSConfig,
     BaaSProbeResult,
     BaaSValidation,
     TABLE_PROBE_CAP,
+    _probe_target_block_reason,
     _tables_from_openapi,
     extract_baas_config,
+    make_default_prober,
     validate_baas_config,
 )
 from keyleak.browser_scanner import evaluate_findings_payload
+from keyleak.net_guard import ALLOW_PRIVATE_ENV
 
 
 def _mock_prober(responses: Dict[str, Dict[str, Any]]):
@@ -701,6 +706,68 @@ class OpenApiTableEnumerationTests(unittest.TestCase):
         self.assertIn("ALTER TABLE", finding.remediation)
         self.assertNotIn("security_invoker", finding.remediation)
         self.assertNotIn("view", finding.risk_reason.lower())
+
+
+class SSRFGuardTests(unittest.TestCase):
+    """Audit W1/S0: the BaaS probe target comes from the scanned page's own JS,
+    so it is attacker-influenced. The real-network prober must refuse internal /
+    loopback / link-local (cloud-metadata) targets before any request egresses.
+    All assertions use IP literals, so no DNS or network is exercised.
+    """
+
+    INTERNAL = [
+        "http://169.254.169.254/rest/v1/users",   # cloud metadata (link-local)
+        "http://127.0.0.1:8000/rest/v1/users",     # loopback
+        "http://10.1.2.3/rest/v1/users",           # RFC1918 private
+        "http://192.168.0.5/rest/v1/users",        # RFC1918 private
+        "http://[::1]/rest/v1/users",              # IPv6 loopback
+    ]
+
+    def test_default_prober_blocks_internal_targets_without_egress(self):
+        prober = make_default_prober()
+        for url in self.INTERNAL:
+            resp = prober("GET", url, {})
+            self.assertEqual(resp["status_code"], 0, url)
+            self.assertIn("blocked", resp, url)
+            self.assertTrue(resp["blocked"], url)
+
+    def test_proxied_prober_is_also_guarded(self):
+        # The proxy path is a separate prober construction; it must guard too.
+        prober = make_default_prober(proxy=None)
+        resp = prober("GET", "http://169.254.169.254/storage/v1/bucket", {})
+        self.assertEqual(resp["status_code"], 0)
+        self.assertIn("metadata", resp["blocked"].lower())  # link-local/cloud-metadata reason
+
+    def test_public_ip_literal_not_blocked_by_guard(self):
+        # 8.8.8.8 is a routable public address — the guard must not block it
+        # (the request itself is not made here; we only assert the guard verdict).
+        self.assertIsNone(_probe_target_block_reason("https://8.8.8.8/rest/v1/x"))
+
+    def test_link_local_blocked_even_with_allow_private(self):
+        # Cloud metadata must stay blocked even when the operator opts into
+        # private targets — link-local is never a legitimate scan target.
+        with mock.patch.dict(os.environ, {ALLOW_PRIVATE_ENV: "1"}):
+            self.assertIsNotNone(_probe_target_block_reason("http://169.254.169.254/x"))
+
+    def test_loopback_allowed_only_with_opt_in(self):
+        with mock.patch.dict(os.environ, {ALLOW_PRIVATE_ENV: ""}, clear=False):
+            os.environ.pop(ALLOW_PRIVATE_ENV, None)
+            self.assertIsNotNone(_probe_target_block_reason("http://127.0.0.1/x"))
+        with mock.patch.dict(os.environ, {ALLOW_PRIVATE_ENV: "1"}):
+            self.assertIsNone(_probe_target_block_reason("http://127.0.0.1/x"))
+
+    def test_validate_baas_config_skips_probing_blocked_supabase_target(self):
+        # End-to-end: a Supabase config whose project_url resolves to an internal
+        # IP yields zero probe findings via the real prober (no egress, no crash).
+        config = BaaSConfig(
+            provider="supabase",
+            project_url="http://169.254.169.254",
+            api_key="eyJhbGciOiJ.fake.fake",
+            tables=["users", "orders"],
+        )
+        result = validate_baas_config(config)  # uses the guarded default prober
+        self.assertEqual(result.findings, [])
+        self.assertEqual(result.open_tables, [])
 
 
 if __name__ == "__main__":

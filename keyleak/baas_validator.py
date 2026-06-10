@@ -16,11 +16,16 @@ import re
 import time
 from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, List, Optional, Tuple
+from urllib.parse import urlparse
 
 from .models import Evidence, Finding
 from .redaction import redact_url, redact_value
 
 BaaSProber = Callable[..., Dict[str, Any]]
+
+# A guard maps a hostname to a block reason (str) or None if the host is safe to
+# probe. Defaults to ``net_guard.scan_target_block_reason``.
+ProbeTargetGuard = Callable[[str], Optional[str]]
 
 TABLE_PROBE_CAP = 50
 BUCKET_PROBE_CAP = 10
@@ -99,14 +104,59 @@ class BaaSValidation:
 # Default HTTP prober — overridden by tests.
 # ---------------------------------------------------------------------------
 
-def make_default_prober(proxy: Optional[str] = None):
-    """Build an HTTP prober, optionally routing probes through ``proxy``."""
+def _probe_target_block_reason(
+    url: str,
+    *,
+    target_guard: Optional[ProbeTargetGuard] = None,
+    allow_private: Optional[bool] = None,
+) -> Optional[str]:
+    """Return a reason if ``url``'s host must not be probed (SSRF guard), else None.
+
+    The probe target comes from the scanned page's own JavaScript, so it is
+    attacker-influenced (audit W1/S0). We refuse to send a request to
+    non-routable / internal / cloud-metadata hosts. Defaults to
+    ``net_guard.scan_target_block_reason`` so egress is SSRF-safe even if a
+    caller forgets to supply a guard.
+    """
+    try:
+        host = urlparse(url).hostname
+    except Exception:
+        return "unparseable probe URL"
+    if not host:
+        return "probe URL has no host"
+    if target_guard is not None:
+        return target_guard(host)
+    from .net_guard import scan_target_block_reason
+
+    return scan_target_block_reason(host, allow_private=allow_private)
+
+
+# Response returned in place of a real request when the SSRF guard blocks a
+# target. status_code 0 makes every downstream probe treat it as "no result"
+# (no finding) rather than crashing the scan.
+def _blocked_response(reason: str) -> Dict[str, Any]:
+    return {"status_code": 0, "body": None, "headers": {}, "blocked": reason}
+
+
+def make_default_prober(proxy: Optional[str] = None, *, allow_private: Optional[bool] = None):
+    """Build an HTTP prober, optionally routing probes through ``proxy``.
+
+    Every request URL is SSRF-checked against ``net_guard`` before it leaves the
+    process: this is the single real-network egress point for BaaS probing, so
+    guarding here protects both the default and proxied paths (audit W1/S0).
+    Injected probers (tests, custom callers) bypass this by construction — they
+    never reach the real network.
+    """
 
     from .proxy import requests_proxies
 
     proxies = requests_proxies(proxy)
 
-    def _prober(method: str, url: str, headers: Dict[str, str], body: Optional[str] = None) -> Dict[str, Any]:  # pragma: no cover
+    def _prober(method: str, url: str, headers: Dict[str, str], body: Optional[str] = None) -> Dict[str, Any]:
+        reason = _probe_target_block_reason(url, allow_private=allow_private)
+        if reason:
+            return _blocked_response(reason)
+
         import requests as _requests
 
         kwargs: Dict[str, Any] = {"headers": headers, "timeout": 10}
@@ -283,11 +333,22 @@ def validate_baas_config(
     prober: Optional[BaaSProber] = None,
     js_extraction: Optional[Dict[str, Any]] = None,
     allow_write_probe: bool = False,
+    allow_private: Optional[bool] = None,
 ) -> BaaSValidation:
     """Run read-only probes against a BaaS configuration.
 
     Returns a ``BaaSValidation`` with enriched findings. All HTTP calls go
     through ``prober`` (defaults to ``requests`` in production).
+
+    SSRF safety (audit W1/S0): ``config.project_url`` is extracted from the
+    scanned page's own JavaScript and is therefore attacker-influenced. When the
+    real network prober is used (``prober is None``), the target host is
+    validated up front via ``net_guard`` and probing is skipped entirely for
+    non-routable / internal / cloud-metadata hosts, rather than emitting
+    misleading "key invalid" results. Injected probers (tests, custom callers)
+    are trusted and bypass this check; the real egress prober built by
+    ``make_default_prober`` is additionally guarded per-request as defense in
+    depth.
 
     By default the scan is strictly read-only. The one mutating probe — a test
     ``POST`` insert used to detect missing write-side RLS — is **skipped unless
@@ -296,6 +357,17 @@ def validate_baas_config(
     deployment and an un-rolled-back insert would write a row into the target's
     database. No built-in scan bundle enables it.
     """
+    if prober is None:
+        block_reason = _probe_target_block_reason(config.project_url, allow_private=allow_private)
+        if block_reason:
+            # Refuse to probe an internal/non-routable target. Return an empty
+            # validation (no findings) instead of a stream of HTTP-0 "key
+            # invalid" results that would misrepresent a blocked scan.
+            return BaaSValidation(
+                provider=config.provider,
+                project_url_redacted=redact_url(config.project_url),
+            )
+
     if config.provider == "supabase":
         return _validate_supabase(
             config, prober or _default_prober,
