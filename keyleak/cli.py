@@ -587,24 +587,50 @@ def _print_bundles() -> int:
 
 
 def _apply_bundle_selection(args: argparse.Namespace) -> int:
-    """Resolve --bundle into args.packs (the bundle's runtime packs) and report,
-    loudly, the phases it implies and any packs not yet populated."""
-    from .bundles import REPO_ONLY_PACKS, resolve_bundle, runnable_packs, unpopulated_packs
+    """Resolve --bundle into args.packs (the bundle's runtime packs).
+
+    Honesty contract (audit W4): a bundle must either run what it advertises or
+    say loudly that it does not. So we (a) HARD-FAIL a bundle with no runnable
+    detectors instead of running an empty scan that "passes", and (b) emit an
+    unmistakable WARNING naming the active phases this command does NOT execute,
+    so a passive-only run is never mistaken for active coverage.
+    """
+    from .bundles import (
+        NAVIGATION_PHASES, PROBING_PHASES, REPO_ONLY_PACKS,
+        resolve_bundle, runnable_packs, unpopulated_packs,
+    )
     try:
         bundle = resolve_bundle(args.bundle)
     except KeyError as exc:
         print(str(exc), file=sys.stderr)
         return 1
+
+    if not runnable_packs(bundle):
+        print(
+            f"[bundle] ERROR: bundle {bundle.id!r} has NO runnable detectors yet — "
+            f"its packs ({', '.join(bundle.packs)}) land in later milestones. Refusing "
+            f"to run a scan that would find nothing. Pick another bundle (`keyleak bundles`).",
+            file=sys.stderr,
+        )
+        return 1
+
     runtime_packs = [pack for pack in bundle.packs if pack not in REPO_ONLY_PACKS]
     args.packs = ",".join(runtime_packs)
     print(f"[bundle] {bundle.id}: packs={','.join(runtime_packs)} phases={','.join(bundle.phases)}", file=sys.stderr)
-    if not runnable_packs(bundle):
-        print(f"[bundle] WARNING: bundle {bundle.id!r} has NO runnable detectors yet — its packs/phases land in later milestones. This scan will find nothing until then.", file=sys.stderr)
+
     empties = unpopulated_packs(bundle)
     if empties:
         print(f"[bundle] note: packs not yet populated (skipped; land in later milestones): {', '.join(empties)}", file=sys.stderr)
-    if bundle.is_probing:
-        print("[bundle] note: active phases (crawl/probe/fuzz/authz_diff/baas_probe/mitm) are not yet orchestrated by the CLI (M3+); selecting pack detectors for now.", file=sys.stderr)
+
+    not_run = [p for p in bundle.phases if p in NAVIGATION_PHASES or p in PROBING_PHASES]
+    if not_run:
+        print(
+            f"[bundle] WARNING: this command runs PASSIVE detection only. The bundle's "
+            f"active phases are NOT executed here: {', '.join(not_run)}. "
+            f"Use `site-scan` (crawl/subdomain) or `browser-scan --baas-validate` (BaaS probes) "
+            f"to run them; do not read this passive result as active coverage.",
+            file=sys.stderr,
+        )
     return 0
 
 
