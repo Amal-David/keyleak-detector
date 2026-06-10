@@ -39,8 +39,8 @@ const JS_BUILTINS = [
   'json.parse', 'json.stringify', 'object.keys', 'object.values',
   'array.from', 'array.isarray', 'math.random', 'math.floor',
   'date.now', 'localstorage', 'sessionstorage', 'fetch',
-  'xmlhttprequest', 'promise', 'console.log', 'console.error',
-  'document.cookie', 'window.location',
+  'xmlhttprequest', 'promise', 'document.cookie', 'window.location',
+  'console.log', 'console.error',
 ];
 
 const PLACEHOLDER_PATTERNS = [

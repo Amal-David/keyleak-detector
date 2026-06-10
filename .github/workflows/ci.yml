@@ -1,0 +1,54 @@
+# KeyLeak CI — runs the test suites + launch-gate on every PR.
+#
+# Supply-chain hygiene (per CLAUDE.md): every `uses:` is pinned to a full commit
+# SHA (tags are mutable); the workflow is `pull_request`-triggered (NOT
+# pull_request_target); it uses no secrets, so no secret/OIDC scope is shared
+# with any release workflow.
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  python:
+    name: Python tests + launch-gate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@0b93645e9fea7318ecaed2b359559ac225c90a2b # v5.3.0
+        with:
+          python-version: "3.12"
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+      - name: Run unit tests (fails on collection errors)
+        run: |
+          # `unittest discover` exits non-zero on any error OR collection
+          # (import) failure, so a missing dep can no longer silently disable a
+          # whole suite the way it did pre-audit.
+          PYTHONPATH=. python -m unittest discover -s tests -v
+      - name: Launch-gate self-scan
+        run: |
+          PYTHONPATH=. python -m keyleak.cli local . --launch-profile launch-gate --fail-on high
+
+  extension:
+    name: Extension tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@39370e3970a6d050c480ffad4ff0ed4d3fdee5af # v4.1.0
+        with:
+          node-version: "20"
+      - name: Run extension test suite
+        run: |
+          cd extension && node --test

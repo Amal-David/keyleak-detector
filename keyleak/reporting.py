@@ -7,8 +7,34 @@ import json
 import shlex
 from typing import Any, Dict, Iterable, List, Optional
 
+from .attack_chains import correlate
 from .models import Finding, ScanReport, SEVERITY_ORDER, finding_from_legacy
+from .privacy_filter import scrub_snippet
 from .redaction import redact_url
+
+
+def _scrub_finding_pii(finding: Finding) -> Finding:
+    """Mask adjacent PII in a finding's evidence snippet, preserving the matched
+    (already-redacted) secret token.
+
+    Single chokepoint for the **Python report path**: every scan mode that builds
+    a report through ``build_report`` (local, CLI browser, site, BaaS) is scrubbed
+    here. Previously only ``local_scanner`` scrubbed, so CLI browser/BaaS/site
+    findings carried third-party emails/phones/cards into a report (audit W7).
+    Idempotent — re-scrubbing is a no-op — so local_scanner's earlier pass is
+    unaffected. The browser *extension* serializes findings client-side and
+    scrubs in its own ``extension/lib/reporting.js`` (parity, not this path).
+
+    Scope note: only ``evidence.snippet`` is scrubbed. ``source`` and
+    ``request_url`` are URLs already redacted via ``redact_url`` upstream; the
+    free-text ``risk_reason``/``remediation`` are tool-authored, not scanned
+    content, so they are not a PII vector. Snippet is the only field that carries
+    adjacent scanned content.
+    """
+    ev = finding.evidence
+    if ev is not None and ev.snippet:
+        ev.snippet = scrub_snippet(ev.snippet, ev.redacted_value or None)
+    return finding
 
 
 def build_report(
@@ -18,22 +44,33 @@ def build_report(
     attack_vectors: Optional[Dict[str, Any]] = None,
     profile: str = "launch-gate",
     packs: Optional[Iterable[str]] = None,
+    provenance: Optional[Dict[str, List[str]]] = None,
 ) -> ScanReport:
     normalized = normalize_findings(findings)
     normalized.extend(_attack_vector_findings(attack_vectors or {}))
     normalized.sort(key=lambda finding: SEVERITY_ORDER.get(finding.severity, 0), reverse=True)
     selected_packs = list(packs or _packs_from_findings(normalized))
 
+    # Meta-analysis: correlate individual findings into chained attack vectors
+    # (e.g. published anon key + a table readable without RLS = unauthenticated
+    # data exfiltration). ``target`` anchors single-URL scans to one host;
+    # ``provenance`` (set by site_scanner) supplies host co-location for crawls.
+    chains = correlate(normalized, provenance=provenance, target=target)
+
+    extra: Dict[str, Any] = {
+        "profile": profile,
+        "packs": selected_packs,
+        "pack_summary": _pack_summary(normalized, selected_packs),
+    }
+    if chains:
+        extra["attack_chains"] = [vector.to_dict() for vector in chains]
+
     return ScanReport(
         target=target,
         scan_mode=scan_mode,
         findings=normalized,
         retest_command=_retest_command(target, scan_mode),
-        extra={
-            "profile": profile,
-            "packs": selected_packs,
-            "pack_summary": _pack_summary(normalized, selected_packs),
-        },
+        extra=extra,
     )
 
 
@@ -47,6 +84,10 @@ def normalize_findings(findings: Iterable[Any]) -> List[Finding]:
                 normalized.append(Finding.from_dict(raw))
             else:
                 normalized.append(finding_from_legacy(raw))
+    # Single PII-scrub chokepoint: applies to every scan mode before any
+    # serializer sees the findings (audit W7).
+    for finding in normalized:
+        _scrub_finding_pii(finding)
     return normalized
 
 
@@ -66,8 +107,31 @@ def format_markdown(report: ScanReport) -> str:
         f"- Reason: {payload['verdict']['reason']}",
         f"- Re-test: `{payload['retest_command']}`",
         "",
-        "## Findings",
     ]
+
+    chains = payload.get("attack_chains") or []
+    if chains:
+        lines.append("## Attack chains")
+        lines.append("")
+        lines.append(
+            "Individual findings correlated into exploitable paths "
+            "(this is what an attacker actually chains together):"
+        )
+        for chain in chains:
+            lines.extend(
+                [
+                    "",
+                    f"### {chain['severity'].upper()}: {chain['name']}",
+                    f"- Confidence: `{chain['confidence']}`",
+                    f"- Hosts: `{', '.join(chain.get('hosts') or []) or 'n/a'}`",
+                    f"- Chained from: {len(chain.get('member_finding_ids') or [])} finding(s)",
+                    f"- Path: {chain['narrative']}",
+                    f"- Fix: {chain['remediation']}",
+                ]
+            )
+        lines.append("")
+
+    lines.append("## Findings")
 
     if not report.findings:
         lines.append("No findings detected.")
@@ -155,6 +219,34 @@ def format_html(report: ScanReport) -> str:
 
     findings_html = "\n\n".join(finding_cards) if finding_cards else "    <p>No findings detected.</p>"
 
+    # --- attack-chain cards (meta-analysis) ---
+    chain_cards = []
+    for chain in payload.get("attack_chains") or []:
+        c_sev = str(chain.get("severity") or "").lower()
+        c_conf = str(chain.get("confidence") or "")
+        # Don't paint a lead-confidence chain green/"confirmed" (honesty: a chain
+        # whose members are static leads is not an actively-confirmed attack).
+        conf_cls = "badge-confirmed" if c_conf == "confirmed" else "badge-lead"
+        chain_cards.append(
+            f"""    <div class="finding {e(c_sev)}">
+      <div class="finding-head">
+        <span class="sev {e(c_sev)}">{e(c_sev.upper())}</span>
+        <span class="finding-type">{e(str(chain.get('name') or ''))}</span>
+        <span class="{e(conf_cls)}">{e(c_conf)}</span>
+      </div>
+      <div class="finding-detail">{e(str(chain.get('narrative') or ''))}</div>
+      <div class="finding-fix">Fix: <code>{e(str(chain.get('remediation') or ''))}</code></div>
+    </div>"""
+        )
+    chains_section = ""
+    if chain_cards:
+        chains_section = (
+            '  <div class="section">\n'
+            '    <div class="section-title">Attack chains</div>\n\n'
+            + "\n\n".join(chain_cards)
+            + "\n  </div>\n\n"
+        )
+
     return f"""<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -230,6 +322,7 @@ def format_html(report: ScanReport) -> str:
   .sev.medium {{ background: var(--yellow); color: #0a0a0f; }}
   .sev.low {{ background: var(--blue); color: #0a0a0f; }}
   .badge-confirmed {{ font-size: 10px; color: var(--green); border: 1px solid rgba(81,207,102,.3); padding: 1px 6px; border-radius: 3px; }}
+  .badge-lead {{ font-size: 10px; color: var(--yellow); border: 1px solid rgba(255,212,59,.35); padding: 1px 6px; border-radius: 3px; }}
   .finding-type {{ font-size: 14px; font-weight: 600; color: var(--text); }}
   .finding-detail {{ font-size: 13px; color: var(--text2); margin-bottom: 6px; }}
   .finding-evidence {{ font-family: var(--mono); font-size: 12px; background: var(--surface2); padding: 8px 12px; border-radius: 6px; color: var(--text); margin: 8px 0; overflow-x: auto; white-space: nowrap; }}
@@ -265,7 +358,7 @@ def format_html(report: ScanReport) -> str:
     <div class="stat"><div class="stat-num low">{summary["low_severity"]}</div><div class="stat-label">Low</div></div>
   </div>
 
-  <div class="section">
+{chains_section}  <div class="section">
     <div class="section-title">Findings</div>
 
 {findings_html}

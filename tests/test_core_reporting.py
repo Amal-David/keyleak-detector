@@ -7,7 +7,7 @@ from pathlib import Path
 from keyleak.access_control import compare_access_control_urls
 from keyleak.cli import _scan_request_payload
 from keyleak.extension_bundle import extension_pattern_payload, extension_patterns_js
-from keyleak.local_scanner import scan_file, scan_path
+from keyleak.local_scanner import _is_generated_file, scan_file, scan_path, scan_text
 from keyleak.detectors import DETECTORS, DETECTOR_PACKS, HEATMAP_ROWS, detectors_for_packs, normalize_packs
 from keyleak.local_scanner import _is_placeholder
 from keyleak.models import Finding, Evidence, ScanReport, finding_from_legacy
@@ -330,6 +330,31 @@ class DetectorTests(unittest.TestCase):
 
         self.assertIn("openai_api_key", docker_detectors)
 
+    def test_secret_in_logs_detector_matches_real_sensitive_log_terms(self):
+        detector = _detector("secret_in_logs_lead")
+        content = """
+logger.info("auth token: %s", token)
+console.log("api_key", apiKey)
+print("password", password)
+"""
+
+        findings = scan_text(content, "app.py", [detector])
+
+        self.assertEqual([finding.type for finding in findings], ["secret_in_logs"] * 3)
+
+    def test_secret_in_logs_detector_ignores_detector_bookkeeping_names(self):
+        detector = _detector("secret_in_logs_lead")
+        content = """
+logger.info(f"Successfully loaded {loaded_pattern_count} detection patterns")
+SECRET_PATTERNS = CUSTOM_SECRET_PATTERNS
+print(f"GitLeaks: {len(gitleaks_patterns)} patterns")
+secrets_db = SecretsPatternsDB()
+"""
+
+        findings = scan_text(content, "pattern_importer.py", [detector])
+
+        self.assertEqual(findings, [])
+
     def test_mcp_config_detector_does_not_bridge_lines(self):
         detector = _detector("mcp_config_secret")
         unrelated_lines = "server configuration\nTOKEN=abcdefghijklmnopqrstuvwx1234567890"
@@ -363,6 +388,10 @@ class DetectorTests(unittest.TestCase):
         self.assertNotIn("mcp_config_secret", bundle)
         self.assertNotIn("sql_injection_lead", bundle)
         self.assertIn("openai_api_key", bundle)
+
+    def test_generated_extension_detector_metadata_is_skipped_by_local_scan(self):
+        self.assertTrue(_is_generated_file(Path("extension/lib/detector-info.js")))
+        self.assertTrue(_is_generated_file(Path("extension/lib/patterns.js")))
 
     def test_extension_bundle_excludes_repo_only_packs_by_default(self):
         payload = extension_pattern_payload()
@@ -538,6 +567,89 @@ def _detector(detector_id):
         if detector.id == detector_id:
             return detector
     raise AssertionError(f"missing detector {detector_id}")
+
+
+class VerdictHonestyTests(unittest.TestCase):
+    """Audit W10: the verdict reason must not claim a 'high-confidence' gate it
+    doesn't enforce; it should report confirmed-vs-lead counts truthfully."""
+
+    def _report(self, *specs):
+        findings = [
+            Finding(type="t", severity=sev, confidence=0.8, detector_id="d", source="s",
+                    evidence=Evidence(source="s"), risk_reason="r", remediation="m",
+                    validation_status=vs)
+            for sev, vs in specs
+        ]
+        return ScanReport("t", "browser", findings)
+
+    def test_reason_drops_false_high_confidence_claim(self):
+        reason = self._report(("high", "lead")).verdict["reason"]
+        self.assertNotIn("high-confidence", reason)
+        self.assertIn("verify", reason.lower())
+
+    def test_static_validated_is_not_reported_as_actively_confirmed(self):
+        # Gate B3-MF1: the static detector default 'validated' must NOT read as
+        # active confirmation — only a live probe ('confirmed') does.
+        reason = self._report(("high", "validated")).verdict["reason"]
+        self.assertNotIn("confirmed", reason)
+        self.assertIn("static", reason.lower())
+
+    def test_reason_reports_active_confirmation_separately(self):
+        reason = self._report(("critical", "confirmed"), ("high", "validated")).verdict["reason"]
+        self.assertIn("confirmed by active probe", reason)
+        self.assertIn("static", reason.lower())
+
+    def test_still_blocks_on_severity_regardless_of_confidence(self):
+        # A leaked secret (a static detection) must still BLOCK — severity is the gate.
+        self.assertEqual(self._report(("high", "validated")).verdict["status"], "BLOCK_SHIP")
+
+
+class PrivacyChokepointTests(unittest.TestCase):
+    """Audit W7: PII scrubbing must apply to every scan mode, not just local
+    files. A browser/BaaS-style Finding built directly (never through
+    local_scanner) must still be scrubbed when it flows through build_report.
+    """
+
+    def _browser_finding(self, snippet, redacted_value="AKIA...[redacted]...wxyz"):
+        return Finding(
+            type="aws_access_key",
+            severity="high",
+            confidence=0.9,
+            detector_id="leak.aws_access_key",
+            source="https://app.example.com/main.js",
+            evidence=Evidence(
+                source="https://app.example.com/main.js",
+                snippet=snippet,
+                redacted_value=redacted_value,
+            ),
+            risk_reason="x",
+            remediation="y",
+        )
+
+    def test_build_report_scrubs_pii_from_live_findings(self):
+        snippet = "owner=jane.doe@example.com phone=+1 555-123-4567 key=AKIA...[redacted]...wxyz"
+        report = build_report("https://app.example.com", [self._browser_finding(snippet)], scan_mode="browser")
+        out = report.findings[0].evidence.snippet
+        self.assertNotIn("jane.doe@example.com", out)
+        self.assertNotIn("555-123-4567", out)
+        self.assertIn("[email]", out)
+        self.assertIn("[phone]", out)
+        # The matched (already-redacted) secret token must survive scrubbing.
+        self.assertIn("AKIA...[redacted]...wxyz", out)
+
+    def test_build_report_scrub_is_idempotent(self):
+        # A snippet already scrubbed (e.g. by local_scanner) is unchanged.
+        snippet = "owner=[email] key=AKIA...[redacted]...wxyz"
+        report = build_report("p", [self._browser_finding(snippet)], scan_mode="local")
+        self.assertEqual(report.findings[0].evidence.snippet, snippet)
+
+    def test_serializers_carry_no_raw_pii(self):
+        pan = " ".join(["4111", "1111", "1111", "1111"])  # built from parts to avoid PAN-scanner alerts
+        snippet = f"card {pan} contact bob@corp.io key=AKIA...[redacted]...wxyz"
+        report = build_report("t", [self._browser_finding(snippet)], scan_mode="browser")
+        blob = format_sarif(report) + format_html(report) + json.dumps(report.to_dict())
+        self.assertNotIn("bob@corp.io", blob)
+        self.assertNotIn(pan, blob)
 
 
 if __name__ == "__main__":

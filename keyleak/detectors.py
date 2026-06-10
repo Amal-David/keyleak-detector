@@ -99,6 +99,15 @@ DETECTOR_PACKS = {
     "correctness": "N+1, regression, off-by-one, timezone/date, and semantic config leads.",
     "housekeeping": "Missing tests, dead code, and stale comments or docs.",
     "baas": "BaaS misconfiguration: open tables, exposed admin logic, storage, and RPC abuse vectors.",
+    # Runtime-vulnerability program packs (populated incrementally in M2-M7).
+    # Registered up front so scan bundles resolve through normalize_packs; a pack
+    # with no detectors yet simply contributes nothing until its milestone lands.
+    "injection": "Injection + input-validation leads found at runtime: SQLi/NoSQLi/SSTI/command/SSRF/open-redirect/traversal.",
+    "authn": "Authentication/session leads: JWT flaws, OAuth/OIDC, session + cookie, password reset, OTP-in-response, 2FA bypass.",
+    "client": "Client-side/browser leads: DOM XSS, prototype pollution, postMessage, tokens in web storage, clickjacking.",
+    "api": "API-layer leads: excessive data exposure, broken object/property-level authz, enumeration, GraphQL introspection/abuse.",
+    "recon": "Attack-surface/recon leads: subdomain takeover, debug/admin endpoints, exposed files, default credentials.",
+    "headers": "Security-header and cookie-flag hygiene (passive).",
 }
 
 HEATMAP_ROWS = {
@@ -520,7 +529,7 @@ DETECTORS = [
         "validated",
         ("https://www.stepsecurity.io/blog/mini-shai-hulud-is-back-a-self-spreading-supply-chain-attack-hits-the-npm-ecosystem", "https://tanstack.com/blog/npm-supply-chain-compromise-postmortem"),
         True,
-        "The Mini Shai-Hulud worm sends stolen credentials to the Session/Oxen messenger network (`filev2.getsession.org`, `seed{1,2,3}.getsession.org`) and uses `api.masscan.cloud` and `git-tanstack.com` for C2. If your code, logs, or build artifacts mention any of these, an installed dependency is already exfiltrating data.",
+        "The Mini Shai-Hulud worm sends stolen credentials to known Session/Oxen messenger, mass-scan, and fake TanStack infrastructure endpoints. If code, logs, or build artifacts mention the IOC domains matched by this detector, treat the installed dependency or host as already exfiltrating data.",
     ),
     Detector(
         "npm_prepare_bun_payload",
@@ -537,6 +546,75 @@ DETECTORS = [
         ("https://tanstack.com/blog/npm-supply-chain-compromise-postmortem",),
         True,
         "The TanStack worm executed its payload through `prepare: \"bun run tanstack_runner.js && exit 1\"` in the malicious tarball's package.json. Any install (developer machine or CI runner) immediately ran the harvester. `--ignore-scripts` blocks this vector entirely; pnpm v10 does it by default in CI.",
+    ),
+    Detector(
+        "gh_actions_unpinned_action",
+        # `uses: org/repo[/sub/path][.yml]@<ref>` where <ref> is NOT a 40-hex SHA.
+        # The optional `(?:/[\w.-]+)*` segment covers reusable workflows
+        # (`org/repo/.github/workflows/x.yml@main`), which are a real supply-chain
+        # vector (gate D4-FN1).
+        r"uses:\s*['\"]?[A-Za-z0-9._-]+/[A-Za-z0-9._-]+(?:/[A-Za-z0-9._-]+)*@(?![0-9a-fA-F]{40}\b)[^\s'\"]+",
+        "medium",
+        "GitHub Actions step pins a third-party action or reusable workflow to a mutable tag/branch, not a full commit SHA. Tags can be moved to point at malicious code after you've reviewed them.",
+        "Pin every `uses:` to a full 40-character commit SHA, e.g. `actions/checkout@<sha>  # v4.2.0`. Tags and branches are mutable; a compromised maintainer can repoint them.",
+        ["ci"],
+        12,
+        0,
+        "leak",
+        "gh_actions_unpinned_action",
+        "lead",
+        ("https://docs.github.com/en/actions/security-guides/security-hardening-for-github-actions#using-third-party-actions",),
+        False,
+        "Supply-chain worms (Shai-Hulud lineage, 2025-2026) and the 'Megalodon'/'prt-scan' campaigns repointed action tags at credential-stealing code. A SHA pin is immutable: even if the upstream tag is moved to malicious code, your workflow keeps running the reviewed commit.",
+    ),
+    Detector(
+        "gh_actions_unpinned_docker_action",
+        # `uses: docker://image:tag` with no `@sha256:` digest pin.
+        r"uses:\s*['\"]?docker://(?![^\s'\"]*@sha256:)[^\s'\"]+",
+        "medium",
+        "GitHub Actions step uses a `docker://` container action pinned by a mutable tag (or `latest`), not an immutable `@sha256:` digest.",
+        "Pin container actions by digest: `uses: docker://image@sha256:<digest>`. A tag can be repushed to malicious content; a digest cannot.",
+        ["ci"],
+        12,
+        0,
+        "leak",
+        "gh_actions_unpinned_docker_action",
+        "lead",
+        ("https://docs.github.com/en/actions/security-guides/security-hardening-for-github-actions#using-third-party-actions",),
+        False,
+        "A `docker://` image referenced by tag is repository-mutable: the registry can repush `:3.18` or `:latest` to a credential stealer between your review and the next run. Digest pinning (`@sha256:`) makes the pulled image bit-for-bit immutable.",
+    ),
+    Detector(
+        "gh_actions_write_all_permissions",
+        r"permissions:\s*write-all\b",
+        "medium",
+        "GitHub Actions workflow grants `permissions: write-all`, giving every job the maximum token scope (contents, packages, deployments, etc.).",
+        "Set least-privilege `permissions:` per job — start from `permissions: {}` and grant only what each job needs (e.g. `contents: read`). Never `write-all`.",
+        ["ci"],
+        12,
+        0,
+        "leak",
+        "gh_actions_write_all_permissions",
+        "lead",
+        ("https://docs.github.com/en/actions/security-guides/automatic-token-authentication#modifying-the-permissions-for-the-github_token",),
+        False,
+        "A `write-all` GITHUB_TOKEN handed to a job that runs untrusted code (a PR build, a compromised action) can push commits, publish packages, or create releases. Least-privilege scoping contains the blast radius if any step is compromised.",
+    ),
+    Detector(
+        "gh_actions_secret_echoed_in_run",
+        r"(?:echo|printf|print|cat)\b[^\n]{0,80}\$\{\{\s*secrets\.[A-Za-z0-9_]+",
+        "high",
+        "GitHub Actions `run:` step echoes a secret to stdout. Anything printed to the build log is visible to anyone with read access to the run and to any later step.",
+        "Never `echo`/`print` a `${{ secrets.* }}` value. Pass secrets via `env:` and let the tool read them from the environment; GitHub masks env-injected secrets in logs but not arbitrary string interpolation.",
+        ["ci"],
+        12,
+        0,
+        "leak",
+        "gh_actions_secret_echoed_in_run",
+        "lead",
+        ("https://docs.github.com/en/actions/security-guides/security-hardening-for-github-actions#using-secrets",),
+        False,
+        "Echoing a secret into the log is a direct exfiltration path: log access is broader than secret access, logs are retained, and forked-PR or compromised steps can read them. Masking only applies to registered secret values used as env vars, not to ad-hoc interpolation into shell commands.",
     ),
     Detector(
         "webhook_url",
@@ -556,7 +634,7 @@ DETECTORS = [
     ),
     Detector(
         "secret_in_logs_lead",
-        r"(?:console\.log|logger\.(?:debug|info|warn|error)|print\s*\()[\s\S]{0,120}(?:api[_-]?key|secret|token|password|authorization|cookie)",
+        r"(?:console\.log|logger\.(?:debug|info|warn|error)|print\s*\()[\s\S]{0,120}?(?<![a-z0-9_])(?:api[_-]?key|secret|token|password|authorization|cookie)(?![a-z0-9_])",
         "medium",
         "Secret-in-logs lead found.",
         "Remove secrets from logs, redact sensitive fields at the logger boundary, and rotate any value that may already have been written.",

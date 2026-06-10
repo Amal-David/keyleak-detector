@@ -169,11 +169,13 @@ try:
         use_cache=True,  # Cache patterns for 24 hours
         include_secrets_db=False  # Use GitLeaks patterns only (160+ patterns)
     )
-    logger.info(f"Successfully loaded {len(SECRET_PATTERNS)} detection patterns (custom + GitLeaks)")
+    loaded_pattern_count = len(SECRET_PATTERNS)
+    logger.info(f"Successfully loaded {loaded_pattern_count} detection patterns (custom + GitLeaks)")
 except Exception as e:
-    logger.warning(f"Failed to import GitLeaks patterns, using custom patterns only: {e}")
     SECRET_PATTERNS = CUSTOM_SECRET_PATTERNS
-    logger.info(f"Using {len(SECRET_PATTERNS)} custom detection patterns")
+    custom_pattern_count = len(SECRET_PATTERNS)
+    logger.warning(f"Failed to import GitLeaks patterns, using custom patterns only: {e}")
+    logger.info(f"Using {custom_pattern_count} custom detection patterns")
 
 # Compiled regex patterns for better performance
 COMPILED_PATTERNS = {}
@@ -183,7 +185,9 @@ for name, pattern in SECRET_PATTERNS.items():
     except (re.error, Exception) as e:
         logger.warning(f"Skipping invalid pattern '{name}': {e}")
 
-logger.info(f"Successfully compiled {len(COMPILED_PATTERNS)}/{len(SECRET_PATTERNS)} patterns")
+compiled_pattern_count = len(COMPILED_PATTERNS)
+total_pattern_count = len(SECRET_PATTERNS)
+logger.info(f"Successfully compiled {compiled_pattern_count}/{total_pattern_count} patterns")
 
 # Known false positives to filter out
 FALSE_POSITIVES = [
@@ -692,7 +696,7 @@ def analyze_content(content: str, source: str = '') -> List[Dict[str, Any]]:
             logger.warning(f"Failed to convert content to string: {e}")
             return findings
     
-    # Check for potential secrets using regex patterns
+    # Check for potential matches using regex patterns
     for name, pattern in COMPILED_PATTERNS.items():
         for match in pattern.finditer(content):
             value = match.group(1) if len(match.groups()) > 0 else match.group(0)

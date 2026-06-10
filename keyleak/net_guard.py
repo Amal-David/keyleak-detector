@@ -19,9 +19,14 @@ from __future__ import annotations
 import ipaddress
 import os
 import socket
-from typing import Optional
+from typing import Any, Dict, Optional
+from urllib.parse import urlparse, urljoin
 
 ALLOW_PRIVATE_ENV = "KEYLEAK_ALLOW_PRIVATE_TARGETS"
+
+
+class SSRFBlocked(Exception):
+    """Raised when a request target (initial or via redirect) fails the guard."""
 
 
 def _allow_private_default() -> bool:
@@ -56,3 +61,79 @@ def scan_target_block_reason(hostname: Optional[str], *, allow_private: Optional
             return (f"Refusing to scan '{hostname}' — it resolves to an internal address "
                     f"({ip}). Set {ALLOW_PRIVATE_ENV}=1 to allow scanning internal/local hosts.")
     return None
+
+
+def url_block_reason(url: str, *, allow_private: Optional[bool] = None) -> Optional[str]:
+    """Return a block reason for ``url`` (parses scheme+host, applies the guard)."""
+    try:
+        parsed = urlparse(url)
+    except Exception:
+        return "unparseable URL"
+    # Only http(s) may egress. Without this, a redirect Location like
+    # ``gopher://host:6379/`` or ``ftp://host/`` would pass a host-only guard and
+    # be handed to the HTTP client — harmless today (no such adapter) but a latent
+    # vector if a caller mounts extra adapters (R2 hardening).
+    if parsed.scheme not in ("http", "https"):
+        return f"Refusing non-http(s) scheme {parsed.scheme!r}."
+    if not parsed.hostname:
+        return "URL has no host"
+    return scan_target_block_reason(parsed.hostname, allow_private=allow_private)
+
+
+def guarded_request(
+    method: str,
+    url: str,
+    *,
+    allow_private: Optional[bool] = None,
+    max_redirects: int = 3,
+    session: Any = None,
+    **kwargs: Any,
+) -> Any:
+    """SSRF-safe HTTP request: validates the target host before connecting and
+    **re-validates every redirect hop** instead of letting ``requests`` follow
+    3xx into an unvalidated (possibly internal) host.
+
+    This is the shared egress primitive for probes that fetch attacker-influenced
+    URLs (BaaS config from page JS, subdomains from CT logs). Auto-redirects are
+    forced off; redirects are followed manually, guarding each ``Location``.
+
+    Raises ``SSRFBlocked`` if the initial target or any redirect target is
+    refused by the guard. Returns the final ``requests.Response``.
+
+    Residual risk (documented, not closed here): DNS rebinding between this
+    guard's resolution and the socket connect — see ``docs/audit``. Mitigated by
+    read-only probes, request caps, and host pre-validation; full connection-time
+    IP pinning is tracked as follow-up.
+    """
+    import requests as _requests
+
+    sess = session or _requests
+    kwargs.pop("allow_redirects", None)  # we follow manually
+    kwargs.setdefault("timeout", 15)     # defensive ceiling so a probe can't hang
+    current = url
+    current_method = method.upper()
+    req_kwargs = dict(kwargs)
+    _CRED_HEADERS = {"authorization", "cookie", "proxy-authorization", "apikey", "x-api-key"}
+    for _hop in range(max_redirects + 1):
+        reason = url_block_reason(current, allow_private=allow_private)
+        if reason:
+            raise SSRFBlocked(reason)
+        resp = sess.request(current_method, current, allow_redirects=False, **req_kwargs)
+        if resp.status_code in (301, 302, 303, 307, 308) and resp.headers.get("location"):
+            nxt = urljoin(current, resp.headers["location"])
+            # On a cross-host redirect, strip credential-bearing headers so we
+            # never forward an auth token / cookie / api key to a different host.
+            if (urlparse(current).hostname or "").lower() != (urlparse(nxt).hostname or "").lower():
+                hdrs = {k: v for k, v in (req_kwargs.get("headers") or {}).items()
+                        if k.lower() not in _CRED_HEADERS}
+                req_kwargs["headers"] = hdrs
+            # HTTP semantics: 303 (and 301/302 for a non-idempotent verb) become a
+            # bodyless GET; 307/308 preserve method+body.
+            if resp.status_code == 303 or (resp.status_code in (301, 302) and current_method not in ("GET", "HEAD")):
+                current_method = "GET"
+                req_kwargs.pop("data", None)
+                req_kwargs.pop("json", None)
+            current = nxt
+            continue
+        return resp
+    raise SSRFBlocked(f"Too many redirects (>{max_redirects}) starting from {url!r}.")

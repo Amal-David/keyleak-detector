@@ -18,10 +18,11 @@ class _Resp:
 
 
 class ProbeHostTests(unittest.TestCase):
-    # _probe_host does a local ``import requests``, so patch the real global.
+    # _probe_host fetches through net_guard.guarded_request (SSRF-safe: it
+    # validates the host and re-checks redirect hops), so we patch that layer.
     def test_flags_known_fingerprint(self):
         body = "<html><body>There isn't a GitHub Pages site here.</body></html>"
-        with mock.patch("requests.get", return_value=_Resp(body)):
+        with mock.patch("keyleak.net_guard.guarded_request", return_value=_Resp(body)):
             finding = st._probe_host("app.example.test", None, 8)
         self.assertIsNotNone(finding)
         self.assertEqual(finding.type, "subdomain_takeover")
@@ -30,12 +31,17 @@ class ProbeHostTests(unittest.TestCase):
         self.assertIn("GitHub Pages", finding.evidence.redacted_value)
 
     def test_benign_body_yields_nothing(self):
-        with mock.patch("requests.get", return_value=_Resp("<html>Welcome to our app</html>")):
+        with mock.patch("keyleak.net_guard.guarded_request", return_value=_Resp("<html>Welcome to our app</html>")):
             self.assertIsNone(st._probe_host("ok.example.test", None, 8))
 
     def test_network_error_is_no_signal(self):
-        with mock.patch("requests.get", side_effect=requests.RequestException("boom")):
+        with mock.patch("keyleak.net_guard.guarded_request", side_effect=requests.RequestException("boom")):
             self.assertIsNone(st._probe_host("dead.example.test", None, 8))
+
+    def test_ssrf_blocked_target_is_no_signal(self):
+        from keyleak.net_guard import SSRFBlocked
+        with mock.patch("keyleak.net_guard.guarded_request", side_effect=SSRFBlocked("internal")):
+            self.assertIsNone(st._probe_host("internal.example.test", None, 8))
 
 
 class CheckSubdomainTakeoversTests(unittest.TestCase):

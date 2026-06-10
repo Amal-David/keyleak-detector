@@ -1,0 +1,257 @@
+[
+  {
+    "id": "rails-mass-assignment-admin-flag",
+    "name": "Mass Assignment \u2014 Privilege Escalation via Admin/Role Field",
+    "owasp_category": "A01:2021 Broken Access Control",
+    "frameworks": [
+      "Ruby on Rails"
+    ],
+    "description": "Rails models without strict strong-params permit lists allow attackers to POST extra fields (e.g., `user[admin]=1`, `user[role]=admin`) that map directly to protected database columns. Even with strong_parameters enabled, misconfigured `permit!` calls or overly broad `permit(:role)` admit escalation.",
+    "runtime_discovery": "Submit a registration or profile-update form and inject extra parameters: `user[admin]=true`, `user[role]=admin`, `user[is_staff]=1`. Compare the authenticated session's capabilities before and after; re-fetch the user profile endpoint as the same account to see if the field was persisted. Auth-diff by checking whether the modified account can reach admin-only routes that a normal account cannot.",
+    "detection_signal": "POST to `/users` or `/account` with appended params `user[admin]=1` returns HTTP 200/302 without a parameter-not-permitted error; subsequent GET to `/users/:id` or `/api/v1/me` returns `\"admin\":true` or `\"role\":\"admin\"` in the JSON response body, confirming the write was accepted.",
+    "active_probe": true,
+    "severity": "critical",
+    "prevalence": "common",
+    "slice": "rails",
+    "uid": "rails__rails-mass-assignment-admin-flag",
+    "class_hint": "bfla"
+  },
+  {
+    "id": "rails-default-route-action-exposure",
+    "name": "Default Catch-All Route Exposing Unintended Controller Actions",
+    "owasp_category": "A01:2021 Broken Access Control",
+    "frameworks": [
+      "Ruby on Rails"
+    ],
+    "description": "Legacy Rails apps may include the catch-all route `match ':controller(/:action(/:id))'` in routes.rb, exposing every public controller method as a URL without explicit authentication or authorization guards. This surfaces developer or admin actions never intended to be public.",
+    "runtime_discovery": "Crawl the app and enumerate URL patterns by guessing controller/action pairs: `/admin/index`, `/users/destroy/1`, `/orders/export`. Look for any action name that differs from the REST standard seven (index/show/new/create/edit/update/destroy). Attempt HTTP GET/POST to guessed routes and observe whether a 200 or redirect-with-content is returned instead of a 404.",
+    "detection_signal": "HTTP 200 response body with HTML or JSON content for a guessed path like `/<controller>/<non-restful-action>` that is not linked anywhere in the crawled surface; the response differs from a genuine 404 page (different status code, different Content-Length, or recognizable application chrome).",
+    "active_probe": true,
+    "severity": "high",
+    "prevalence": "occasional",
+    "slice": "rails",
+    "uid": "rails__rails-default-route-action-exposure",
+    "class_hint": "other"
+  },
+  {
+    "id": "rails-idor-activerecord-id",
+    "name": "IDOR via Unscoped ActiveRecord Lookups (Direct Object Reference)",
+    "owasp_category": "A01:2021 Broken Access Control",
+    "frameworks": [
+      "Ruby on Rails"
+    ],
+    "description": "Controllers that call `Model.find(params[:id])` without scoping to `current_user` allow any authenticated user to access any record by incrementing or fuzzing the ID. Rails' numeric auto-increment IDs make these trivially enumerable.",
+    "runtime_discovery": "Authenticate as User A, capture a resource URL such as `/invoices/42`. Authenticate as User B (different account), send a GET to `/invoices/41`, `/invoices/43`, `/invoices/1`. Auth-diff: if User B receives User A's data with a 200 instead of a 403/404, an IDOR is confirmed.",
+    "detection_signal": "User B's authenticated GET to `/resource/:id` owned by User A returns HTTP 200 with the resource body (name, email, data fields) that matches what User A sees; User B's own resource returns the same HTTP 200 structure, confirming no ownership enforcement.",
+    "active_probe": true,
+    "severity": "high",
+    "prevalence": "ubiquitous",
+    "slice": "rails",
+    "uid": "rails__rails-idor-activerecord-id",
+    "class_hint": "idor-bola"
+  },
+  {
+    "id": "rails-strong-params-permit-bang",
+    "name": "Strong Params `permit!` Whitelisting Everything",
+    "owasp_category": "A01:2021 Broken Access Control",
+    "frameworks": [
+      "Ruby on Rails"
+    ],
+    "description": "Calling `params.permit!` or `params.require(:user).permit!` whitelists all submitted parameters without restriction, functionally reverting Rails 4+ strong_parameters protection to Rails 3 behavior. Any model attribute \u2014 including computed or protected columns \u2014 becomes writable.",
+    "runtime_discovery": "Submit a form or JSON API body with extra fields commonly present in Rails user models: `[admin, role, confirmed, locked, stripe_customer_id, api_key]`. If a subset of those fields appear in the subsequent GET response or cause a behavior change (unlocked account, confirmed email without verification flow), `permit!` or an overly broad permit is in use.",
+    "detection_signal": "POST body containing `user[confirmed]=true` or `user[locked]=false` returns HTTP 200/302 and a follow-up GET to the user profile shows `\"confirmed\":true` or a changed field value; alternatively, the app does not return a Rails `ActionController::UnpermittedParameters` log error translated to a 400 for novel fields.",
+    "active_probe": true,
+    "severity": "high",
+    "prevalence": "occasional",
+    "slice": "rails",
+    "uid": "rails__rails-strong-params-permit-bang",
+    "class_hint": "mass-assignment"
+  },
+  {
+    "id": "rails-csrf-token-missing",
+    "name": "Missing or Bypassable CSRF Protection on State-Changing Endpoints",
+    "owasp_category": "A01:2021 Broken Access Control",
+    "frameworks": [
+      "Ruby on Rails"
+    ],
+    "description": "Rails includes CSRF protection via `protect_from_forgery`, but controllers that skip this callback or accept JSON content-type requests without verifying the token expose state-changing actions to cross-site request forgery. API-mode apps that incorrectly share cookie sessions with browser clients are a common pattern.",
+    "runtime_discovery": "Crawl all POST/PATCH/DELETE forms and API endpoints. For each, replay the request without the `authenticity_token` field or `X-CSRF-Token` header. If the server still processes the state change (returns 200 or 302 instead of 422 Unprocessable Entity), CSRF protection is absent or skipped.",
+    "detection_signal": "POST to a state-changing endpoint (password change, email update, account delete) without any `authenticity_token` parameter or `X-CSRF-Token` header returns HTTP 200 or 302 (success redirect) rather than HTTP 422 with a `ActionController::InvalidAuthenticityToken` error.",
+    "active_probe": true,
+    "severity": "high",
+    "prevalence": "common",
+    "slice": "rails",
+    "uid": "rails__rails-csrf-token-missing",
+    "class_hint": "csrf"
+  },
+  {
+    "id": "rails-open-redirect-redirect-to",
+    "name": "Open Redirect via Unsafe `redirect_to params[:return_to]`",
+    "owasp_category": "A01:2021 Broken Access Control",
+    "frameworks": [
+      "Ruby on Rails"
+    ],
+    "description": "Rails controllers frequently accept a `return_to`, `redirect`, or `next` URL parameter and pass it directly to `redirect_to`, which will follow an absolute URL to an external host if the value is not validated against an allowlist. This enables phishing and OAuth token-stealing flows.",
+    "runtime_discovery": "Identify login, logout, and OAuth callback endpoints. Append `?return_to=https://evil.example.com` (or `?redirect=//evil.example.com`). After completing the authentication flow, observe whether the browser or the HTTP response Location header points to the external domain.",
+    "detection_signal": "HTTP 302 response Location header contains an external host (e.g., `https://evil.example.com`) after submitting `?return_to=https://evil.example.com` to a login or post-auth endpoint; the redirect target differs from the application's own hostname.",
+    "active_probe": true,
+    "severity": "medium",
+    "prevalence": "common",
+    "slice": "rails",
+    "uid": "rails__rails-open-redirect-redirect-to",
+    "class_hint": "open-redirect"
+  },
+  {
+    "id": "rails-sql-injection-activerecord-string-interpolation",
+    "name": "SQL Injection via ActiveRecord String Interpolation",
+    "owasp_category": "A03:2021 Injection",
+    "frameworks": [
+      "Ruby on Rails"
+    ],
+    "description": "ActiveRecord's `where`, `order`, `group`, and `select` methods accept raw SQL strings. Developers who interpolate user input directly (`where(\"name = '#{params[:name]}'\")` or `order(params[:sort])`) bypass the parameterized query protection that the `?` placeholder syntax provides.",
+    "runtime_discovery": "In search, filter, and sort query parameters, inject SQL payloads: a single quote `'`, `' OR '1'='1`, `1; --`, and `1 ORDER BY 1--`. For sort parameters specifically try `name ASC, (SELECT SLEEP(2))--`. Observe whether the response produces a Rails SQL error (500 with ActiveRecord::StatementInvalid), returns unexpected extra rows, or shows measurable time delays.",
+    "detection_signal": "Injecting `'` into a query parameter produces HTTP 500 with body containing `ActiveRecord::StatementInvalid`, `PG::SyntaxError`, or `SQLite3::Exception`; or time-based payload `'; SELECT pg_sleep(3); --` causes response time to increase by 3+ seconds compared to baseline.",
+    "active_probe": true,
+    "severity": "critical",
+    "prevalence": "occasional",
+    "slice": "rails",
+    "uid": "rails__rails-sql-injection-activerecord-string-interpolation",
+    "class_hint": "sqli"
+  },
+  {
+    "id": "rails-xss-raw-html-output",
+    "name": "Reflected/Stored XSS via `raw`, `html_safe`, or Missing ERB Escaping",
+    "owasp_category": "A03:2021 Injection",
+    "frameworks": [
+      "Ruby on Rails"
+    ],
+    "description": "Rails' ERB templates auto-escape output by default, but developers who call `.html_safe`, `raw()`, or `content_tag` with unescaped user content reintroduce XSS. This is detectable at runtime wherever user-supplied strings are reflected back in responses.",
+    "runtime_discovery": "Submit the string `<script>alert(1)</script>` (and URL-encoded/double-encoded variants) into every text input, URL parameter, and HTTP header that appears to be reflected in the response. Check name fields, search boxes, profile fields, and error messages. Also attempt stored XSS by saving the payload and retrieving it in a subsequent GET.",
+    "detection_signal": "The literal string `<script>alert(1)</script>` (unencoded, not `&lt;script&gt;`) appears in the HTTP response body with Content-Type `text/html`, indicating the value was rendered without HTML-escaping.",
+    "active_probe": true,
+    "severity": "high",
+    "prevalence": "common",
+    "slice": "rails",
+    "uid": "rails__rails-xss-raw-html-output",
+    "class_hint": "xss"
+  },
+  {
+    "id": "rails-devise-user-enumeration",
+    "name": "User Enumeration via Devise Login/Reset Timing or Message Differences",
+    "owasp_category": "A07:2021 Identification and Authentication Failures",
+    "frameworks": [
+      "Ruby on Rails"
+    ],
+    "description": "Default Devise configurations return different error messages (`Invalid email or password` vs. `Email not found`) or exhibit measurable response-time differences for existing vs. non-existing accounts during login and password-reset flows, enabling attacker enumeration of valid usernames.",
+    "runtime_discovery": "Submit the login form with a known-valid email and wrong password; record status code, response body text, and response time. Repeat with a non-existent email. Compare the two responses for any difference in message text (e.g., `Invalid email or password` vs `No account found`), HTTP status, or response latency (>100ms delta indicates BCrypt only runs for existing accounts).",
+    "detection_signal": "Two login attempts return different response body text or differ in response time by more than 150ms: known email + bad password produces one string (`Invalid email or password`) while unknown email produces another (`Email not found`), or the timing delta indicates BCrypt computation only occurs on the valid-account path.",
+    "active_probe": true,
+    "severity": "medium",
+    "prevalence": "common",
+    "slice": "rails",
+    "uid": "rails__rails-devise-user-enumeration",
+    "class_hint": "rate-limit-enum"
+  },
+  {
+    "id": "rails-json-api-unpermitted-field-write",
+    "name": "JSON API Mass Assignment via Unpermitted Nested Attributes",
+    "owasp_category": "A01:2021 Broken Access Control",
+    "frameworks": [
+      "Ruby on Rails"
+    ],
+    "description": "Rails controllers that accept `accepts_nested_attributes_for` or JSON:API payloads may expose nested model writes when the strong-params permit list includes `relationships` or nested hashes broadly. An attacker can write to associated models (e.g., change another user's data via a nested `user_attributes` key) without direct access to that model's endpoint.",
+    "runtime_discovery": "On endpoints that accept nested JSON (e.g., `POST /projects` with `included` or `relationships`), inject additional nested attribute blocks targeting associated models: `{\"data\":{\"relationships\":{\"owner\":{\"data\":{\"id\":\"2\"}}}}}`. Check whether the ownership of the created/updated resource changed to the injected ID by fetching the object afterward.",
+    "detection_signal": "After submitting a nested JSON payload with a foreign key or relationship ID pointing to another user's resource, a GET to the created/updated object returns the injected association ID (e.g., `owner_id: 2` rather than the authenticated user's ID), confirming the nested attribute write was accepted.",
+    "active_probe": true,
+    "severity": "high",
+    "prevalence": "occasional",
+    "slice": "rails",
+    "uid": "rails__rails-json-api-unpermitted-field-write",
+    "class_hint": "mass-assignment"
+  },
+  {
+    "id": "rails-cookie-session-tampering",
+    "name": "Insecure Cookie-Based Session \u2014 Known/Weak Secret Key Base",
+    "owasp_category": "A02:2021 Cryptographic Failures",
+    "frameworks": [
+      "Ruby on Rails"
+    ],
+    "description": "Rails' cookie-based session is signed (and optionally encrypted) with `secret_key_base`. Applications using a default, publicly committed, or short secret allow an attacker to forge arbitrary session cookies, escalating to any user including admins.",
+    "runtime_discovery": "Capture the session cookie (`_session_store` or app-named cookie). Check if it decodes as a base64 JSON blob without encryption (older config) or a MessageEncryptor ciphertext. Attempt to decode the cookie using known default keys (e.g., `secret`). Separately, fuzz the session with a cookie containing serialized `{\"warden.user.user.key\":[[1],\"$2a$...\"]}`-style payloads to test whether an arbitrary user ID is accepted.",
+    "detection_signal": "Sending a crafted session cookie with a forged `user_id` returns HTTP 200 with response body containing the target user's email, name, or account data \u2014 confirming the signature was accepted and the server trusts the cookie value without re-validating identity.",
+    "active_probe": true,
+    "severity": "critical",
+    "prevalence": "occasional",
+    "slice": "rails",
+    "uid": "rails__rails-cookie-session-tampering",
+    "class_hint": "session"
+  },
+  {
+    "id": "rails-path-traversal-send-file",
+    "name": "Path Traversal via `send_file` / `send_data` with User-Controlled Path",
+    "owasp_category": "A01:2021 Broken Access Control",
+    "frameworks": [
+      "Ruby on Rails"
+    ],
+    "description": "Controllers that call `send_file(Rails.root.join('uploads', params[:filename]))` without sanitizing the filename parameter allow `../` traversal to read arbitrary files accessible to the Rails process, including `config/database.yml`, `config/credentials.yml.enc`, and `.env` files.",
+    "runtime_discovery": "Identify file download endpoints that accept a filename or path parameter (e.g., `/files/download?name=report.pdf`, `/attachments/123?filename=...`). Inject traversal sequences: `../../config/database.yml`, `%2e%2e%2fconfig%2fdatabase.yml`, `....//config//database.yml`. Check response Content-Type and body for YAML/env file content.",
+    "detection_signal": "HTTP 200 response with Content-Type `application/octet-stream` or `text/plain` whose body contains YAML keys like `adapter:`, `database:`, `password:` or environment variable assignments like `DATABASE_URL=`, indicating the server read a config file rather than the intended upload.",
+    "active_probe": true,
+    "severity": "critical",
+    "prevalence": "occasional",
+    "slice": "rails",
+    "uid": "rails__rails-path-traversal-send-file",
+    "class_hint": "path-traversal"
+  },
+  {
+    "id": "rails-verbose-error-pages-in-production",
+    "name": "Rails Verbose Error Pages Enabled in Production (config.consider_all_requests_local)",
+    "owasp_category": "A05:2021 Security Misconfiguration",
+    "frameworks": [
+      "Ruby on Rails"
+    ],
+    "description": "When `config.consider_all_requests_local = true` is left in `production.rb`, Rails renders full stack traces, source code snippets, environment variables, and request parameters in the browser on any unhandled exception, exposing internal architecture and secrets.",
+    "runtime_discovery": "Trigger an application error by submitting malformed input to a known endpoint (e.g., passing a string where an integer is expected for an ID, submitting an invalid enum value). Also probe for 500s with boundary inputs like extremely large payloads, null bytes, and invalid UTF-8 sequences. Observe whether the error page contains a stack trace with file paths and source code.",
+    "detection_signal": "HTTP 500 response body contains Rails error page markers: `<h1>` with the exception class name (e.g., `ActiveRecord::RecordNotFound`), a source code window showing `.rb` file lines, the full file system path under `/app/` or `/var/`, or the `Request Parameters` dump listing environment variables.",
+    "active_probe": true,
+    "severity": "medium",
+    "prevalence": "occasional",
+    "slice": "rails",
+    "uid": "rails__rails-verbose-error-pages-in-production",
+    "class_hint": "debug-endpoint"
+  },
+  {
+    "id": "rails-exposed-rails-routes-endpoint",
+    "name": "Exposed `/rails/info/routes` and `/rails/info/properties` in Production",
+    "owasp_category": "A05:2021 Security Misconfiguration",
+    "frameworks": [
+      "Ruby on Rails"
+    ],
+    "description": "Rails development helpers including `/rails/info/routes`, `/rails/info/properties`, and `/rails/mailers` expose the full application route table, framework version, middleware stack, and environment info. These are restricted to localhost by default but are sometimes left open in containerized or misconfigured production deployments.",
+    "runtime_discovery": "Send unauthenticated GET requests to `/rails/info/routes`, `/rails/info/properties`, `/rails/info`, `/rails/mailers`. Also try `/rails/info/routes.json`. Check response for route table HTML (table with `Helper`, `HTTP Verb`, `Path`, `Controller#Action` columns) or a properties page listing `Ruby version`, `RubyGems version`, `Rack version`, `Rails version`.",
+    "detection_signal": "HTTP 200 response to `GET /rails/info/routes` with HTML body containing a table of controller action mappings (e.g., `users#index`, `admin#dashboard`), or `GET /rails/info/properties` returning a properties table showing `Rails version:` and `Ruby version:` values \u2014 confirming the info controller is accessible without authorization.",
+    "active_probe": true,
+    "severity": "medium",
+    "prevalence": "occasional",
+    "slice": "rails",
+    "uid": "rails__rails-exposed-rails-routes-endpoint",
+    "class_hint": "other"
+  },
+  {
+    "id": "rails-insecure-direct-object-reference-globalize-locale",
+    "name": "Insecure Locale/Tenant Parameter Switching (Subdomain or `locale` Param Hijack)",
+    "owasp_category": "A01:2021 Broken Access Control",
+    "frameworks": [
+      "Ruby on Rails"
+    ],
+    "description": "Multi-tenant or multi-locale Rails apps that derive the current tenant or locale from a URL parameter or subdomain without validating it against the authenticated user's permitted tenants allow privilege escalation by simply changing the `locale`, `account_id`, or subdomain to another tenant's identifier.",
+    "runtime_discovery": "Authenticate as a user in tenant A (e.g., subdomain `acme.app.com` or `?account_id=1`). Then request the same resource endpoint substituting another tenant's identifier: `rival.app.com/dashboard` or `?account_id=2`. Auth-diff: if the response returns tenant B's data rather than a 403/404, the tenant boundary is not enforced at the data layer.",
+    "detection_signal": "Changing the `account_id` query parameter or subdomain in an authenticated request returns HTTP 200 with a response body containing a different tenant's organization name, user list, or data records \u2014 distinct from what the authenticated user's own tenant returns \u2014 confirming cross-tenant data access.",
+    "active_probe": true,
+    "severity": "critical",
+    "prevalence": "occasional",
+    "slice": "rails",
+    "uid": "rails__rails-insecure-direct-object-reference-globalize-locale",
+    "class_hint": "bfla"
+  }
+]

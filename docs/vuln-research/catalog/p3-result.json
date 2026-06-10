@@ -1,0 +1,2905 @@
+{
+  "kept_count": 266,
+  "clusters": [
+    {
+      "merge_key": "idor-bola",
+      "canonical_name": "Insecure Direct Object Reference / Broken Object-Level Authorization (IDOR/BOLA)",
+      "canonical_class": "idor-bola",
+      "member_uids": [
+        "api-rest__broken-object-level-authz-idor",
+        "node-express__express-idor-sequential-id",
+        "react-spa__react-idor-client-controlled-id",
+        "django-drf__drf-object-level-authz-bypass",
+        "rails__rails-idor-activerecord-id",
+        "fastapi__fastapi-idor-path-param",
+        "laravel-php__laravel-idor-eloquent-id",
+        "aspnet__aspnet-idor-id-enumeration",
+        "go-web__go-idor-numeric-id",
+        "drf-pagination-off-bola-IGNORE",
+        "authn-authz__idor-bola-numeric-id",
+        "java-spring__spring-security-method-bypass-idor",
+        "flask__flask-idor-numeric-id",
+        "angular-vue__spa-idor-numeric-ids",
+        "angular-vue__angular-bypass-route-guard",
+        "nextjs__nextjs-server-action-idor",
+        "baas-graphql__supabase-rls-bola-user-data",
+        "baas-graphql__graphql-bola-object-level-auth",
+        "authn-authz__bola-uuid-indirect",
+        "laravel-php__laravel-missing-route-auth-middleware",
+        "rails__rails-insecure-direct-object-reference-globalize-locale",
+        "django-drf__drf-pagination-off-bola",
+        "fastapi__fastapi-background-task-info-leak",
+        "laravel-php__laravel-storage-link-unprotected",
+        "baas-graphql__supabase-realtime-channel-bola"
+      ],
+      "frameworks": [
+        "agnostic",
+        "express",
+        "React",
+        "Django REST Framework",
+        "Ruby on Rails",
+        "FastAPI",
+        "Laravel",
+        "ASP.NET",
+        "net/http",
+        "gin",
+        "echo",
+        "Spring",
+        "Flask",
+        "Angular",
+        "Vue",
+        "Next.js",
+        "Supabase",
+        "GraphQL",
+        "Hasura"
+      ],
+      "best_severity": "critical",
+      "score": 100
+    },
+    {
+      "merge_key": "sqli",
+      "canonical_name": "SQL / ORM Injection (error-based, blind boolean, blind time, raw query, JPQL)",
+      "canonical_class": "sql-injection",
+      "member_uids": [
+        "injection-fuzz__sqli-error-based",
+        "injection-fuzz__sqli-boolean-blind",
+        "injection-fuzz__sqli-time-blind",
+        "flask__flask-sqli-via-raw-query",
+        "laravel-php__php-sql-injection-error-based",
+        "aspnet__aspnet-sql-injection-entity-raw-query",
+        "rails__rails-sql-injection-activerecord-string-interpolation",
+        "fastapi__fastapi-sql-injection-orm-bypass",
+        "java-spring__spring-data-jpql-injection"
+      ],
+      "frameworks": [
+        "agnostic",
+        "Flask",
+        "PHP",
+        "Laravel",
+        "ASP.NET",
+        "Ruby on Rails",
+        "FastAPI",
+        "SQLAlchemy",
+        "Spring",
+        "Hibernate"
+      ],
+      "best_severity": "critical",
+      "score": 100
+    },
+    {
+      "merge_key": "ssrf",
+      "canonical_name": "Server-Side Request Forgery (incl. cloud metadata SSRF)",
+      "canonical_class": "ssrf",
+      "member_uids": [
+        "node-express__express-ssrf-axios-got",
+        "fastapi__fastapi-ssrf-httpx-requests",
+        "go-web__go-ssrf-url-param",
+        "injection-fuzz__ssrf-basic",
+        "injection-fuzz__ssrf-cloud-metadata",
+        "angular-vue__angular-ssr-ssrf-httpbackend",
+        "nextjs__nextjs-ssrf-via-server-side-fetch"
+      ],
+      "frameworks": [
+        "agnostic",
+        "express",
+        "FastAPI",
+        "net/http",
+        "gin",
+        "echo",
+        "AWS",
+        "GCP",
+        "Azure",
+        "Angular",
+        "Next.js"
+      ],
+      "best_severity": "critical",
+      "score": 96
+    },
+    {
+      "merge_key": "jwt-flaw",
+      "canonical_name": "JWT Verification Flaw (alg=none, RS256/HS256 confusion, weak secret)",
+      "canonical_class": "jwt-flaw",
+      "member_uids": [
+        "node-express__express-jwt-alg-none",
+        "go-web__go-jwt-none-alg",
+        "angular-vue__spa-jwt-alg-none",
+        "authn-authz__jwt-alg-none",
+        "fastapi__fastapi-jwt-algorithm-confusion",
+        "java-spring__spring-jwt-none-alg",
+        "django-drf__drf-jwt-none-algorithm",
+        "authn-authz__jwt-alg-confusion-rs256-hs256",
+        "authn-authz__jwt-secret-weak",
+        "flask__flask-session-cookie-none-algo"
+      ],
+      "frameworks": [
+        "agnostic",
+        "express",
+        "net/http",
+        "gin",
+        "echo",
+        "Angular",
+        "Vue",
+        "FastAPI",
+        "Spring",
+        "Django REST Framework",
+        "Flask"
+      ],
+      "best_severity": "critical",
+      "score": 95
+    },
+    {
+      "merge_key": "mass-assignment",
+      "canonical_name": "Mass Assignment / Overposting / Broken Object Property-Level Authorization",
+      "canonical_class": "mass-assignment",
+      "member_uids": [
+        "node-express__express-mass-assignment-req-body",
+        "rails__rails-mass-assignment-admin-flag",
+        "laravel-php__laravel-mass-assignment",
+        "injection-fuzz__mass-assignment",
+        "api-rest__broken-object-property-level-authz",
+        "java-spring__spring-data-mass-assignment",
+        "django-drf__django-orm-mass-assignment",
+        "aspnet__aspnet-mass-assignment-overposting",
+        "go-web__go-echo-bind-mass-assignment",
+        "fastapi__fastapi-pydantic-mass-assignment",
+        "rails__rails-strong-params-permit-bang",
+        "rails__rails-json-api-unpermitted-field-write"
+      ],
+      "frameworks": [
+        "agnostic",
+        "express",
+        "Ruby on Rails",
+        "Laravel",
+        "Spring",
+        "Django REST Framework",
+        "ASP.NET MVC",
+        "gin",
+        "echo",
+        "FastAPI",
+        "Pydantic"
+      ],
+      "best_severity": "critical",
+      "score": 94
+    },
+    {
+      "merge_key": "debug-endpoint-exposure",
+      "canonical_name": "Generic Debug / Admin / Shadow Endpoint Exposed in Production",
+      "canonical_class": "debug-endpoint-exposure",
+      "member_uids": [
+        "node-express__express-debug-route-exposed",
+        "django-drf__django-debug-mode-on",
+        "flask__flask-debug-mode-exposed",
+        "flask__flask-exposed-config-endpoint",
+        "laravel-php__laravel-app-debug-enabled",
+        "ethical-recon__debug-admin-endpoint-exposure",
+        "fastapi__fastapi-dependency-override-env-leak",
+        "api-rest__api-unauthenticated-endpoint-shadow",
+        "rails__rails-verbose-error-pages-in-production",
+        "rails__rails-exposed-rails-routes-endpoint",
+        "aspnet__aspnet-debug-pages-yellow-screen",
+        "nextjs__nextjs-debug-error-overlay-in-prod",
+        "client-browser__js-framework-debug-mode",
+        "fastapi__fastapi-debug-mode-500-traceback",
+        "go-web__go-verbose-error-leakage",
+        "java-spring__spring-security-verbose-errors",
+        "django-drf__drf-verbose-400-orm-field-leak",
+        "ethical-recon__stack-trace-disclosure",
+        "api-rest__verbose-api-errors",
+        "server-error-traceback-leak"
+      ],
+      "frameworks": [
+        "agnostic",
+        "express",
+        "Django",
+        "Flask",
+        "Laravel",
+        "FastAPI",
+        "Ruby on Rails",
+        "ASP.NET",
+        "Next.js",
+        "Spring Boot",
+        "go"
+      ],
+      "best_severity": "critical",
+      "score": 95
+    },
+    {
+      "merge_key": "cors-misconfig",
+      "canonical_name": "CORS Misconfiguration (wildcard origin + credentials)",
+      "canonical_class": "cors-misconfig",
+      "member_uids": [
+        "node-express__express-cors-wildcard-credentialed",
+        "client-browser__cors-misconfiguration",
+        "ethical-recon__cors-misconfiguration",
+        "fastapi__fastapi-cors-wildcard",
+        "react-spa__react-cors-wildcard-api",
+        "java-spring__spring-cors-wildcard",
+        "flask__flask-cors-misconfiguration",
+        "laravel-php__laravel-cors-misconfiguration",
+        "aspnet__aspnet-cors-wildcard-credentialed",
+        "go-web__go-missing-cors-middleware",
+        "nextjs__nextjs-cors-wildcard-api-routes",
+        "angular-vue__spa-cors-misconfiguration",
+        "django-drf__django-cors-wildcard-credentials",
+        "client-browser__cors-wildcard-sensitive-api"
+      ],
+      "frameworks": [
+        "agnostic",
+        "express",
+        "FastAPI",
+        "React",
+        "Spring",
+        "Flask",
+        "Laravel",
+        "ASP.NET",
+        "go",
+        "Next.js",
+        "Angular",
+        "Vue",
+        "Django"
+      ],
+      "best_severity": "high",
+      "score": 94
+    },
+    {
+      "merge_key": "exposed-env-file",
+      "canonical_name": "Exposed .env / Secrets File Reachable Over HTTP",
+      "canonical_class": "secrets-exposure",
+      "member_uids": [
+        "ethical-recon__exposed-env-file",
+        "laravel-php__laravel-env-direct-access",
+        "ethical-recon__exposed-git-repository",
+        "laravel-php__laravel-forced-browsing-backup-files"
+      ],
+      "frameworks": [
+        "agnostic",
+        "Laravel",
+        "Django",
+        "Node.js/Express",
+        "Next.js",
+        "Rails",
+        "PHP"
+      ],
+      "best_severity": "critical",
+      "score": 100
+    },
+    {
+      "merge_key": "env-secrets-in-js-bundle",
+      "canonical_name": "Secrets Baked Into Client JS Bundle / Public Env Var Leak",
+      "canonical_class": "secrets-exposure",
+      "member_uids": [
+        "react-spa__react-env-vars-in-bundle",
+        "ethical-recon__js-secret-mining",
+        "nextjs__nextjs-env-var-leak-client-side",
+        "nextjs__nextjs-rsc-sensitive-data-in-client-component"
+      ],
+      "frameworks": [
+        "React",
+        "Create React App",
+        "Vite",
+        "Next.js",
+        "Vue",
+        "Angular",
+        "agnostic"
+      ],
+      "best_severity": "critical",
+      "score": 100
+    },
+    {
+      "merge_key": "supabase-rls-open-table",
+      "canonical_name": "BaaS Row-Level-Security / Access Rules Disabled (Supabase, Firebase, PocketBase, Appwrite)",
+      "canonical_class": "baas-rls",
+      "member_uids": [
+        "baas-graphql__supabase-rls-disabled-anon-read",
+        "baas-graphql__supabase-rls-disabled-anon-write",
+        "baas-graphql__firebase-rtdb-no-auth-rules",
+        "baas-graphql__supabase-rls-bypass-rpc",
+        "baas-graphql__supabase-storage-bucket-public",
+        "baas-graphql__firebase-storage-public-listing",
+        "baas-graphql__pocketbase-collection-no-api-rules",
+        "baas-graphql__appwrite-collection-guest-permission"
+      ],
+      "frameworks": [
+        "Supabase",
+        "Firebase",
+        "PocketBase",
+        "Appwrite"
+      ],
+      "best_severity": "critical",
+      "score": 100
+    },
+    {
+      "merge_key": "unauthenticated-api-access",
+      "canonical_name": "Unauthenticated / Missing-Auth API Endpoint (no auth middleware on route)",
+      "canonical_class": "broken-access-control",
+      "member_uids": [
+        "nextjs__nextjs-api-route-unprotected-auth",
+        "go-web__go-gin-missing-auth-middleware",
+        "fastapi__fastapi-missing-auth-dependency",
+        "api-rest__api-missing-auth-on-write"
+      ],
+      "frameworks": [
+        "Next.js",
+        "gin",
+        "echo",
+        "FastAPI",
+        "agnostic"
+      ],
+      "best_severity": "critical",
+      "score": 100
+    },
+    {
+      "merge_key": "bfla",
+      "canonical_name": "Broken Function-Level Authorization / Privilege Escalation (admin function reachable)",
+      "canonical_class": "bfla",
+      "member_uids": [
+        "api-rest__api-function-level-authz-bypass",
+        "authn-authz__bfla-admin-function-unauthenticated",
+        "java-spring__spring-security-privilege-escalation-role-check",
+        "nextjs__nextjs-api-route-missing-method-check",
+        "aspnet__aspnet-http-verb-tampering",
+        "django-drf__django-admin-custom-actions-unauth"
+      ],
+      "frameworks": [
+        "agnostic",
+        "Spring",
+        "Next.js",
+        "ASP.NET",
+        "Django"
+      ],
+      "best_severity": "critical",
+      "score": 94
+    },
+    {
+      "merge_key": "path-traversal",
+      "canonical_name": "Path Traversal / Directory Traversal (static file serving)",
+      "canonical_class": "path-traversal",
+      "member_uids": [
+        "injection-fuzz__path-traversal",
+        "node-express__express-path-traversal-serve-static",
+        "flask__flask-path-traversal",
+        "rails__rails-path-traversal-send-file",
+        "nextjs__nextjs-path-traversal-static-file-serving",
+        "aspnet__aspnet-path-traversal-static-files",
+        "go-web__go-gin-path-traversal"
+      ],
+      "frameworks": [
+        "agnostic",
+        "express",
+        "Flask",
+        "Ruby on Rails",
+        "Next.js",
+        "ASP.NET Core",
+        "gin",
+        "echo"
+      ],
+      "best_severity": "critical",
+      "score": 94
+    },
+    {
+      "merge_key": "spring-actuator-exposed",
+      "canonical_name": "Spring Boot Actuator Endpoints Exposed (env/heapdump/loggers)",
+      "canonical_class": "debug-endpoint-exposure",
+      "member_uids": [
+        "java-spring__spring-actuator-exposed",
+        "java-spring__spring-actuator-env-secrets",
+        "java-spring__spring-actuator-loggers-rce"
+      ],
+      "frameworks": [
+        "Spring Boot",
+        "Spring Actuator"
+      ],
+      "best_severity": "critical",
+      "score": 94
+    },
+    {
+      "merge_key": "ssti",
+      "canonical_name": "Server-Side Template Injection (Jinja2/Twig/FreeMarker/Angular CSTI)",
+      "canonical_class": "ssti",
+      "member_uids": [
+        "flask__flask-jinja2-ssti",
+        "injection-fuzz__ssti-template-injection",
+        "angular-vue__angular-csti-double-curly"
+      ],
+      "frameworks": [
+        "Flask",
+        "Jinja2",
+        "Twig",
+        "FreeMarker",
+        "Pebble",
+        "Velocity",
+        "Handlebars",
+        "Mako",
+        "Angular",
+        "AngularJS"
+      ],
+      "best_severity": "critical",
+      "score": 94
+    },
+    {
+      "merge_key": "nosql-injection",
+      "canonical_name": "NoSQL Injection (MongoDB operator injection)",
+      "canonical_class": "nosql-injection",
+      "member_uids": [
+        "node-express__express-nosql-injection-mongodb",
+        "injection-fuzz__nosqli-operator-injection"
+      ],
+      "frameworks": [
+        "express",
+        "mongoose",
+        "mongodb",
+        "Node.js",
+        "Meteor",
+        "Django",
+        "Flask"
+      ],
+      "best_severity": "critical",
+      "score": 96
+    },
+    {
+      "merge_key": "insecure-cookie-flags",
+      "canonical_name": "Insecure Session/Auth Cookie Flags (missing Secure/HttpOnly/SameSite)",
+      "canonical_class": "insecure-cookie",
+      "member_uids": [
+        "node-express__express-session-insecure-defaults",
+        "ethical-recon__insecure-cookie-flags",
+        "flask__flask-insecure-cookie-flags",
+        "aspnet__aspnet-forms-auth-cookie-insecure",
+        "laravel-php__laravel-session-fixation-cookie"
+      ],
+      "frameworks": [
+        "agnostic",
+        "express",
+        "Flask",
+        "ASP.NET",
+        "Laravel"
+      ],
+      "best_severity": "high",
+      "score": 91
+    },
+    {
+      "merge_key": "open-redirect",
+      "canonical_name": "Open Redirect (incl. OAuth code-leak via redirect_uri)",
+      "canonical_class": "open-redirect",
+      "member_uids": [
+        "injection-fuzz__open-redirect",
+        "authn-authz__oauth-open-redirect-code-leak",
+        "node-express__express-open-redirect",
+        "flask__flask-open-redirect",
+        "rails__rails-open-redirect-redirect-to",
+        "go-web__go-open-redirect",
+        "aspnet__aspnet-open-redirect-returnurl",
+        "angular-vue__spa-open-redirect-router",
+        "java-spring__spring-open-redirect",
+        "nextjs__nextjs-open-redirect-redirect-api",
+        "react-spa__react-open-redirect-spa-router",
+        "client-browser__open-redirect-client-side"
+      ],
+      "frameworks": [
+        "agnostic",
+        "express",
+        "Flask",
+        "Ruby on Rails",
+        "go",
+        "ASP.NET",
+        "Angular",
+        "Vue",
+        "Spring",
+        "Next.js",
+        "React"
+      ],
+      "best_severity": "high",
+      "score": 92
+    },
+    {
+      "merge_key": "csrf",
+      "canonical_name": "Missing/Disabled CSRF Protection (incl. OAuth state)",
+      "canonical_class": "csrf",
+      "member_uids": [
+        "rails__rails-csrf-token-missing",
+        "aspnet__aspnet-antiforgery-csrf",
+        "flask__flask-missing-csrf-protection",
+        "django-drf__django-csrf-exempt-api",
+        "go-web__go-missing-csrf-protection",
+        "authn-authz__oauth-state-csrf-missing",
+        "java-spring__spring-csrf-disabled",
+        "nextjs__nextjs-server-action-csrf"
+      ],
+      "frameworks": [
+        "Ruby on Rails",
+        "ASP.NET",
+        "Flask",
+        "Django",
+        "go",
+        "agnostic",
+        "Spring",
+        "Next.js"
+      ],
+      "best_severity": "high",
+      "score": 89
+    },
+    {
+      "merge_key": "xss-reflected-stored-dom",
+      "canonical_name": "Cross-Site Scripting (reflected, stored, DOM, dangerouslySetInnerHTML, v-html)",
+      "canonical_class": "xss",
+      "member_uids": [
+        "client-browser__reflected-xss",
+        "client-browser__stored-xss",
+        "client-browser__dom-xss",
+        "rails__rails-xss-raw-html-output",
+        "flask__flask-jinja2-xss-autoescape-off",
+        "react-spa__react-dangerouslysetinnerhtml-xss",
+        "angular-vue__vue-csti-v-html-xss",
+        "angular-vue__vue-router-hash-xss"
+      ],
+      "frameworks": [
+        "agnostic",
+        "Ruby on Rails",
+        "Flask",
+        "React",
+        "Vue"
+      ],
+      "best_severity": "high",
+      "score": 89
+    },
+    {
+      "merge_key": "secret-in-dom",
+      "canonical_name": "Sensitive Data / Secret Exposed in DOM or Global JS Store",
+      "canonical_class": "secret-in-dom",
+      "member_uids": [
+        "client-browser__sensitive-data-in-dom",
+        "react-spa__react-redux-state-exposure",
+        "angular-vue__vue-vuex-devtools-state-leak"
+      ],
+      "frameworks": [
+        "agnostic",
+        "React",
+        "Redux",
+        "Zustand",
+        "MobX",
+        "Vue"
+      ],
+      "best_severity": "high",
+      "score": 88
+    },
+    {
+      "merge_key": "token-in-webstorage",
+      "canonical_name": "Auth Token / JWT Stored in localStorage / Web Storage",
+      "canonical_class": "token-in-webstorage",
+      "member_uids": [
+        "client-browser__sensitive-data-in-localstorage",
+        "react-spa__react-jwt-stored-localstorage",
+        "angular-vue__spa-sensitive-data-localstorage"
+      ],
+      "frameworks": [
+        "agnostic",
+        "React",
+        "Angular",
+        "Vue"
+      ],
+      "best_severity": "high",
+      "score": 96
+    },
+    {
+      "merge_key": "exposed-source-maps",
+      "canonical_name": "Exposed Source Maps in Production",
+      "canonical_class": "exposed-source-maps",
+      "member_uids": [
+        "client-browser__exposed-source-maps",
+        "react-spa__react-source-map-exposed",
+        "ethical-recon__sourcemap-exposure"
+      ],
+      "frameworks": [
+        "agnostic",
+        "React",
+        "Vue",
+        "Angular",
+        "Webpack",
+        "Vite"
+      ],
+      "best_severity": "high",
+      "score": 88
+    },
+    {
+      "merge_key": "security-headers-missing",
+      "canonical_name": "Missing Security Headers / CSP (HSTS, X-Frame, CSP)",
+      "canonical_class": "security-headers",
+      "member_uids": [
+        "ethical-recon__missing-security-headers",
+        "node-express__express-helmet-missing-csp",
+        "fastapi__fastapi-security-headers-missing",
+        "aspnet__aspnet-missing-security-headers",
+        "go-web__go-missing-security-headers",
+        "client-browser__missing-csp",
+        "angular-vue__angular-csp-bypass-inline",
+        "laravel-php__laravel-session-fixation-cookie"
+      ],
+      "frameworks": [
+        "agnostic",
+        "express",
+        "FastAPI",
+        "ASP.NET",
+        "go",
+        "Angular",
+        "Vue"
+      ],
+      "best_severity": "medium",
+      "score": 87
+    },
+    {
+      "merge_key": "rate-limit-missing",
+      "canonical_name": "Missing Rate Limiting (auth brute-force / OTP / business endpoints)",
+      "canonical_class": "rate-limit",
+      "member_uids": [
+        "authn-authz__2fa-otp-no-rate-limit",
+        "api-rest__missing-rate-limiting-auth",
+        "fastapi__fastapi-rate-limit-absent",
+        "go-web__go-rate-limit-absence",
+        "node-express__express-rate-limit-bypass",
+        "api-rest__missing-rate-limiting-business"
+      ],
+      "frameworks": [
+        "agnostic",
+        "FastAPI",
+        "go",
+        "express"
+      ],
+      "best_severity": "high",
+      "score": 85
+    },
+    {
+      "merge_key": "session-fixation",
+      "canonical_name": "Session Fixation (no session ID rotation on login)",
+      "canonical_class": "session-fixation",
+      "member_uids": [
+        "authn-authz__session-fixation",
+        "aspnet__aspnet-session-fixation-sessionid",
+        "flask__flask-session-fixation",
+        "django-drf__django-session-fixation-no-rotation",
+        "java-spring__spring-session-fixation"
+      ],
+      "frameworks": [
+        "agnostic",
+        "ASP.NET",
+        "Flask",
+        "Django",
+        "Spring"
+      ],
+      "best_severity": "high",
+      "score": 82
+    },
+    {
+      "merge_key": "prototype-pollution",
+      "canonical_name": "Prototype Pollution (JSON body / query parser / client-side)",
+      "canonical_class": "prototype-pollution",
+      "member_uids": [
+        "client-browser__prototype-pollution",
+        "node-express__express-body-parser-json-prototype-pollution",
+        "nextjs__nextjs-prototype-pollution-query-parser",
+        "angular-vue__spa-prototype-pollution"
+      ],
+      "frameworks": [
+        "agnostic",
+        "express",
+        "body-parser",
+        "Next.js",
+        "Angular",
+        "Vue"
+      ],
+      "best_severity": "critical",
+      "score": 64
+    },
+    {
+      "merge_key": "weak-session-secret",
+      "canonical_name": "Forgeable Session via Weak/Known Signing Secret (session forgery)",
+      "canonical_class": "session-forgery",
+      "member_uids": [
+        "flask__flask-session-cookie-unsigned",
+        "rails__rails-cookie-session-tampering"
+      ],
+      "frameworks": [
+        "Flask",
+        "Ruby on Rails"
+      ],
+      "best_severity": "critical",
+      "score": 86
+    },
+    {
+      "merge_key": "graphql-introspection-exposed",
+      "canonical_name": "GraphQL Introspection / Schema Enumeration Enabled in Production",
+      "canonical_class": "graphql-introspection-exposed",
+      "member_uids": [
+        "api-rest__graphql-introspection-enabled",
+        "baas-graphql__graphql-introspection-enabled-prod",
+        "react-spa__react-graphql-introspection-enabled",
+        "angular-vue__spa-graphql-introspection-enabled",
+        "api-rest__graphql-field-suggestion-enumeration"
+      ],
+      "frameworks": [
+        "GraphQL",
+        "Hasura",
+        "Apollo",
+        "React",
+        "Angular",
+        "Vue",
+        "agnostic"
+      ],
+      "best_severity": "medium",
+      "score": 82
+    },
+    {
+      "merge_key": "host-header-injection",
+      "canonical_name": "Host Header Injection (incl. password-reset poisoning)",
+      "canonical_class": "host-header-injection",
+      "member_uids": [
+        "injection-fuzz__host-header-injection",
+        "authn-authz__password-reset-host-header-injection",
+        "django-drf__drf-host-header-injection",
+        "go-web__go-http-host-header-injection"
+      ],
+      "frameworks": [
+        "agnostic",
+        "Django",
+        "go"
+      ],
+      "best_severity": "high",
+      "score": 77
+    },
+    {
+      "merge_key": "user-enumeration",
+      "canonical_name": "User Enumeration (login / registration / password reset)",
+      "canonical_class": "user-enumeration",
+      "member_uids": [
+        "api-rest__user-enumeration-api",
+        "aspnet__aspnet-identity-username-enumeration",
+        "rails__rails-devise-user-enumeration",
+        "django-drf__django-user-enumeration-login"
+      ],
+      "frameworks": [
+        "agnostic",
+        "ASP.NET",
+        "Ruby on Rails",
+        "Django"
+      ],
+      "best_severity": "medium",
+      "score": 79
+    },
+    {
+      "merge_key": "excessive-data-exposure",
+      "canonical_name": "Excessive Data Exposure (API returns more fields than needed)",
+      "canonical_class": "excessive-data-exposure",
+      "member_uids": [
+        "api-rest__api-excessive-data-exposure"
+      ],
+      "frameworks": [
+        "agnostic"
+      ],
+      "best_severity": "high",
+      "score": 94
+    },
+    {
+      "merge_key": "otp-in-response",
+      "canonical_name": "OTP / 2FA Secret Leaked in Response or 2FA Bypass",
+      "canonical_class": "otp-2fa-flaw",
+      "member_uids": [
+        "authn-authz__otp-in-response",
+        "authn-authz__2fa-bypass-direct-endpoint"
+      ],
+      "frameworks": [
+        "agnostic"
+      ],
+      "best_severity": "critical",
+      "score": 89
+    },
+    {
+      "merge_key": "supabase-service-role-key-exposed",
+      "canonical_name": "BaaS Privileged Key Exposed (Supabase service_role / Hasura admin secret)",
+      "canonical_class": "secrets-exposure",
+      "member_uids": [
+        "baas-graphql__supabase-service-role-key-exposed",
+        "baas-graphql__hasura-admin-secret-exposed"
+      ],
+      "frameworks": [
+        "Supabase",
+        "Hasura"
+      ],
+      "best_severity": "critical",
+      "score": 89
+    },
+    {
+      "merge_key": "client-side-only-authz",
+      "canonical_name": "Client-Side-Only Authorization (UI-gated / feature-flag bypass / hidden endpoints)",
+      "canonical_class": "broken-access-control",
+      "member_uids": [
+        "react-spa__react-client-side-authz-ui-only",
+        "react-spa__react-feature-flags-client-bypass",
+        "ethical-recon__js-hidden-endpoint-discovery"
+      ],
+      "frameworks": [
+        "React",
+        "React Router",
+        "Next.js",
+        "LaunchDarkly",
+        "Unleash",
+        "Vue",
+        "Angular",
+        "agnostic"
+      ],
+      "best_severity": "high",
+      "score": 80
+    },
+    {
+      "merge_key": "h2-console-exposed",
+      "canonical_name": "Spring H2 Database Console Exposed",
+      "canonical_class": "debug-endpoint-exposure",
+      "member_uids": [
+        "java-spring__spring-h2-console-exposed"
+      ],
+      "frameworks": [
+        "Spring Boot"
+      ],
+      "best_severity": "critical",
+      "score": 89
+    },
+    {
+      "merge_key": "nextjs-middleware-authz-bypass",
+      "canonical_name": "Next.js Middleware Authorization Bypass (x-middleware-subrequest / i18n / rewrite)",
+      "canonical_class": "broken-access-control",
+      "member_uids": [
+        "nextjs__nextjs-middleware-bypass-x-middleware-subrequest",
+        "nextjs__nextjs-i18n-route-auth-bypass",
+        "nextjs__nextjs-rewrite-internal-api-exposure"
+      ],
+      "frameworks": [
+        "Next.js"
+      ],
+      "best_severity": "critical",
+      "score": 94
+    },
+    {
+      "merge_key": "spring-data-rest-exposure",
+      "canonical_name": "Spring Data REST Auto-Exposed Repository Endpoints",
+      "canonical_class": "idor-bola",
+      "member_uids": [
+        "java-spring__spring-data-rest-exposure"
+      ],
+      "frameworks": [
+        "Spring Boot",
+        "Spring Data REST"
+      ],
+      "best_severity": "critical",
+      "score": 89
+    },
+    {
+      "merge_key": "default-credentials",
+      "canonical_name": "Default Credentials on Admin Panels (WordPress/Jenkins/Grafana/Adminer)",
+      "canonical_class": "default-credentials",
+      "member_uids": [
+        "ethical-recon__default-credentials"
+      ],
+      "frameworks": [
+        "WordPress",
+        "Jenkins",
+        "Grafana",
+        "Adminer",
+        "phpMyAdmin",
+        "agnostic"
+      ],
+      "best_severity": "critical",
+      "score": 78
+    },
+    {
+      "merge_key": "laravel-debugbar-telescope-exposed",
+      "canonical_name": "Laravel Debugbar / Telescope Exposed",
+      "canonical_class": "debug-endpoint-exposure",
+      "member_uids": [
+        "laravel-php__laravel-debug-bar-exposed"
+      ],
+      "frameworks": [
+        "Laravel"
+      ],
+      "best_severity": "high",
+      "score": 88
+    },
+    {
+      "merge_key": "go-pprof-debug-exposed",
+      "canonical_name": "Go net/http/pprof Debug Endpoints Exposed",
+      "canonical_class": "debug-endpoint-exposure",
+      "member_uids": [
+        "go-web__go-default-mux-debug-pprof"
+      ],
+      "frameworks": [
+        "net/http"
+      ],
+      "best_severity": "high",
+      "score": 88
+    },
+    {
+      "merge_key": "openapi-docs-exposed",
+      "canonical_name": "OpenAPI / Swagger Docs Exposed (FastAPI /docs)",
+      "canonical_class": "debug-endpoint-exposure",
+      "member_uids": [
+        "fastapi__fastapi-docs-exposure"
+      ],
+      "frameworks": [
+        "FastAPI",
+        "Starlette"
+      ],
+      "best_severity": "medium",
+      "score": 94
+    },
+    {
+      "merge_key": "missing-sri",
+      "canonical_name": "Missing Subresource Integrity on Third-Party Scripts",
+      "canonical_class": "missing-sri",
+      "member_uids": [
+        "client-browser__subresource-integrity-missing",
+        "react-spa__react-third-party-script-supply-chain"
+      ],
+      "frameworks": [
+        "agnostic",
+        "React"
+      ],
+      "best_severity": "medium",
+      "score": 88
+    },
+    {
+      "merge_key": "baas-config-exposed",
+      "canonical_name": "Firebase/BaaS Web Config (apiKey) Exposed in Client",
+      "canonical_class": "baas-config-exposed",
+      "member_uids": [
+        "react-spa__react-firebase-api-key-exposed"
+      ],
+      "frameworks": [
+        "React",
+        "Firebase",
+        "Supabase",
+        "Amplify"
+      ],
+      "best_severity": "critical",
+      "score": 96
+    },
+    {
+      "merge_key": "directory-listing",
+      "canonical_name": "Directory Listing / Index-of Enabled",
+      "canonical_class": "directory-listing",
+      "member_uids": [
+        "node-express__express-directory-listing",
+        "ethical-recon__directory-listing-enabled"
+      ],
+      "frameworks": [
+        "express",
+        "serve-static",
+        "Apache",
+        "Nginx",
+        "IIS",
+        "agnostic"
+      ],
+      "best_severity": "medium",
+      "score": 76
+    },
+    {
+      "merge_key": "django-admin-exposed",
+      "canonical_name": "Django Admin / DRF Browsable API Exposed",
+      "canonical_class": "debug-endpoint-exposure",
+      "member_uids": [
+        "django-drf__django-admin-exposed",
+        "django-drf__drf-browsable-api-exposed"
+      ],
+      "frameworks": [
+        "Django",
+        "Django REST Framework"
+      ],
+      "best_severity": "high",
+      "score": 78
+    },
+    {
+      "merge_key": "postmessage-origin-bypass",
+      "canonical_name": "postMessage Origin Wildcard / Missing Origin Check",
+      "canonical_class": "postmessage-origin-bypass",
+      "member_uids": [
+        "client-browser__postmessage-abuse",
+        "react-spa__react-postmessage-origin-wildcard"
+      ],
+      "frameworks": [
+        "agnostic",
+        "React"
+      ],
+      "best_severity": "high",
+      "score": 59
+    },
+    {
+      "merge_key": "token-in-query-string",
+      "canonical_name": "Sensitive Token / Data in URL or Query String",
+      "canonical_class": "token-in-url",
+      "member_uids": [
+        "fastapi__fastapi-token-in-query-string",
+        "react-spa__react-sensitive-data-in-url"
+      ],
+      "frameworks": [
+        "FastAPI",
+        "React",
+        "agnostic"
+      ],
+      "best_severity": "medium",
+      "score": 84
+    },
+    {
+      "merge_key": "xxe-injection",
+      "canonical_name": "XML External Entity (XXE) Injection",
+      "canonical_class": "xxe",
+      "member_uids": [
+        "injection-fuzz__xxe-injection"
+      ],
+      "frameworks": [
+        "Java",
+        "PHP",
+        ".NET",
+        "Python (lxml)",
+        "Ruby (Nokogiri)"
+      ],
+      "best_severity": "critical",
+      "score": 73
+    },
+    {
+      "merge_key": "cmd-injection",
+      "canonical_name": "OS Command Injection",
+      "canonical_class": "cmd-injection",
+      "member_uids": [
+        "injection-fuzz__os-command-injection"
+      ],
+      "frameworks": [
+        "agnostic"
+      ],
+      "best_severity": "critical",
+      "score": 65
+    },
+    {
+      "merge_key": "werkzeug-debug-pin-derivation",
+      "canonical_name": "Werkzeug Debugger Console / PIN Brute-Force",
+      "canonical_class": "debug-endpoint-exposure",
+      "member_uids": [
+        "flask__flask-debug-pin-bruteforce"
+      ],
+      "frameworks": [
+        "Flask",
+        "Werkzeug"
+      ],
+      "best_severity": "critical",
+      "score": 67
+    },
+    {
+      "merge_key": "server-version-disclosure",
+      "canonical_name": "Server / Tech / Version Disclosure (Server, X-Powered-By headers)",
+      "canonical_class": "version-disclosure",
+      "member_uids": [
+        "ethical-recon__server-technology-disclosure",
+        "aspnet__aspnet-x-powered-by-server-header",
+        "node-express__express-x-powered-by-disclosure"
+      ],
+      "frameworks": [
+        "agnostic",
+        "ASP.NET",
+        "express"
+      ],
+      "best_severity": "low",
+      "score": 78
+    },
+    {
+      "merge_key": "secret-in-response-body",
+      "canonical_name": "Secret Key / API Token Leaked in Response Body",
+      "canonical_class": "secret-leak",
+      "member_uids": [
+        "django-drf__django-secret-key-exposed",
+        "laravel-php__laravel-sanctum-token-response-leak"
+      ],
+      "frameworks": [
+        "Django",
+        "Laravel"
+      ],
+      "best_severity": "critical",
+      "score": 78
+    },
+    {
+      "merge_key": "password-reset-token-predictable",
+      "canonical_name": "Predictable / Weak Password-Reset Token",
+      "canonical_class": "password-reset-flaw",
+      "member_uids": [
+        "authn-authz__password-reset-token-predictable"
+      ],
+      "frameworks": [
+        "agnostic"
+      ],
+      "best_severity": "high",
+      "score": 72
+    },
+    {
+      "merge_key": "resource-id-enumeration",
+      "canonical_name": "Resource ID / Legacy API Version Enumeration",
+      "canonical_class": "resource-id-enumeration",
+      "member_uids": [
+        "api-rest__resource-id-enumeration",
+        "api-rest__improper-api-inventory-old-versions"
+      ],
+      "frameworks": [
+        "agnostic"
+      ],
+      "best_severity": "high",
+      "score": 80
+    },
+    {
+      "merge_key": "graphql-batching-amplification",
+      "canonical_name": "GraphQL Query Batching / Aliasing DoS Amplification",
+      "canonical_class": "graphql-batching-amplification",
+      "member_uids": [
+        "api-rest__graphql-batching-dos",
+        "baas-graphql__graphql-query-batching-dos"
+      ],
+      "frameworks": [
+        "GraphQL",
+        "Hasura",
+        "Apollo",
+        "agnostic"
+      ],
+      "best_severity": "high",
+      "score": 69
+    },
+    {
+      "merge_key": "aspnet-viewstate-mac-bypass",
+      "canonical_name": "ASP.NET ViewState MAC Disabled (deserialization integrity bypass)",
+      "canonical_class": "deserialization-integrity-bypass",
+      "member_uids": [
+        "aspnet__aspnet-viewstate-mac-disabled"
+      ],
+      "frameworks": [
+        "ASP.NET WebForms"
+      ],
+      "best_severity": "critical",
+      "score": 70
+    },
+    {
+      "merge_key": "oidc-email-claim-trust",
+      "canonical_name": "OIDC ID-Token Unverified Email-Claim Trust",
+      "canonical_class": "oauth-oidc-flaw",
+      "member_uids": [
+        "authn-authz__oidc-id-token-email-claim-trust"
+      ],
+      "frameworks": [
+        "agnostic"
+      ],
+      "best_severity": "critical",
+      "score": 70
+    },
+    {
+      "merge_key": "phpinfo-exposure",
+      "canonical_name": "phpinfo() Page Exposed",
+      "canonical_class": "debug-endpoint-exposure",
+      "member_uids": [
+        "laravel-php__php-phpinfo-exposure"
+      ],
+      "frameworks": [
+        "PHP"
+      ],
+      "best_severity": "medium",
+      "score": 80
+    },
+    {
+      "merge_key": "token-in-telemetry",
+      "canonical_name": "Auth Token Logged to Telemetry / Console (Angular interceptor)",
+      "canonical_class": "secrets-exposure",
+      "member_uids": [
+        "angular-vue__angular-httpinterceptor-token-log"
+      ],
+      "frameworks": [
+        "Angular"
+      ],
+      "best_severity": "high",
+      "score": 74
+    },
+    {
+      "merge_key": "clickjacking",
+      "canonical_name": "Clickjacking (missing X-Frame-Options / frame-ancestors)",
+      "canonical_class": "clickjacking",
+      "member_uids": [
+        "client-browser__clickjacking"
+      ],
+      "frameworks": [
+        "agnostic"
+      ],
+      "best_severity": "medium",
+      "score": 67
+    },
+    {
+      "merge_key": "type-coercion-validation-bypass",
+      "canonical_name": "Pydantic Type-Coercion Input-Validation Bypass",
+      "canonical_class": "input-validation-bypass",
+      "member_uids": [
+        "fastapi__fastapi-pydantic-validation-bypass-coercion"
+      ],
+      "frameworks": [
+        "FastAPI",
+        "Pydantic"
+      ],
+      "best_severity": "medium",
+      "score": 55
+    },
+    {
+      "merge_key": "robots-sitemap-path-disclosure",
+      "canonical_name": "robots.txt / sitemap Path Disclosure",
+      "canonical_class": "information-disclosure",
+      "member_uids": [
+        "ethical-recon__robots-sitemap-path-disclosure"
+      ],
+      "frameworks": [
+        "agnostic"
+      ],
+      "best_severity": "low",
+      "score": 78
+    },
+    {
+      "merge_key": "subdomain-takeover",
+      "canonical_name": "Subdomain Takeover (dangling DNS)",
+      "canonical_class": "subdomain-takeover",
+      "member_uids": [
+        "ethical-recon__subdomain-takeover"
+      ],
+      "frameworks": [
+        "agnostic"
+      ],
+      "best_severity": "high",
+      "score": 58
+    },
+    {
+      "merge_key": "rails-default-catchall-route",
+      "canonical_name": "Rails Default Catch-All Route / Action Exposure",
+      "canonical_class": "debug-endpoint-exposure",
+      "member_uids": [
+        "rails__rails-default-route-action-exposure"
+      ],
+      "frameworks": [
+        "Ruby on Rails"
+      ],
+      "best_severity": "high",
+      "score": 57
+    },
+    {
+      "merge_key": "http-method-unrestricted",
+      "canonical_name": "Excessive / Unrestricted HTTP Methods (TRACE, PUT, DELETE)",
+      "canonical_class": "http-method-unrestricted",
+      "member_uids": [
+        "go-web__go-excessive-http-methods"
+      ],
+      "frameworks": [
+        "net/http"
+      ],
+      "best_severity": "low",
+      "score": 67
+    }
+  ],
+  "top51_initial": [
+    {
+      "rank": 1,
+      "merge_key": "idor-bola",
+      "why": "Most prevalent and highest-impact runtime vuln (22 members across every framework, comp=100). A black-box scanner detects it directly by tampering object IDs and observing cross-tenant data return. Perfect KeyLeak fit and #1 OWASP API risk (BOLA)."
+    },
+    {
+      "rank": 2,
+      "merge_key": "unauthenticated-api-access",
+      "why": "Missing-auth route is the single highest-value runtime finding: comp=100, critical, trivially confirmed by hitting the endpoint with no credentials. Spans Next.js/Go/FastAPI/agnostic and maps to OWASP API2/A01."
+    },
+    {
+      "rank": 3,
+      "merge_key": "exposed-env-file",
+      "why": "comp=100 critical; .env/.git/backup files reachable over HTTP yield live secrets. Pure HTTP GET detection, zero false-positive risk, directly in KeyLeak's secrets-scanning wheelhouse."
+    },
+    {
+      "rank": 4,
+      "merge_key": "env-secrets-in-js-bundle",
+      "why": "comp=100 critical; API keys/secrets baked into shipped client JS. KeyLeak's core competency is regex/entropy secret mining in fetched bundles. Huge prevalence across React/Next/Vue/Angular."
+    },
+    {
+      "rank": 5,
+      "merge_key": "supabase-rls-open-table",
+      "why": "comp=100 critical; anon-readable/writable BaaS tables and open storage buckets are epidemic in modern apps and confirmable with a single anon API call. Spans Supabase/Firebase/PocketBase/Appwrite."
+    },
+    {
+      "rank": 6,
+      "merge_key": "sqli",
+      "why": "Critical, comp=100. Classic injection detectable at runtime via error/boolean/time-blind probes. Broad framework coverage; highest-impact data-breach primitive."
+    },
+    {
+      "rank": 7,
+      "merge_key": "ssrf",
+      "why": "Critical, comp=96, incl. cloud-metadata variant that yields IAM creds. Runtime-detectable via OOB/metadata callbacks. Top cloud-era impact, broad framework spread."
+    },
+    {
+      "rank": 8,
+      "merge_key": "nosql-injection",
+      "why": "Critical comp=96. MongoDB operator injection ($ne/$gt) is highly prevalent in Node stacks and cleanly probed at runtime by mutating JSON params."
+    },
+    {
+      "rank": 9,
+      "merge_key": "mass-assignment",
+      "why": "Critical comp=94; 12 members across all major ORMs. Runtime-detectable by adding privileged fields (role/isAdmin) to write requests and observing acceptance. OWASP API6."
+    },
+    {
+      "rank": 10,
+      "merge_key": "cors-misconfig",
+      "why": "comp=94, 14 members. Wildcard-origin-with-credentials is trivially and reliably detected by replaying with an attacker Origin header. Ubiquitous and high signal."
+    },
+    {
+      "rank": 11,
+      "merge_key": "jwt-flaw",
+      "why": "Critical comp=95. alg=none, RS256/HS256 confusion, and weak secrets are all forgeable-token issues a runtime scanner confirms by minting a forged token. Broad framework spread, full account takeover impact."
+    },
+    {
+      "rank": 12,
+      "merge_key": "bfla",
+      "why": "Critical comp=94. Admin/privileged function reachable by lower-privilege user; detected at runtime by replaying privileged calls with a normal session. OWASP API5, high impact."
+    },
+    {
+      "rank": 13,
+      "merge_key": "debug-endpoint-exposure",
+      "why": "comp=95 critical, 20 members. Generic debug/admin/shadow endpoints and stack traces are pure HTTP-probe detections with massive prevalence; the broadest recon-style finding KeyLeak can ship."
+    },
+    {
+      "rank": 14,
+      "merge_key": "path-traversal",
+      "why": "Critical comp=94. ../ in static-file serving is a high-impact file-read primitive, runtime-probed across 8 frameworks with clear oracle (read /etc/passwd or app source)."
+    },
+    {
+      "rank": 15,
+      "merge_key": "ssti",
+      "why": "Critical comp=94. Template injection escalates to RCE; runtime-detectable via arithmetic-payload reflection (e.g. {{7*7}}). Covers Jinja/Twig/FreeMarker plus Angular CSTI."
+    },
+    {
+      "rank": 16,
+      "merge_key": "spring-actuator-exposed",
+      "why": "Critical comp=94, genuinely framework-bound: detected by specific /actuator/{env,heapdump,loggers} paths that leak secrets/enable RCE. High prevalence in Spring Boot fleets."
+    },
+    {
+      "rank": 17,
+      "merge_key": "supabase-service-role-key-exposed",
+      "why": "Critical comp=89. A leaked service_role/admin secret is full-database compromise; KeyLeak detects it directly in client responses/bundles. Distinct from RLS misconfig."
+    },
+    {
+      "rank": 18,
+      "merge_key": "baas-config-exposed",
+      "why": "comp=96 critical signal. Firebase apiKey/config in client is the canonical entry probe that pivots to RLS testing; very high prevalence, trivially fetched from bundle."
+    },
+    {
+      "rank": 19,
+      "merge_key": "token-in-webstorage",
+      "why": "comp=96. JWT/auth tokens in localStorage are detectable at runtime by reading web storage; extremely common SPA anti-pattern that amplifies XSS to account takeover."
+    },
+    {
+      "rank": 20,
+      "merge_key": "open-redirect",
+      "why": "comp=92, 12 members. Reliable runtime detection by injecting external URL into redirect params; broad spread and the OAuth-code-leak variant escalates to ATO."
+    },
+    {
+      "rank": 21,
+      "merge_key": "nextjs-middleware-authz-bypass",
+      "why": "Critical comp=94, framework-bound (CVE-class x-middleware-subrequest/i18n/rewrite bypass). Detected by a specific header trick; high prevalence given Next.js dominance."
+    },
+    {
+      "rank": 22,
+      "merge_key": "csrf",
+      "why": "comp=89, 8 members. Missing/disabled CSRF tokens (incl. OAuth state) detectable by replaying state-changing requests without token. Ubiquitous, clear remediation."
+    },
+    {
+      "rank": 23,
+      "merge_key": "xss-reflected-stored-dom",
+      "why": "comp=89. Reflected/stored/DOM XSS is the most prevalent client-side bug; runtime-detectable via payload reflection. KeyLeak's browser-scan surface makes it a strong fit."
+    },
+    {
+      "rank": 24,
+      "merge_key": "excessive-data-exposure",
+      "why": "High comp=94 agnostic. API returning extra sensitive fields (OWASP API3) is detected by inspecting response bodies for over-broad objects, a natural KeyLeak response-diff check."
+    },
+    {
+      "rank": 25,
+      "merge_key": "insecure-cookie-flags",
+      "why": "comp=91, 5 members. Missing Secure/HttpOnly/SameSite on session cookies is detected directly from Set-Cookie headers; zero-FP, high prevalence."
+    },
+    {
+      "rank": 26,
+      "merge_key": "h2-console-exposed",
+      "why": "Critical comp=89, framework-bound single-path probe (/h2-console) that yields DB RCE. High value, near-zero false positives in Spring stacks."
+    },
+    {
+      "rank": 27,
+      "merge_key": "spring-data-rest-exposure",
+      "why": "Critical comp=89, framework-bound. Auto-exposed Spring Data REST repositories enable enumeration/CRUD on entities; distinct path-signature detection."
+    },
+    {
+      "rank": 28,
+      "merge_key": "weak-session-secret",
+      "why": "Critical comp=86. Forgeable Flask/Rails signed sessions from weak/known secret = full session forgery; runtime-confirmable by minting a valid cookie. Distinct from session-fixation."
+    },
+    {
+      "rank": 29,
+      "merge_key": "otp-in-response",
+      "why": "Critical comp=89. OTP/2FA code returned in response or bypassable endpoint is full MFA defeat; detected by inspecting auth-flow responses. High impact, clean oracle."
+    },
+    {
+      "rank": 30,
+      "merge_key": "secret-in-dom",
+      "why": "comp=88 high. Secrets in DOM/Redux/Vuex global store are read directly from the live page state; squarely KeyLeak's browser secret-mining strength."
+    },
+    {
+      "rank": 31,
+      "merge_key": "security-headers-missing",
+      "why": "comp=87, 8 members. Missing CSP/HSTS/X-Frame detected directly from response headers; ubiquitous, zero-FP baseline check expected in any scanner."
+    },
+    {
+      "rank": 32,
+      "merge_key": "exposed-source-maps",
+      "why": "comp=88. .map files in prod leak full source incl. secrets/logic; detected by GET of sourceMappingURL. Strong KeyLeak fit for follow-on secret mining."
+    },
+    {
+      "rank": 33,
+      "merge_key": "openapi-docs-exposed",
+      "why": "comp=94 (medium sev). Swagger/OpenAPI /docs exposes full API surface for further attack; single-path probe, high prevalence in FastAPI/Starlette."
+    },
+    {
+      "rank": 34,
+      "merge_key": "rate-limit-missing",
+      "why": "comp=85, 6 members. Absent rate limiting on auth/OTP enables brute-force/credential-stuffing; runtime-detected by burst-request timing. OWASP API4."
+    },
+    {
+      "rank": 35,
+      "merge_key": "client-side-only-authz",
+      "why": "comp=80 high. UI-only/feature-flag authz and hidden endpoints are bypassed by calling the API directly; KeyLeak's JS endpoint-mining feeds this well."
+    },
+    {
+      "rank": 36,
+      "merge_key": "laravel-debugbar-telescope-exposed",
+      "why": "comp=88 high, framework-bound. Debugbar/Telescope expose queries, env, and request data; specific path/marker detection with high Laravel prevalence."
+    },
+    {
+      "rank": 37,
+      "merge_key": "go-pprof-debug-exposed",
+      "why": "comp=88 high, framework-bound. /debug/pprof on default mux leaks memory/goroutine data and enables DoS; specific-path probe, common Go misconfig."
+    },
+    {
+      "rank": 38,
+      "merge_key": "session-fixation",
+      "why": "comp=82, 5 members. No session-ID rotation on login; runtime-detectable by comparing pre/post-auth session identifiers. Broad framework spread."
+    },
+    {
+      "rank": 39,
+      "merge_key": "graphql-introspection-exposed",
+      "why": "comp=82, 5 members. Introspection/field-suggestion enabled in prod maps the whole schema; single introspection query is a clean, reliable oracle."
+    },
+    {
+      "rank": 40,
+      "merge_key": "secret-in-response-body",
+      "why": "Critical comp=78. SECRET_KEY / Sanctum token echoed in a response body is direct secret leakage KeyLeak catches by scanning bodies; high impact."
+    },
+    {
+      "rank": 41,
+      "merge_key": "directory-listing",
+      "why": "comp=76. Index-of/autoindex enabled exposes files for harvesting; pure HTTP detection with high prevalence on misconfigured static servers."
+    },
+    {
+      "rank": 42,
+      "merge_key": "django-admin-exposed",
+      "why": "comp=78 high. Exposed /admin and DRF browsable API give attack surface and sometimes login brute-force target; specific-path probe, very common in Django."
+    },
+    {
+      "rank": 43,
+      "merge_key": "host-header-injection",
+      "why": "comp=77 high. Host-header poisoning (esp. password-reset link poisoning) is account-takeover-grade; detected by injecting a malicious Host and observing reflection."
+    },
+    {
+      "rank": 44,
+      "merge_key": "missing-sri",
+      "why": "comp=88. Missing SRI on third-party scripts is the supply-chain attack surface; detected directly from script tags. Timely given Shai-Hulud-class threats."
+    },
+    {
+      "rank": 45,
+      "merge_key": "prototype-pollution",
+      "why": "comp=64 but critical impact. JSON-body/query prototype pollution can escalate to RCE/authz bypass; runtime-probed by sending __proto__ payloads. Strong in Node ecosystem."
+    },
+    {
+      "rank": 46,
+      "merge_key": "user-enumeration",
+      "why": "comp=79. Login/reset response or timing differences reveal valid accounts; runtime-detectable by response-diffing. Common precursor to credential attacks."
+    },
+    {
+      "rank": 47,
+      "merge_key": "resource-id-enumeration",
+      "why": "comp=80 high. Sequential/guessable IDs and exposed legacy API versions enable enumeration; detected by ID fuzzing and version-path probing (OWASP API9)."
+    },
+    {
+      "rank": 48,
+      "merge_key": "token-in-query-string",
+      "why": "comp=84. Tokens/PII in URL or query string leak via logs/referrers; detected directly in request URLs and links. Easy, reliable, high prevalence."
+    },
+    {
+      "rank": 49,
+      "merge_key": "werkzeug-debug-pin-derivation",
+      "why": "Critical comp=67, framework-bound. Werkzeug interactive debugger console = RCE; detected by probing the debugger endpoint. Distinct, high-impact Flask finding."
+    },
+    {
+      "rank": 50,
+      "merge_key": "server-version-disclosure",
+      "why": "comp=78. Server/X-Powered-By version banners drive targeted CVE exploitation; trivially read from headers. Low sev but ubiquitous baseline recon check."
+    },
+    {
+      "rank": 51,
+      "merge_key": "oidc-email-claim-trust",
+      "why": "Critical comp=70 agnostic. Trusting an unverified OIDC email claim enables account takeover via attacker-controlled IdP; runtime-testable in auth flows. High-impact emerging auth flaw."
+    }
+  ],
+  "extended_initial": [
+    "aspnet-viewstate-mac-bypass",
+    "postmessage-origin-bypass",
+    "xxe-injection",
+    "password-reset-token-predictable",
+    "graphql-batching-amplification",
+    "default-credentials",
+    "phpinfo-exposure",
+    "cmd-injection",
+    "clickjacking",
+    "token-in-telemetry",
+    "robots-sitemap-path-disclosure",
+    "subdomain-takeover",
+    "rails-default-catchall-route",
+    "http-method-unrestricted",
+    "type-coercion-validation-bypass"
+  ],
+  "adversarial": [
+    {
+      "lens": "bug-bounty-realist",
+      "promote": [
+        "idor-bola",
+        "exposed-env-file",
+        "ssrf",
+        "supabase-rls-open-table",
+        "env-secrets-in-js-bundle",
+        "subdomain-takeover",
+        "supabase-service-role-key-exposed",
+        "open-redirect",
+        "spring-actuator-exposed",
+        "graphql-introspection-exposed",
+        "default-credentials",
+        "exposed-source-maps",
+        "nextjs-middleware-authz-bypass",
+        "host-header-injection",
+        "baas-config-exposed"
+      ],
+      "demote": [
+        "security-headers-missing",
+        "missing-sri",
+        "server-version-disclosure",
+        "clickjacking",
+        "insecure-cookie-flags",
+        "robots-sitemap-path-disclosure",
+        "csrf",
+        "session-fixation",
+        "user-enumeration",
+        "token-in-webstorage",
+        "secret-in-dom",
+        "http-method-unrestricted",
+        "type-coercion-validation-bypass",
+        "openapi-docs-exposed",
+        "rails-default-catchall-route"
+      ],
+      "remove": [],
+      "add": [
+        {
+          "name": "exposed-git-directory",
+          "canonical_class": "secrets-exposure",
+          "frameworks": [
+            "agnostic",
+            "Apache",
+            "Nginx"
+          ],
+          "severity": "high",
+          "why": "A reachable /.git/ (config, HEAD, packed-refs, then full source/secret reconstruction via git-dumper) is one of the single most-paid recon findings in the wild and gets accepted far more reliably than a generic '.env file' because it yields full source + history. The Top 51 folds /.git into exposed-env-file's blurb but ships no dedicated, high-confidence /.git/HEAD + /.git/config probe. It deserves first-class status.",
+          "detection_signal": "GET /.git/HEAD returns 'ref: refs/heads/...'; GET /.git/config returns INI with [core]/[remote]; then enumerate /.git/index and packed-refs.",
+          "severity_note": "high",
+          "runtime_discovery": "Pure unauthenticated HTTP GET against a fixed path set; near-zero FP; immediately reconstructable to full source."
+        },
+        {
+          "name": "xss-stored-blind",
+          "canonical_class": "xss",
+          "frameworks": [
+            "agnostic"
+          ],
+          "severity": "high",
+          "why": "The bucket xss-reflected-stored-dom under-weights blind/stored XSS that fires in a second context (admin panel, support-ticket viewer, log dashboard). These are among the most-paid XSS in the wild via OOB callback (e.g. blind-xss canary domains), and are a distinct detection mode — you do not see reflection in the immediate response. The ranked entry's '{{7*7}}-style reflection' framing only covers the trivially-reflected case.",
+          "detection_signal": "Out-of-band callback (DNS/HTTP) fired from a delayed/second-context render of an injected canary payload; correlate by unique subdomain token per injection point.",
+          "runtime_discovery": "Inject uniquely-tokenized blind-XSS canaries into every stored field and header (User-Agent, Referer, contact forms), then watch an OOB collaborator for delayed hits."
+        },
+        {
+          "name": "account-takeover-chain",
+          "canonical_class": "auth-takeover",
+          "frameworks": [
+            "agnostic"
+          ],
+          "severity": "critical",
+          "why": "The economic center of gravity in bug bounty is full ATO, but it is scattered across the Top 51 as fragments (jwt-flaw, otp-in-response, host-header password-reset poisoning, oidc-email-claim-trust, open-redirect OAuth-code leak). A realist scanner benefits from an explicit ATO-chain class that fuses password-reset flaws, response-based OTP/token leakage, and pre-auth/post-auth identity confusion. This is what triagers fast-track to critical.",
+          "detection_signal": "Password-reset link reflects attacker-controlled Host header; reset token is guessable/non-rotating; OTP or reset token present in any response body; email/identity claim accepted without verification.",
+          "runtime_discovery": "Drive the full reset/login/MFA flow with two accounts and an attacker-controlled Host, diff responses for leaked tokens, and replay reset tokens cross-account."
+        },
+        {
+          "name": "api-key-validation-live",
+          "canonical_class": "secrets-exposure",
+          "frameworks": [
+            "agnostic",
+            "AWS",
+            "Stripe",
+            "SendGrid",
+            "Google",
+            "Slack",
+            "Twilio",
+            "GitHub"
+          ],
+          "severity": "critical",
+          "why": "Finding a key string is cheap; the paid finding is a LIVE, privileged key. Programs routinely close 'hardcoded key' reports as informational unless you prove it's active and high-scope. KeyLeak already mines secrets but the Top 51 has no explicit 'validate the candidate against the provider's safe read-only endpoint' class. Live-validation is what converts a medium dedup-prone secret report into an accepted critical (e.g. AWS sts:GetCallerIdentity, Stripe /v1/balance, SendGrid scopes, Slack auth.test).",
+          "detection_signal": "Candidate secret returns 200/authenticated metadata from the provider's read-only verification endpoint (GetCallerIdentity, auth.test, /v1/balance, key-scope introspection) rather than 401/403.",
+          "runtime_discovery": "For each mined credential, classify the provider by prefix/shape and call its documented safe validation endpoint to confirm liveness and enumerate scope before reporting."
+        },
+        {
+          "name": "cache-deception-poisoning",
+          "canonical_class": "web-cache-attack",
+          "frameworks": [
+            "agnostic",
+            "Cloudflare",
+            "Akamai",
+            "Fastly",
+            "Varnish",
+            "Next.js"
+          ],
+          "severity": "high",
+          "why": "Web cache deception and cache poisoning (unkeyed header/extension tricks that cache victim-private responses or inject malicious content for all users) are a high-frequency, well-paid modern class on CDN-fronted targets and are entirely absent from the Top 51. They are reliably black-box detectable and map to a class of disclosed criticals that the current list does not represent at all.",
+          "detection_signal": "Appending a static-looking suffix (e.g. /account/foo.css) returns the authenticated /account body with a cache HIT; or an unkeyed input (X-Forwarded-Host, X-Forwarded-Scheme) is reflected into a cacheable response.",
+          "runtime_discovery": "Probe authenticated paths with cache-buster + fake-extension/static-path variants and unkeyed header injections, then re-request unauthenticated and inspect Age/X-Cache/CF-Cache-Status for a poisoned or victim-private HIT."
+        }
+      ],
+      "notes": "Lens = what actually gets FOUND by black-box probing AND PAID at real programs, after accounting for duplicate rates and 'informational/N/A' closures.\n\nOVER-RANKED HYPE (demote):\n- security-headers-missing (#31), missing-sri (#44), server-version-disclosure (#50), clickjacking, robots-sitemap-disclosure: these are the canonical 'thanks, marking informational, no bounty' closures. Virtually every mature program explicitly lists missing CSP/HSTS/X-Frame, version banners, SRI, and clickjacking-on-non-sensitive-pages as out-of-scope or N/A. A scanner should report them as hygiene, not rank them as findable-and-paid bug-bounty value. They are zero-FP but also near-zero-payout.\n- insecure-cookie-flags (#25): same trap — accepted only when chained to a concrete session-theft impact; standalone it is almost always informational.\n- token-in-webstorage (#19, comp=96) and secret-in-dom (#30): localStorage-token-storage is by itself a near-universal 'best practice / informational' closure; it only pays when an actual XSS exists to exfil it. comp=96 massively overstates its paid value vs. its 'every SPA does this' prevalence.\n- csrf (#22), session-fixation (#38), user-enumeration (#46): heavily duplicated and routinely downgraded. CSRF on non-state-critical actions and username-enumeration via timing are the textbook 'informational' bucket at most programs; pay rate is low relative to rank.\n- openapi-docs-exposed (#33, comp=94): Swagger/docs exposure is recon, not a paid finding on its own — comp=94 is wildly inflated for what is an info-level signal.\n- type-coercion-validation-bypass, http-method-unrestricted, rails-default-catchall: niche/low-signal; rarely the basis of an accepted report.\n\nUNDER-RANKED / GENUINELY COMMON AND PAID (promote):\n- subdomain-takeover (#52, score 58): this is dramatically under-ranked. Dangling-CNAME takeovers are one of the highest-volume, cleanly-accepted, well-paid findings in real programs (dedup-resistant because each is unique infra), and are perfectly black-box detectable (resolve CNAME -> fingerprint the 404/claim page of the unclaimed service). It belongs in the top ~15, not the basement.\n- exposed-env-file (#3) and exposed-source-maps (#32): correctly high but /.git/ specifically (see ADD) outpays generic .env in acceptance.\n- supabase-rls-open-table + supabase-service-role-key-exposed + baas-config-exposed: the BaaS-misconfig cluster is the single fastest-growing source of real, high-severity, low-dedup payouts on modern apps; the service-role-key and open-RLS variants in particular deserve to sit alongside the top secrets findings.\n- ssrf (#7): if anything under-ranked at comp=96 vs IDOR — cloud-metadata SSRF -> IAM creds is the highest-EV single class once landed.\n- open-redirect (#20): under-valued — the OAuth-code/token-leak escalation makes a chunk of these ATO-grade, not the informational redirect they're often dismissed as.\n- graphql-introspection-exposed (#39) and spring-actuator-exposed (#16), default-credentials (score 78): all reliably accepted, low-FP, framework-bound criticals that punch above their current placement.\n- host-header-injection (#43): under-ranked because the password-reset-poisoning variant is straight ATO.\n\nMISSING HIGH-FREQUENCY CLASSES (add): the biggest gaps are (1) a dedicated /.git/ directory probe, (2) blind/stored XSS via OOB callback as a distinct detection mode from reflected, (3) an explicit ATO-chain class fusing reset-token + response-leaked-OTP + identity-claim confusion (the economic center of bounty), (4) LIVE secret validation (the difference between an 'informational hardcoded key' and an accepted critical), and (5) web cache deception / cache poisoning, which is completely absent yet high-frequency and well-paid on CDN-fronted targets.\n\nMETA: the ranking conflates comp= (detectability/prevalence) with paid bounty value. Several comp=100/96 entries (token-in-webstorage, openapi-docs, security-headers) are highly detectable but low-paid; several lower-scored entries (subdomain-takeover, default-credentials) are less 'novel' but reliably paid. A realist re-rank weights acceptance-rate and dedup-resistance, not just probe simplicity."
+    },
+    {
+      "lens": "runtime-detectability",
+      "promote": [
+        "exposed-env-file",
+        "supabase-rls-open-table",
+        "supabase-service-role-key-exposed",
+        "baas-config-exposed",
+        "env-secrets-in-js-bundle",
+        "token-in-webstorage",
+        "secret-in-dom",
+        "exposed-source-maps",
+        "security-headers-missing",
+        "server-version-disclosure",
+        "directory-listing",
+        "idor-bola"
+      ],
+      "demote": [
+        "sqli",
+        "ssrf",
+        "nosql-injection",
+        "mass-assignment",
+        "ssti",
+        "jwt-flaw",
+        "cors-misconfig",
+        "prototype-pollution",
+        "path-traversal",
+        "open-redirect",
+        "nextjs-middleware-authz-bypass",
+        "host-header-injection",
+        "csrf",
+        "bfla",
+        "rate-limit-missing",
+        "session-fixation",
+        "user-enumeration",
+        "graphql-introspection-exposed",
+        "weak-session-secret",
+        "aspnet-viewstate-mac-bypass",
+        "oidc-email-claim-trust",
+        "werkzeug-debug-pin-derivation",
+        "xxe-injection",
+        "cmd-injection"
+      ],
+      "remove": [],
+      "add": [
+        {
+          "name": "insecure-cookie-flags",
+          "canonical_class": "insecure-cookie",
+          "severity": "high",
+          "frameworks": [
+            "agnostic",
+            "express",
+            "Flask",
+            "ASP.NET",
+            "Laravel"
+          ],
+          "detection_signal": "Set-Cookie response header lacking HttpOnly/Secure/SameSite on a session/auth cookie",
+          "runtime_discovery": "Parse Set-Cookie on every observed/fetched response; flag session-like cookie names without the three flags",
+          "why": "This is listed in the Top 51 at #25 and self-describes as zero-FP, but NO cookie-flag parsing exists anywhere in attack_vector_scanner.py, app.py, or keyleak/. It is the single highest-value MISSING easy win: pure header read, deterministic, no payloads. The mitmproxy passive path (app.py) already sees every Set-Cookie and discards it.",
+          "detection_signal_confidence": "high"
+        },
+        {
+          "name": "open-cloud-storage-bucket",
+          "canonical_class": "exposed-storage",
+          "severity": "high",
+          "frameworks": [
+            "AWS S3",
+            "GCS",
+            "Azure Blob",
+            "agnostic"
+          ],
+          "detection_signal": "Anonymous GET of a bucket-list/object URL returns 200 with an XML/JSON listing",
+          "runtime_discovery": "Extract bucket hostnames from fetched bundles/links, then issue one anonymous list request — identical shape to the existing Firebase/Supabase storage probes",
+          "why": "KeyLeak already probes BaaS storage buckets but has no generic public-cloud-bucket probe, despite it being the same single-GET oracle and epidemic in modern apps. High value, near-zero FP, trivially within the existing BaaS prober architecture.",
+          "detection_signal_confidence": "high"
+        },
+        {
+          "name": "generic-cors-misconfig-active-replay",
+          "canonical_class": "cors-misconfig",
+          "severity": "high",
+          "frameworks": [
+            "agnostic",
+            "express",
+            "FastAPI",
+            "Spring",
+            "Flask"
+          ],
+          "detection_signal": "Response reflects an attacker Origin in Access-Control-Allow-Origin together with Access-Control-Allow-Credentials: true",
+          "runtime_discovery": "Replay any observed endpoint with Origin: https://evil.example and inspect ACAO/ACAC headers",
+          "why": "cors-misconfig is ranked #10 and the entry claims it is 'trivially detected by replaying with an attacker Origin header' — but the ONLY CORS check in the codebase is a literal ACAO=='*' read on the Supabase REST root (baas_validator.py). There is no general-app Origin-replay probe. The high-signal credentialed-reflection variant (the actually-exploitable one) is entirely undetected. This is an easy, deterministic active probe that is missing.",
+          "detection_signal_confidence": "high"
+        }
+      ],
+      "notes": "SCANNER-GROUND-TRUTH (read code, not the ranking rationale). KeyLeak's real runtime surface is FOUR engines: (1) attack_vector_scanner.py = read-only HTTP probes: fixed exposed-path GETs (.env/.git/db.sql/backups), security-header presence read, directory-listing marker, TLS expiry, Server/X-Powered-By fingerprint + a tiny outdated-version regex, and a FIXED admin-endpoint path list (/admin,/wp-admin,/phpmyadmin,/server-status). (2) baas_validator.py = the ONLY genuine active validation: anon table read, storage list, write-probe (Prefer tx=rollback), service_role JWT-claim decode, mailer_autoconfirm, BaaS-only CORS=='*'. (3) browser_scanner.py = passive DOM/localStorage/sessionStorage/IndexedDB/Cache + bundle/sourcemap regex mining + BaaS config extraction. (4) access_control.py = 2-user IDOR diff. (5) app.py = mitmproxy PASSIVE observe (secret regex on flows + heuristic IDOR). \n\nCRITICAL ARCHITECTURE TRUTH: In detectors.py, sql_injection / xss / idor_direct_object / auth_bypass / ssti / open_redirect / mass_assignment ALL carry validation_status='lead' and run as REGEX OVER FETCHED STATIC CONTENT (categories: code, sourcemaps, logs) — they are source-code grep hits in shipped JS/maps, NOT active runtime probes. There is ZERO active-injection engine anywhere: I grepped every module for Origin-replay, 7*7, $ne/$gt, __proto__, alg=none, x-middleware-subrequest, /actuator, /h2-console, /debug/pprof, __schema/introspection query, rate-limit burst, X-Forwarded-Host — NONE exist.\n\nVERDICT BY TOP-51 CLAIM vs REALITY:\n- GENUINELY runtime-detectable, low-FP, IMPLEMENTED (keep/promote): #3 exposed-env-file, #4 env-secrets-in-js-bundle, #5 supabase-rls-open-table, #17 service-role-key, #18 baas-config-exposed, #19 token-in-webstorage, #30 secret-in-dom, #32 exposed-source-maps, #31 security-headers-missing, #50 server-version-disclosure, #41 directory-listing, #29 otp-in-response (response-body regex), #40 secret-in-response-body, #48 token-in-query-string, #39 graphql-introspection (regex hint only, see caveat). #1 idor-bola is real ONLY via the 2-user diff path (access_control.py) — promote that path but note the single-user passive IDOR in app.py is heuristic and FP-prone.\n- DEMOTE: claimed-runtime but actually STATIC-LEAD-ONLY or UNIMPLEMENTED as active probes — sqli, ssrf, nosql-injection, mass-assignment, ssti, path-traversal, open-redirect, prototype-pollution, jwt-flaw (decode-only, no forge), cors-misconfig (BaaS-only, no app replay), nextjs-middleware-authz-bypass, host-header-injection, csrf, bfla, rate-limit-missing, session-fixation, user-enumeration, weak-session-secret, oidc-email-claim-trust, werkzeug-debug-pin, xxe, cmd-injection, aspnet-viewstate. The ranking rationale text ('confirm by minting a forged token', 'replay with attacker Origin', 'send $ne', 'inject ../') describes capabilities the scanner DOES NOT HAVE.\n\nDEBUG/PATH-PROBE FAMILY (#13,16,26,27,36,37,42,49 + openapi #33, phpinfo, django-admin, rails-catchall): the generic /admin,/wp-admin,/phpmyadmin,/server-status list in attack_vector_scanner.py is the ONLY path-probe. Spring /actuator, /h2-console, Go /debug/pprof, Laravel Telescope/_debugbar, Werkzeug console, FastAPI /docs, Django /admin, phpinfo are NOT in the probe list. These are EASY to add (single-path GET + body marker, same shape as exposed-paths) and are the highest-ROI additions after cookie-flags. Right now they are only detected if a secret regex happens to match leaked content — effectively not detected.\n\nFALSE-POSITIVE RISK FLAGS:\n- attack_vector_scanner _check_admin_endpoints flags ANY 200/301/302/401/403 on /login,/dashboard,/admin as a finding — a 200 on /login or a 403 on /admin is NORMAL and will drown users in low-value noise. High FP, recommend down-weighting or gating.\n- app.py analyze_access_control_issues flags any sensitive-resource URL containing an object-ID returning 2xx as 'potential access control issue' WITHOUT tampering the ID — every legitimate authorized /users/{me} request matches. This is the heuristic single-user IDOR and is a major FP source; the trustworthy signal is the 2-user diff only.\n- otp_in_response regex can match non-OTP 4-8 digit fields (zip, year, count). Medium FP.\n\nNET: promote the BaaS family + pure-read header/file/bundle/storage detectors (these are KeyLeak's true, defensible, low-FP strengths). Demote the entire active-injection ranking tier — those rankings assume an active fuzzing engine that does not exist; shipping them as 'runtime-detected' would be a Fail-Loud violation. Three concrete easy-to-add high-value MISSING items: cookie-flag parsing (zero-FP, listed but unbuilt), generic public-cloud bucket probe (reuses BaaS prober), and credentialed CORS Origin-replay (the only CORS variant that actually matters). Also strongly recommend adding the framework debug-path probe list (actuator/h2/pprof/telescope/werkzeug/docs/phpinfo) — same trivial GET+marker shape as exposed-paths, currently unbuilt."
+    },
+    {
+      "lens": "coverage-gaps",
+      "promote": [
+        "cmd-injection",
+        "default-credentials",
+        "xxe-injection",
+        "password-reset-token-predictable",
+        "graphql-batching-amplification",
+        "resource-id-enumeration"
+      ],
+      "demote": [
+        "server-version-disclosure",
+        "robots-sitemap-path-disclosure",
+        "http-method-unrestricted",
+        "missing-sri",
+        "phpinfo-exposure"
+      ],
+      "remove": [],
+      "add": [
+        {
+          "name": "http-request-smuggling",
+          "canonical_class": "http-request-smuggling",
+          "frameworks": [
+            "agnostic",
+            "nginx",
+            "Apache",
+            "HAProxy",
+            "Node.js",
+            "gunicorn",
+            "AWS ALB",
+            "Cloudflare"
+          ],
+          "severity": "critical",
+          "why": "Front-end/back-end disagreement on Content-Length vs Transfer-Encoding (CL.TE / TE.CL / TE.TE) lets an attacker prepend bytes to the next user's request, poisoning the request queue for credential theft, cache poisoning, and auth bypass. Completely absent from the Top 51 and cluster index despite being a top-tier, high-impact runtime class with a clean black-box oracle. Proxy/CDN/load-balancer fleets are pervasive.",
+          "detection_signal": "Send a crafted request with both Content-Length and Transfer-Encoding: chunked headers (and obfuscated TE variants like 'Transfer-Encoding:[tab]chunked', duplicate TE, 'TE: chunked\\r\\nTransfer-encoding: x'). Use the timing-based differential probe: a CL.TE/TE.CL desync causes the socket to hang waiting for bytes (measurable ~5s+ delay) vs a baseline. Confirm with a self-contained smuggle that prepends a poisoned prefix and observes it reflected on a follow-up request on the same keep-alive connection.",
+          "runtime_discovery": "Black-box differential timing/response probe over a raw keep-alive socket; no source needed."
+        },
+        {
+          "name": "web-cache-deception-poisoning",
+          "canonical_class": "web-cache-deception",
+          "frameworks": [
+            "agnostic",
+            "Cloudflare",
+            "Akamai",
+            "Fastly",
+            "Varnish",
+            "nginx",
+            "Next.js",
+            "Vercel"
+          ],
+          "severity": "high",
+          "why": "Cache deception (append /account/foo.css to a dynamic authenticated path so the CDN caches the victim's private response under a static-looking key) and cache poisoning (unkeyed headers like X-Forwarded-Host/X-Forwarded-Scheme reflected into cached responses) are epidemic with modern CDN-fronted apps and Next.js ISR. No cluster member covers either. Cache deception leaks PII/tokens to anonymous users; poisoning enables stored-XSS-at-scale and redirect hijack.",
+          "detection_signal": "Deception: request an authenticated endpoint with a fake static extension/path suffix (e.g. /api/me/nonexistent.css, /account;.js) and observe (a) the dynamic body still returned and (b) a cache-storing response (Cache-Control: public, Age, X-Cache: HIT on a second anonymous fetch). Poisoning: inject unkeyed headers (X-Forwarded-Host, X-Forwarded-Scheme, X-Host, X-Original-URL) with a marker, then re-fetch without the header and check the marker is reflected from cache.",
+          "runtime_discovery": "HTTP probe pair (poison/seed then re-fetch) inspecting Cache-Control/Age/X-Cache headers; KeyLeak already inspects response headers."
+        },
+        {
+          "name": "insecure-deserialization",
+          "canonical_class": "insecure-deserialization",
+          "frameworks": [
+            "Python (pickle/PyYAML)",
+            "Java (ObjectInputStream/Jackson)",
+            "Ruby (Marshal/Oj)",
+            "PHP (unserialize)",
+            "Node.js (node-serialize)",
+            "Rails"
+          ],
+          "severity": "critical",
+          "why": "Generic untrusted-input deserialization to RCE is a top critical class and the cluster index only has the narrow aspnet-viewstate-mac-bypass and xxe variants. Java gadget chains, Python pickle, Ruby Marshal/Oj, PHP unserialize, and signed-but-stale cookies (Rails Marshal cookies, Django pickle sessions) all belong to one missing canonical class. Frequently runtime-detectable via cookie/parameter shape and error-oracle differentials.",
+          "detection_signal": "Detect serialized-object magic markers in cookies/params/bodies: PHP 'O:8:' / 'a:N:{', Java base64 'rO0AB' (0xACED stream header), Python pickle opcodes (base64 starting 'gASV'/'gAN'), Ruby Marshal '\\x04\\x08', Node node-serialize '_$$ND_FUNC$$_'. Then send a benign-but-malformed object and diff for deserialization stack traces / type-confusion errors confirming server-side deserialization of attacker input.",
+          "runtime_discovery": "Response/cookie inspection for serialized magic bytes plus an error-oracle differential; partially overlaps KeyLeak's body/cookie scanning."
+        },
+        {
+          "name": "oauth-redirect-uri-pkce-flaw",
+          "canonical_class": "oauth-oidc-flaw",
+          "frameworks": [
+            "agnostic",
+            "OAuth2",
+            "OIDC",
+            "Auth0",
+            "Keycloak",
+            "NextAuth",
+            "Spring Security"
+          ],
+          "severity": "critical",
+          "why": "The existing oidc-email-claim-trust (#51) covers only IdP email-claim trust; redirect_uri validation weaknesses and PKCE absence/downgrade are a distinct, extremely common account-takeover vector not covered by any cluster (open-redirect is about app redirects, not the authorize endpoint). Lax redirect_uri matching (prefix/substring, open path append, subdomain) leaks the auth code to an attacker; missing-or-ignored PKCE (S256->plain or absent code_challenge accepted) enables code interception. Both are confirmable at the authorize/token endpoints.",
+          "detection_signal": "At the /authorize endpoint, vary redirect_uri (append path, add subdomain, swap to attacker host, use //evil.com, add ?/# tricks) and observe whether the authorization server still redirects/issues a code instead of rejecting. For PKCE: initiate without code_challenge or with code_challenge_method=plain and check the token endpoint still issues tokens; replay an auth code to test one-time-use enforcement.",
+          "runtime_discovery": "Active probe of the OAuth /authorize and /token endpoints observing redirect/issue behavior; KeyLeak already exercises auth flows for jwt-flaw/oidc."
+        },
+        {
+          "name": "jwt-kid-injection",
+          "canonical_class": "jwt-flaw",
+          "frameworks": [
+            "agnostic",
+            "express",
+            "FastAPI",
+            "Spring",
+            "jsonwebtoken",
+            "PyJWT",
+            "Auth0"
+          ],
+          "severity": "critical",
+          "why": "The jwt-flaw cluster (#11) is framed around alg=none / RS256<->HS256 confusion / weak HMAC secret. The kid header is a separate, common forgery vector: kid path traversal to a known file (e.g. /dev/null -> empty key), kid SQL injection to return an attacker key, and jku/x5u header pointing at an attacker JWKS. These yield full token forgery distinct from the alg-confusion logic and merit a distinct probe even if grouped under jwt-flaw.",
+          "detection_signal": "Mint tokens with manipulated header kid values: kid='../../../../dev/null' signed with empty key, kid containing SQLi (' UNION SELECT ...), and jku/x5u pointing to a scanner-controlled JWKS URL; observe whether the forged token is accepted (200 on an authenticated endpoint) and whether the jku host receives an OOB callback.",
+          "runtime_discovery": "Forge-and-replay against an authenticated endpoint plus OOB jku/x5u callback; same minting machinery as jwt-flaw."
+        },
+        {
+          "name": "graphql-alias-field-duplication-dos",
+          "canonical_class": "graphql-alias-abuse",
+          "frameworks": [
+            "GraphQL",
+            "Apollo",
+            "Hasura",
+            "graphql-js",
+            "agnostic"
+          ],
+          "severity": "high",
+          "why": "graphql-batching-amplification (score 69) covers array-batched operations, but alias-based field duplication (requesting the same expensive/sensitive field hundreds of times under different aliases in ONE query) is a distinct bypass of per-request rate limits and brute-force protections (e.g. 0..9999 password/OTP attempts in a single HTTP request via aliases) and a resource-exhaustion DoS. Not represented as its own cluster and frequently evades the batching defense.",
+          "detection_signal": "Send a single GraphQL document with the same field aliased many times (alias0: login(...) alias1: login(...) ... or repeated heavy resolver) and observe (a) all aliases executed/returned and (b) no depth/complexity/alias-count limit rejection. Pair with an auth mutation aliased N times to detect rate-limit bypass (multiple distinct results from one request).",
+          "runtime_discovery": "Single crafted GraphQL POST inspecting whether N aliased operations all execute; clean oracle, no source needed."
+        },
+        {
+          "name": "websocket-auth-origin-bypass",
+          "canonical_class": "websocket-security",
+          "frameworks": [
+            "agnostic",
+            "Socket.IO",
+            "ws",
+            "SignalR",
+            "Django Channels",
+            "Phoenix Channels",
+            "GraphQL subscriptions"
+          ],
+          "severity": "high",
+          "why": "WebSocket endpoints frequently skip the auth and Origin checks enforced on the HTTP API (Cross-Site WebSocket Hijacking) and broadcast cross-tenant data over channels. No cluster member covers WS at all. Modern apps (chat, realtime dashboards, GraphQL subscriptions, Supabase Realtime) expose these widely and they are cleanly runtime-testable.",
+          "detection_signal": "Open the WS handshake (ws://, wss://) with no cookies/Authorization and with a forged Origin header; observe whether the upgrade succeeds (101) and whether subscribing/joining a channel returns data without credentials. CSWSH oracle: connect with a foreign Origin and the victim's implicit cookies and check if authenticated messages flow. Also probe Socket.IO/SignalR negotiate endpoints for unauthenticated connection IDs.",
+          "runtime_discovery": "WS upgrade handshake with manipulated Origin/credentials inspecting 101 + post-connect message flow."
+        },
+        {
+          "name": "exposed-vcs-and-backup-artifacts",
+          "canonical_class": "secrets-exposure",
+          "frameworks": [
+            "agnostic",
+            "nginx",
+            "Apache",
+            "git",
+            "PHP",
+            "Rails",
+            "Django"
+          ],
+          "severity": "critical",
+          "why": "exposed-env-file (#3) is described as covering '.env/.git/backup files' but the canonical detection of .git/config + .git/HEAD + .git/index (full source/secret reconstruction via git-dumper), editor/swap backups (.php.bak, index.php~, .swp), database dumps (.sql, dump.sql, backup.zip), and macOS .DS_Store directory enumeration are distinct high-signal HTTP-GET probes that are currently buried inside one env-file entry. These are among the highest-yield zero-FP recon GETs and deserve first-class, enumerated coverage.",
+          "detection_signal": "HTTP GET a probe list and validate by content signature: /.git/config (matches '[core]'), /.git/HEAD ('ref: refs/heads/'), /.git/index (DIRC magic), /.svn/wc.db, /.DS_Store (Bud1 magic), common backups (/index.php~, /config.php.bak, /app.zip, /backup.sql, /db.sql.gz, /.env.bak), and editor swaps (.swp/.swo b0VIM magic). Confirm 200 + magic-byte match, not just status code.",
+          "runtime_discovery": "Pure HTTP GET with magic-byte/content validation; squarely in KeyLeak's secrets-exposure wheelhouse."
+        },
+        {
+          "name": "password-reset-token-leakage",
+          "canonical_class": "password-reset-flaw",
+          "frameworks": [
+            "agnostic",
+            "Django",
+            "Rails",
+            "Laravel",
+            "express",
+            "FastAPI"
+          ],
+          "severity": "critical",
+          "why": "password-reset-token-predictable (score 72) covers predictability but not the more common and more directly runtime-detectable failure: the reset token / reset link / password being returned in the HTTP response body or JSON of the forgot-password call, plus Host-header reset-link poisoning (host-header-injection #43 hints at this but is generic). Token-in-response is a clean body-scan oracle that yields immediate account takeover and fits KeyLeak's response-body secret mining exactly.",
+          "detection_signal": "Trigger the forgot/reset-password endpoint and scan the JSON/HTML response for a token, reset URL, OTP, or temporary password (entropy + token-shaped fields like 'reset_token','token','link'). Combine with Host/X-Forwarded-Host poisoning to detect the reset link being built from an attacker-controlled host. Also detect GET-based reset endpoints reflecting the token in the URL/Location header.",
+          "runtime_discovery": "Auth-flow response-body and Location-header scan; same machinery as otp-in-response (#29) and secret-in-response-body (#40)."
+        }
+      ],
+      "notes": "Scope: only runtime/black-box-detectable classes, per KeyLeak's model (HTTP probes, header/body/cookie inspection, browser scan, token minting/replay, OOB callbacks, BaaS calls). Findings: (1) Top-tier classes with ZERO cluster representation: HTTP request smuggling, web cache deception/poisoning, generic insecure deserialization, OAuth redirect_uri/PKCE flaws, WebSocket auth/CSWSH, GraphQL alias-duplication. These are the most important true gaps. (2) jwt-kid-injection and password-reset-token-leakage and exposed-vcs-and-backup-artifacts are 'buried' — partially implied by an existing cluster (jwt-flaw #11, password-reset-token-predictable, exposed-env-file #3) but the specific high-yield variant is not enumerated; I added them as distinct probes that should sit under those merge_keys rather than create taxonomy churn. (3) Promotions: cmd-injection (score 65) and default-credentials (critical, not in Top 51) are critical-RCE/critical-ATO classes ranked far below their impact and runtime-detectability — both have clean oracles (time-blind/OOB for cmd-injection, known-cred login matrix for default-credentials) and deserve Top-51 placement. xxe-injection (73) similarly under-ranked given critical impact and OOB oracle. (4) Demotions: server-version-disclosure, robots/sitemap disclosure, http-method-unrestricted, phpinfo, and missing-sri are low-severity recon/hardening checks crowding ranking weight that higher-impact classes should hold. (5) Deliberately did NOT add: race conditions / TOCTOU (real and runtime-detectable via parallel-request limit-overrun, but noisy and hard to confirm without state oracle — flag as a future candidate, not a clean fit yet), and clickjacking is already present. Verified against the repo: keyleak/detectors do NOT currently enumerate .git/config, backup, or .DS_Store probes despite the #3 description claiming '.git/backup' coverage — confirming the exposed-vcs-and-backup-artifacts gap is real, not cosmetic. No 'remove' entries: nothing in the Top 51 is mis-scoped enough to drop."
+    }
+  ],
+  "final": {
+    "top51_final": [
+      {
+        "rank": 1,
+        "merge_key": "idor-bola",
+        "canonical_name": "idor-bola",
+        "canonical_class": "idor-bola",
+        "frameworks": [
+          "agnostic",
+          "express",
+          "React",
+          "Django REST Framework",
+          "Ruby on Rails",
+          "FastAPI",
+          "Laravel",
+          "ASP.NET",
+          "net/http",
+          "gin",
+          "echo",
+          "Spring",
+          "Flask",
+          "Angular",
+          "Vue",
+          "Next.js",
+          "Supabase",
+          "GraphQL",
+          "Hasura"
+        ],
+        "severity": "critical",
+        "why": "Highest-impact, highest-prevalence runtime class (22 members, comp=100, #1 OWASP API). All three lenses keep it top. Genuinely confirmed-active via the 2-user diff path in access_control.py (compare_access_control_urls) — promote that path; the single-user passive heuristic in app.py is FP-prone and must stay a lead, not a confirmation.",
+        "suggested_pack": "access-control"
+      },
+      {
+        "rank": 2,
+        "merge_key": "exposed-env-file",
+        "canonical_name": "exposed-env-file",
+        "canonical_class": "secrets-exposure",
+        "frameworks": [
+          "agnostic",
+          "Laravel",
+          "Django",
+          "Node.js/Express",
+          "Next.js",
+          "Rails",
+          "PHP"
+        ],
+        "severity": "critical",
+        "why": "Pure HTTP GET, zero-FP, live secrets. Promoted by both realist and runtime lenses. Note: /.git/ specifically out-pays generic .env on acceptance and is currently NOT enumerated as a probe (verified) — see additions exposed-git-directory.",
+        "suggested_pack": "leak"
+      },
+      {
+        "rank": 3,
+        "merge_key": "supabase-rls-open-table",
+        "canonical_name": "supabase-rls-open-table",
+        "canonical_class": "baas-rls",
+        "frameworks": [
+          "Supabase",
+          "Firebase",
+          "PocketBase",
+          "Appwrite"
+        ],
+        "severity": "critical",
+        "why": "The single confirmed-active validation engine KeyLeak actually has (baas_validator.py: anon read + write-probe with Prefer tx=rollback, validation_status=confirmed). Promoted by both realist and runtime lenses; fastest-growing source of high-severity, low-dedup payouts. This is KeyLeak's defensible core, so it rises above the static-lead injection tier.",
+        "suggested_pack": "baas"
+      },
+      {
+        "rank": 4,
+        "merge_key": "env-secrets-in-js-bundle",
+        "canonical_name": "env-secrets-in-js-bundle",
+        "canonical_class": "secrets-exposure",
+        "frameworks": [
+          "React",
+          "Create React App",
+          "Vite",
+          "Next.js",
+          "Vue",
+          "Angular",
+          "agnostic"
+        ],
+        "severity": "critical",
+        "why": "comp=100 critical, KeyLeak core competency (regex/entropy mining over fetched bundles — real, implemented). Promoted by both realist and runtime lenses. Huge SPA prevalence.",
+        "suggested_pack": "leak"
+      },
+      {
+        "rank": 5,
+        "merge_key": "supabase-service-role-key-exposed",
+        "canonical_name": "supabase-service-role-key-exposed",
+        "canonical_class": "secrets-exposure",
+        "frameworks": [
+          "Supabase",
+          "Hasura"
+        ],
+        "severity": "critical",
+        "why": "Leaked service_role/admin secret = full-DB compromise; detected directly in bundles/responses AND its JWT claims decoded in baas_validator (confirmed). Promoted by both realist and runtime lenses; deserves to sit alongside top secrets findings.",
+        "suggested_pack": "leak"
+      },
+      {
+        "rank": 6,
+        "merge_key": "baas-config-exposed",
+        "canonical_name": "baas-config-exposed",
+        "canonical_class": "baas-config-exposed",
+        "frameworks": [
+          "React",
+          "Firebase",
+          "Supabase",
+          "Amplify"
+        ],
+        "severity": "critical",
+        "why": "Canonical BaaS entry probe (comp=96) that pivots to RLS testing; trivially extracted from bundle and feeds the confirmed-active prober. Promoted by both realist and runtime lenses.",
+        "suggested_pack": "baas"
+      },
+      {
+        "rank": 7,
+        "merge_key": "unauthenticated-api-access",
+        "canonical_name": "unauthenticated-api-access",
+        "canonical_class": "broken-access-control",
+        "frameworks": [
+          "Next.js",
+          "gin",
+          "echo",
+          "FastAPI",
+          "agnostic"
+        ],
+        "severity": "critical",
+        "why": "Missing-auth route, comp=100 critical, trivially confirmed by an unauthenticated GET (a probe the scanner can genuinely make). Maps to OWASP API2/A01. Kept high; one of the few access-control classes confirmable without an injection engine.",
+        "suggested_pack": "access-control"
+      },
+      {
+        "rank": 8,
+        "merge_key": "exposed-source-maps",
+        "canonical_name": "exposed-source-maps",
+        "canonical_class": "exposed-source-maps",
+        "frameworks": [
+          "agnostic",
+          "React",
+          "Vue",
+          "Angular",
+          "Webpack",
+          "Vite"
+        ],
+        "severity": "high",
+        "why": "GET of sourceMappingURL leaks full source incl. secrets; real and implemented (browser_scanner + sourcemaps.py). Promoted by both realist and runtime lenses. Strong follow-on secret-mining fit.",
+        "suggested_pack": "leak"
+      },
+      {
+        "rank": 9,
+        "merge_key": "subdomain-takeover",
+        "canonical_name": "subdomain-takeover",
+        "canonical_class": "subdomain-takeover",
+        "frameworks": [
+          "agnostic"
+        ],
+        "severity": "high",
+        "why": "Realist's strongest single correction: dramatically under-ranked at score 58. Dangling-CNAME takeovers are high-volume, cleanly-accepted, well-paid, dedup-resistant (unique infra) and cleanly black-box detectable (resolve CNAME -> fingerprint unclaimed-service page). site_scanner already enumerates subdomains (discover_subdomains/crt.sh), so the detection scaffolding exists. Promoted into the top tier.",
+        "suggested_pack": "recon"
+      },
+      {
+        "rank": 10,
+        "merge_key": "default-credentials",
+        "canonical_name": "default-credentials",
+        "canonical_class": "default-credentials",
+        "frameworks": [
+          "WordPress",
+          "Jenkins",
+          "Grafana",
+          "Adminer",
+          "phpMyAdmin",
+          "agnostic"
+        ],
+        "severity": "critical",
+        "why": "Was not even in the prior Top 51. Promoted by both realist and coverage-gaps: critical-ATO, reliably accepted, low-FP, framework-bound, with a clean known-cred login-matrix oracle. Belongs in the Top 51.",
+        "suggested_pack": "authn"
+      },
+      {
+        "rank": 11,
+        "merge_key": "token-in-webstorage",
+        "canonical_name": "token-in-webstorage",
+        "canonical_class": "token-in-webstorage",
+        "frameworks": [
+          "agnostic",
+          "React",
+          "Angular",
+          "Vue"
+        ],
+        "severity": "high",
+        "why": "Runtime lens promotes (genuinely implemented: passive localStorage/sessionStorage/IndexedDB read in browser_scanner, zero-FP). Realist demotes (informational unless chained to XSS). Net: keep but down-rank from #19-of-old-comp=96 to mid-tier — high detectability, moderate standalone payout.",
+        "suggested_pack": "client"
+      },
+      {
+        "rank": 12,
+        "merge_key": "secret-in-dom",
+        "canonical_name": "secret-in-dom",
+        "canonical_class": "secret-in-dom",
+        "frameworks": [
+          "agnostic",
+          "React",
+          "Redux",
+          "Zustand",
+          "MobX",
+          "Vue"
+        ],
+        "severity": "high",
+        "why": "Runtime lens promotes (real passive DOM/Redux/Vuex store mining, KeyLeak strength). Realist tempers payout. Kept adjacent to token-in-webstorage as a confirmed-implemented browser-secret detector.",
+        "suggested_pack": "leak"
+      },
+      {
+        "rank": 13,
+        "merge_key": "debug-endpoint-exposure",
+        "canonical_name": "debug-endpoint-exposure",
+        "canonical_class": "debug-endpoint-exposure",
+        "frameworks": [
+          "agnostic",
+          "express",
+          "Django",
+          "Flask",
+          "Laravel",
+          "FastAPI",
+          "Ruby on Rails",
+          "ASP.NET",
+          "Next.js",
+          "Spring Boot",
+          "go"
+        ],
+        "severity": "critical",
+        "why": "Broadest recon-grade HTTP-probe class (20 members, comp=95). Same trivial GET+marker shape the scanner already supports. Note FP flag from runtime lens: the current /admin,/login,/dashboard probe flags any 200/301/302/401/403 as a finding — gate that to reduce noise.",
+        "suggested_pack": "recon"
+      },
+      {
+        "rank": 14,
+        "merge_key": "spring-actuator-exposed",
+        "canonical_name": "spring-actuator-exposed",
+        "canonical_class": "debug-endpoint-exposure",
+        "frameworks": [
+          "Spring Boot",
+          "Spring Actuator"
+        ],
+        "severity": "critical",
+        "why": "Framework-bound, low-FP, reliably accepted (promoted by realist). /actuator/{env,heapdump,loggers} leaks secrets/enables RCE. Runtime lens flags it as a high-ROI easy add (single-path GET + body marker) — currently NOT in the probe list, so detection is aspirational until built.",
+        "suggested_pack": "recon"
+      },
+      {
+        "rank": 15,
+        "merge_key": "sqli",
+        "canonical_name": "sqli",
+        "canonical_class": "sql-injection",
+        "frameworks": [
+          "agnostic",
+          "Flask",
+          "PHP",
+          "Laravel",
+          "ASP.NET",
+          "Ruby on Rails",
+          "FastAPI",
+          "SQLAlchemy",
+          "Spring",
+          "Hibernate"
+        ],
+        "severity": "critical",
+        "why": "Highest-impact injection primitive and a class any appsec scanner must enumerate. BUT runtime lens demotes hard: there is NO active SQLi engine — current detection is validation_status=lead regex over fetched static content, not error/boolean/time-blind probes. Kept in Top 51 by impact but tiered below the confirmed-active strengths; rationale must say 'lead', not 'confirmed at runtime'.",
+        "suggested_pack": "injection"
+      },
+      {
+        "rank": 16,
+        "merge_key": "ssrf",
+        "canonical_name": "ssrf",
+        "canonical_class": "ssrf",
+        "frameworks": [
+          "agnostic",
+          "express",
+          "FastAPI",
+          "net/http",
+          "gin",
+          "echo",
+          "AWS",
+          "GCP",
+          "Azure",
+          "Angular",
+          "Next.js"
+        ],
+        "severity": "critical",
+        "why": "Highest single-class EV once landed (cloud-metadata -> IAM creds); realist even calls it under-ranked. Runtime lens demotes: no OOB/metadata-callback engine exists, current hits are static leads. Net: kept top-of-injection-tier on impact, flagged as lead-only until an OOB probe ships.",
+        "suggested_pack": "injection"
+      },
+      {
+        "rank": 17,
+        "merge_key": "nosql-injection",
+        "canonical_name": "nosql-injection",
+        "canonical_class": "nosql-injection",
+        "frameworks": [
+          "express",
+          "mongoose",
+          "mongodb",
+          "Node.js",
+          "Meteor",
+          "Django",
+          "Flask"
+        ],
+        "severity": "critical",
+        "why": "Highly prevalent in Node stacks, comp=96. Runtime lens demotes: no $ne/$gt mutation probe exists (grep confirmed). Kept by impact/prevalence, tiered as lead-only.",
+        "suggested_pack": "injection"
+      },
+      {
+        "rank": 18,
+        "merge_key": "jwt-flaw",
+        "canonical_name": "jwt-flaw",
+        "canonical_class": "jwt-flaw",
+        "frameworks": [
+          "agnostic",
+          "express",
+          "net/http",
+          "gin",
+          "echo",
+          "Angular",
+          "Vue",
+          "FastAPI",
+          "Spring",
+          "Django REST Framework",
+          "Flask"
+        ],
+        "severity": "critical",
+        "why": "Full-ATO impact, broad spread. Runtime lens demotes: scanner decodes JWTs but does NOT forge/mint (no alg=none/HS256-confusion minting). Kept on impact; the kid-injection high-yield variant (coverage-gaps add) folds in under this merge_key as a distinct probe.",
+        "suggested_pack": "authn"
+      },
+      {
+        "rank": 19,
+        "merge_key": "cors-misconfig",
+        "canonical_name": "cors-misconfig",
+        "canonical_class": "cors-misconfig",
+        "frameworks": [
+          "agnostic",
+          "express",
+          "FastAPI",
+          "React",
+          "Spring",
+          "Flask",
+          "Laravel",
+          "ASP.NET",
+          "go",
+          "Next.js",
+          "Angular",
+          "Vue",
+          "Django"
+        ],
+        "severity": "high",
+        "why": "14 members, ubiquitous. Runtime lens demotes: only the BaaS CORS=='*' check is active; there is NO general app Origin-replay engine. The credentialed Origin-replay variant (runtime lens add) is the only one that matters and should be built. Kept but tiered.",
+        "suggested_pack": "headers"
+      },
+      {
+        "rank": 20,
+        "merge_key": "mass-assignment",
+        "canonical_name": "mass-assignment",
+        "canonical_class": "mass-assignment",
+        "frameworks": [
+          "agnostic",
+          "express",
+          "Ruby on Rails",
+          "Laravel",
+          "Spring",
+          "Django REST Framework",
+          "ASP.NET MVC",
+          "gin",
+          "echo",
+          "FastAPI",
+          "Pydantic"
+        ],
+        "severity": "critical",
+        "why": "OWASP API6, 12 members across all ORMs. Runtime lens demotes: no privileged-field write-probe engine; current hits are static leads. Kept on prevalence/impact, tiered as lead.",
+        "suggested_pack": "injection"
+      },
+      {
+        "rank": 21,
+        "merge_key": "bfla",
+        "canonical_name": "bfla",
+        "canonical_class": "bfla",
+        "frameworks": [
+          "agnostic",
+          "Spring",
+          "Next.js",
+          "ASP.NET",
+          "Django"
+        ],
+        "severity": "critical",
+        "why": "OWASP API5, high impact. Partially confirmable via the same 2-user replay machinery as IDOR (access_control), but privileged-function replay is not fully built. Kept; tiered below idor-bola/unauthenticated-access.",
+        "suggested_pack": "access-control"
+      },
+      {
+        "rank": 22,
+        "merge_key": "nextjs-middleware-authz-bypass",
+        "canonical_name": "nextjs-middleware-authz-bypass",
+        "canonical_class": "broken-access-control",
+        "frameworks": [
+          "Next.js"
+        ],
+        "severity": "critical",
+        "why": "CVE-class x-middleware-subrequest bypass; framework-bound, high prevalence given Next.js dominance (realist promotes). Runtime lens demotes: the specific header-trick probe is NOT implemented (grep confirmed no x-middleware-subrequest). Kept on impact, flagged as unbuilt.",
+        "suggested_pack": "access-control"
+      },
+      {
+        "rank": 23,
+        "merge_key": "path-traversal",
+        "canonical_name": "path-traversal",
+        "canonical_class": "path-traversal",
+        "frameworks": [
+          "agnostic",
+          "express",
+          "Flask",
+          "Ruby on Rails",
+          "Next.js",
+          "ASP.NET Core",
+          "gin",
+          "echo"
+        ],
+        "severity": "critical",
+        "why": "High-impact file-read primitive, 8 frameworks, clean oracle (read /etc/passwd). Runtime lens demotes: ../ injection probe not implemented, current hits are leads. Kept on impact, tiered.",
+        "suggested_pack": "injection"
+      },
+      {
+        "rank": 24,
+        "merge_key": "ssti",
+        "canonical_name": "ssti",
+        "canonical_class": "ssti",
+        "frameworks": [
+          "Flask",
+          "Jinja2",
+          "Twig",
+          "FreeMarker",
+          "Pebble",
+          "Velocity",
+          "Handlebars",
+          "Mako",
+          "Angular",
+          "AngularJS"
+        ],
+        "severity": "critical",
+        "why": "Escalates to RCE; clean {{7*7}} oracle. Runtime lens demotes: no arithmetic-payload reflection engine (grep confirmed no 7*7). Kept on RCE impact, tiered as lead.",
+        "suggested_pack": "injection"
+      },
+      {
+        "rank": 25,
+        "merge_key": "open-redirect",
+        "canonical_name": "open-redirect",
+        "canonical_class": "open-redirect",
+        "frameworks": [
+          "agnostic",
+          "express",
+          "Flask",
+          "Ruby on Rails",
+          "go",
+          "ASP.NET",
+          "Angular",
+          "Vue",
+          "Spring",
+          "Next.js",
+          "React"
+        ],
+        "severity": "high",
+        "why": "Realist promotes (OAuth-code/token-leak variant is ATO-grade, not the informational redirect it's often dismissed as). Runtime lens demotes (param-injection probe not active). Net: keep mid-tier; the ATO-escalation variant lifts it above pure informational.",
+        "suggested_pack": "injection"
+      },
+      {
+        "rank": 26,
+        "merge_key": "h2-console-exposed",
+        "canonical_name": "h2-console-exposed",
+        "canonical_class": "debug-endpoint-exposure",
+        "frameworks": [
+          "Spring Boot"
+        ],
+        "severity": "critical",
+        "why": "Framework-bound single-path /h2-console probe -> DB RCE, near-zero FP. Runtime lens flags as easy high-ROI add (single GET + marker), currently not in probe list. Kept on impact, build-pending.",
+        "suggested_pack": "recon"
+      },
+      {
+        "rank": 27,
+        "merge_key": "otp-in-response",
+        "canonical_name": "otp-in-response",
+        "canonical_class": "otp-2fa-flaw",
+        "frameworks": [
+          "agnostic"
+        ],
+        "severity": "critical",
+        "why": "Full MFA defeat; detected by response-body regex which the scanner genuinely does (runtime lens keeps it as implemented). FP flag: regex can match non-OTP 4-8 digit fields (zip/year/count) — medium FP, needs context gating.",
+        "suggested_pack": "authn"
+      },
+      {
+        "rank": 28,
+        "merge_key": "secret-in-response-body",
+        "canonical_name": "secret-in-response-body",
+        "canonical_class": "secret-leak",
+        "frameworks": [
+          "Django",
+          "Laravel"
+        ],
+        "severity": "critical",
+        "why": "SECRET_KEY/Sanctum token echoed in body = direct leakage caught by body scanning (runtime lens keeps as genuinely implemented). High impact, real detection.",
+        "suggested_pack": "leak"
+      },
+      {
+        "rank": 29,
+        "merge_key": "spring-data-rest-exposure",
+        "canonical_name": "spring-data-rest-exposure",
+        "canonical_class": "idor-bola",
+        "frameworks": [
+          "Spring Boot",
+          "Spring Data REST"
+        ],
+        "severity": "critical",
+        "why": "Auto-exposed repositories enable CRUD enumeration; distinct path-signature detection (single-path probe shape). Framework-bound critical, kept.",
+        "suggested_pack": "recon"
+      },
+      {
+        "rank": 30,
+        "merge_key": "directory-listing",
+        "canonical_name": "directory-listing",
+        "canonical_class": "directory-listing",
+        "frameworks": [
+          "express",
+          "serve-static",
+          "Apache",
+          "Nginx",
+          "IIS",
+          "agnostic"
+        ],
+        "severity": "medium",
+        "why": "Runtime lens promotes (genuinely implemented marker-based HTTP detection, low-FP, high prevalence on misconfigured static servers). Pure-read strength. Moved up from #41.",
+        "suggested_pack": "recon"
+      },
+      {
+        "rank": 31,
+        "merge_key": "xss-reflected-stored-dom",
+        "canonical_name": "xss-reflected-stored-dom",
+        "canonical_class": "xss",
+        "frameworks": [
+          "agnostic",
+          "Ruby on Rails",
+          "Flask",
+          "React",
+          "Vue"
+        ],
+        "severity": "high",
+        "why": "Most prevalent client-side bug. Reflected variant is lead-only (no active reflection probe), but DOM-XSS sinks are visible to browser_scanner. Realist adds blind/stored XSS via OOB as a distinct mode (see additions). Kept mid-tier.",
+        "suggested_pack": "appsec"
+      },
+      {
+        "rank": 32,
+        "merge_key": "excessive-data-exposure",
+        "canonical_name": "excessive-data-exposure",
+        "canonical_class": "excessive-data-exposure",
+        "frameworks": [
+          "agnostic"
+        ],
+        "severity": "high",
+        "why": "OWASP API3; detected by inspecting response bodies for over-broad objects — a natural response-diff check the scanner can genuinely do. Kept.",
+        "suggested_pack": "api"
+      },
+      {
+        "rank": 33,
+        "merge_key": "weak-session-secret",
+        "canonical_name": "weak-session-secret",
+        "canonical_class": "session-forgery",
+        "frameworks": [
+          "Flask",
+          "Ruby on Rails"
+        ],
+        "severity": "critical",
+        "why": "Forgeable Flask/Rails signed session = full forgery. Runtime lens demotes (minting a valid cookie requires a forge step the scanner lacks). Kept on impact, flagged lead/unbuilt.",
+        "suggested_pack": "authn"
+      },
+      {
+        "rank": 34,
+        "merge_key": "open-cloud-storage-bucket",
+        "canonical_name": "open-cloud-storage-bucket",
+        "canonical_class": "exposed-storage",
+        "frameworks": [
+          "Supabase",
+          "Firebase",
+          "AWS S3",
+          "GCS",
+          "Azure Blob",
+          "agnostic"
+        ],
+        "severity": "high",
+        "why": "Net-new from runtime lens (open-cloud-storage-bucket) folded in here as an extension of the BaaS prober: storage-list/public-bucket probe is the same confirmed-active shape baas_validator already uses for Supabase storage. High prevalence, reuses existing engine, low-FP. Promoted into Top 51 as a genuine implemented-adjacent strength.",
+        "suggested_pack": "baas"
+      },
+      {
+        "rank": 35,
+        "merge_key": "client-side-only-authz",
+        "canonical_name": "client-side-only-authz",
+        "canonical_class": "broken-access-control",
+        "frameworks": [
+          "React",
+          "React Router",
+          "Next.js",
+          "LaunchDarkly",
+          "Unleash",
+          "Vue",
+          "Angular",
+          "agnostic"
+        ],
+        "severity": "high",
+        "why": "UI-only/feature-flag authz bypassed by direct API call; KeyLeak's JS endpoint-mining feeds this (real surface). Kept mid-tier.",
+        "suggested_pack": "access-control"
+      },
+      {
+        "rank": 36,
+        "merge_key": "graphql-introspection-exposed",
+        "canonical_name": "graphql-introspection-exposed",
+        "canonical_class": "graphql-introspection-exposed",
+        "frameworks": [
+          "GraphQL",
+          "Hasura",
+          "Apollo",
+          "React",
+          "Angular",
+          "Vue",
+          "agnostic"
+        ],
+        "severity": "medium",
+        "why": "Realist promotes (reliably accepted, low-FP, clean __schema oracle). Runtime lens caveat: current detection is regex hint only, not an active introspection query. Kept; the introspection probe is an easy build.",
+        "suggested_pack": "api"
+      },
+      {
+        "rank": 37,
+        "merge_key": "insecure-cookie-flags",
+        "canonical_name": "insecure-cookie-flags",
+        "canonical_class": "insecure-cookie",
+        "frameworks": [
+          "agnostic",
+          "express",
+          "Flask",
+          "ASP.NET",
+          "Laravel"
+        ],
+        "severity": "high",
+        "why": "Both realist and runtime lenses flag this: realist demotes payout (informational unless chained), runtime lens notes it is LISTED but UNBUILT (verified: no HttpOnly/SameSite/Secure parsing anywhere) and is the #1 zero-FP easy add (Set-Cookie header parse). Net: kept but demoted from #25; flagged as must-build, low standalone payout.",
+        "suggested_pack": "headers"
+      },
+      {
+        "rank": 38,
+        "merge_key": "laravel-debugbar-telescope-exposed",
+        "canonical_name": "laravel-debugbar-telescope-exposed",
+        "canonical_class": "debug-endpoint-exposure",
+        "frameworks": [
+          "Laravel"
+        ],
+        "severity": "high",
+        "why": "Framework-bound, exposes queries/env/request data via specific path+marker. Same trivial GET shape; runtime lens lists it among the easy debug-path adds (currently not in probe list). Kept.",
+        "suggested_pack": "recon"
+      },
+      {
+        "rank": 39,
+        "merge_key": "go-pprof-debug-exposed",
+        "canonical_name": "go-pprof-debug-exposed",
+        "canonical_class": "debug-endpoint-exposure",
+        "frameworks": [
+          "net/http"
+        ],
+        "severity": "high",
+        "why": "/debug/pprof on default mux leaks memory/goroutine data + DoS. Specific-path probe, common Go misconfig; among runtime lens easy-add debug paths (not currently in list). Kept.",
+        "suggested_pack": "recon"
+      },
+      {
+        "rank": 40,
+        "merge_key": "host-header-injection",
+        "canonical_name": "host-header-injection",
+        "canonical_class": "host-header-injection",
+        "frameworks": [
+          "agnostic",
+          "Django",
+          "go"
+        ],
+        "severity": "high",
+        "why": "Realist promotes (password-reset-poisoning variant is straight ATO). Runtime lens demotes (no X-Forwarded-Host injection probe — grep confirmed). Net: kept mid-tier on the ATO variant, flagged unbuilt.",
+        "suggested_pack": "appsec"
+      },
+      {
+        "rank": 41,
+        "merge_key": "cmd-injection",
+        "canonical_name": "cmd-injection",
+        "canonical_class": "cmd-injection",
+        "frameworks": [
+          "agnostic"
+        ],
+        "severity": "critical",
+        "why": "Coverage-gaps promotes: critical-RCE with a clean time-blind/OOB oracle, ranked far below impact and not in prior Top 51. Runtime lens caveat: no active engine yet, so lead-only today. Promoted into Top 51 on impact + buildability.",
+        "suggested_pack": "injection"
+      },
+      {
+        "rank": 42,
+        "merge_key": "resource-id-enumeration",
+        "canonical_name": "resource-id-enumeration",
+        "canonical_class": "resource-id-enumeration",
+        "frameworks": [
+          "agnostic"
+        ],
+        "severity": "high",
+        "why": "OWASP API9; sequential/guessable IDs + legacy API versions enumerable via ID fuzzing and version-path probing. Coverage-gaps promotes. Detectable with the scanner's probe surface. Kept.",
+        "suggested_pack": "api"
+      },
+      {
+        "rank": 43,
+        "merge_key": "xxe-injection",
+        "canonical_name": "xxe-injection",
+        "canonical_class": "xxe",
+        "frameworks": [
+          "Java",
+          "PHP",
+          ".NET",
+          "Python (lxml)",
+          "Ruby (Nokogiri)"
+        ],
+        "severity": "critical",
+        "why": "Coverage-gaps promotes: critical impact, clean OOB oracle, under-ranked at 73 and not in prior Top 51. Promoted in on impact; OOB engine is a build dependency.",
+        "suggested_pack": "injection"
+      },
+      {
+        "rank": 44,
+        "merge_key": "token-in-query-string",
+        "canonical_name": "token-in-query-string",
+        "canonical_class": "token-in-url",
+        "frameworks": [
+          "FastAPI",
+          "React",
+          "agnostic"
+        ],
+        "severity": "medium",
+        "why": "Tokens/PII in URL/query leak via logs/referrers; detected directly in request URLs/links — runtime lens keeps as genuinely implemented and low-FP. Kept.",
+        "suggested_pack": "leak"
+      },
+      {
+        "rank": 45,
+        "merge_key": "prototype-pollution",
+        "canonical_name": "prototype-pollution",
+        "canonical_class": "prototype-pollution",
+        "frameworks": [
+          "agnostic",
+          "express",
+          "body-parser",
+          "Next.js",
+          "Angular",
+          "Vue"
+        ],
+        "severity": "critical",
+        "why": "Can escalate to RCE/authz bypass in Node. Runtime lens demotes (no __proto__ payload engine — grep confirmed). Kept on impact, tiered as lead/unbuilt.",
+        "suggested_pack": "injection"
+      },
+      {
+        "rank": 46,
+        "merge_key": "django-admin-exposed",
+        "canonical_name": "django-admin-exposed",
+        "canonical_class": "debug-endpoint-exposure",
+        "frameworks": [
+          "Django",
+          "Django REST Framework"
+        ],
+        "severity": "high",
+        "why": "Specific-path /admin + DRF browsable API probe, very common in Django. Same GET+marker shape; among easy debug-path adds. Kept.",
+        "suggested_pack": "recon"
+      },
+      {
+        "rank": 47,
+        "merge_key": "rate-limit-missing",
+        "canonical_name": "rate-limit-missing",
+        "canonical_class": "rate-limit",
+        "frameworks": [
+          "agnostic",
+          "FastAPI",
+          "go",
+          "express"
+        ],
+        "severity": "high",
+        "why": "OWASP API4; brute-force/credential-stuffing on auth/OTP. Runtime lens demotes (no burst-timing engine). Kept on impact, flagged unbuilt.",
+        "suggested_pack": "authn"
+      },
+      {
+        "rank": 48,
+        "merge_key": "werkzeug-debug-pin-derivation",
+        "canonical_name": "werkzeug-debug-pin-derivation",
+        "canonical_class": "debug-endpoint-exposure",
+        "frameworks": [
+          "Flask",
+          "Werkzeug"
+        ],
+        "severity": "critical",
+        "why": "Interactive debugger console = RCE; distinct high-impact Flask finding via specific endpoint probe. Among runtime lens easy debug-path adds (not currently probed). Kept on impact.",
+        "suggested_pack": "recon"
+      },
+      {
+        "rank": 49,
+        "merge_key": "oidc-email-claim-trust",
+        "canonical_name": "oidc-email-claim-trust",
+        "canonical_class": "oauth-oidc-flaw",
+        "frameworks": [
+          "agnostic"
+        ],
+        "severity": "critical",
+        "why": "Trusting unverified OIDC email claim -> ATO via attacker IdP. Runtime lens demotes (auth-flow probe not built). Kept on emerging-impact; the oauth redirect_uri/PKCE variant (coverage-gaps add) folds in under this oauth-oidc-flaw merge_key.",
+        "suggested_pack": "authn"
+      },
+      {
+        "rank": 50,
+        "merge_key": "user-enumeration",
+        "canonical_name": "user-enumeration",
+        "canonical_class": "user-enumeration",
+        "frameworks": [
+          "agnostic",
+          "ASP.NET",
+          "Ruby on Rails",
+          "Django"
+        ],
+        "severity": "medium",
+        "why": "Both realist and runtime lenses demote (heavily duplicated, routinely informational, no response-diff timing engine built). Kept at the floor as a common precursor; low standalone payout.",
+        "suggested_pack": "authn"
+      },
+      {
+        "rank": 51,
+        "merge_key": "password-reset-token-predictable",
+        "canonical_name": "password-reset-token-predictable",
+        "canonical_class": "password-reset-flaw",
+        "frameworks": [
+          "agnostic"
+        ],
+        "severity": "high",
+        "why": "Coverage-gaps promotes; sits at the economic center of the bounty ATO-chain. The password-reset-token-leakage high-yield variant (coverage-gaps add) folds in under this merge_key as a distinct probe. Promoted into the 51 to anchor the auth-takeover chain.",
+        "suggested_pack": "authn"
+      }
+    ],
+    "extended_final": [
+      "openapi-docs-exposed",
+      "graphql-batching-amplification",
+      "aspnet-viewstate-mac-bypass",
+      "phpinfo-exposure",
+      "token-in-telemetry",
+      "session-fixation",
+      "csrf",
+      "security-headers-missing",
+      "missing-sri",
+      "server-version-disclosure",
+      "robots-sitemap-path-disclosure",
+      "clickjacking",
+      "rails-default-catchall-route",
+      "type-coercion-validation-bypass",
+      "http-method-unrestricted",
+      "postmessage-origin-bypass"
+    ],
+    "additions": [
+      {
+        "name": "exposed-git-directory",
+        "canonical_class": "secrets-exposure",
+        "severity": "critical",
+        "why": "Realist add + coverage-gaps confirm the gap is real (verified: no .git/config, backup, or .DS_Store probe exists despite the #3 description claiming '.git/backup' coverage). A dedicated /.git/ directory probe out-pays generic .env on acceptance and is dedup-resistant. Distinct enough from exposed-env-file to warrant its own probe.",
+        "detection_signal": "GET /.git/config, /.git/HEAD, /.git/index; reconstruct source from objects/packs",
+        "runtime_discovery": "pure HTTP GET, same shape as existing exposed-path probes; near-zero FP",
+        "frameworks": [
+          "agnostic"
+        ],
+        "suggested_pack": "leak"
+      },
+      {
+        "name": "web-cache-deception-poisoning",
+        "canonical_class": "web-cache-attack",
+        "severity": "high",
+        "why": "Named independently by all three lenses (realist 'cache-deception-poisoning', coverage-gaps 'web-cache-deception-poisoning'). Completely absent from the cluster index, high-frequency and well-paid on CDN-fronted targets. Genuine taxonomy hole.",
+        "detection_signal": "append /nonexistent.css or .json to authenticated path; observe cached sensitive response served to unauthenticated request; or X-Cache/Age header poisoning",
+        "runtime_discovery": "two-request black-box probe (cached vs uncached diff); buildable on the existing HTTP probe surface",
+        "frameworks": [
+          "agnostic",
+          "Cloudflare",
+          "Akamai",
+          "Fastly",
+          "Next.js"
+        ],
+        "suggested_pack": "appsec"
+      },
+      {
+        "name": "open-cloud-storage-bucket",
+        "canonical_class": "exposed-storage",
+        "severity": "high",
+        "why": "Runtime lens add; reuses the confirmed-active BaaS prober (baas_validator storage-list). Generic public S3/GCS/Azure-blob enumeration is high-prevalence, low-FP, and one of the few genuinely active checks the scanner can already perform. Folded into Top 51 at #34 as it is implemented-adjacent.",
+        "detection_signal": "anonymous LIST/GET on bucket URLs extracted from bundles/config; 200 + object listing = open",
+        "runtime_discovery": "active anon request, same engine as Supabase storage probe",
+        "frameworks": [
+          "AWS S3",
+          "GCS",
+          "Azure Blob",
+          "Firebase Storage",
+          "agnostic"
+        ],
+        "suggested_pack": "baas"
+      },
+      {
+        "name": "http-request-smuggling",
+        "canonical_class": "http-request-smuggling",
+        "severity": "critical",
+        "why": "Coverage-gaps: top-tier class with ZERO cluster representation. Genuine high-impact gap, black-box detectable via timing/desync, though it requires a raw-socket probe engine the scanner does not yet have.",
+        "detection_signal": "CL.TE / TE.CL desync via crafted Content-Length + Transfer-Encoding; measure response-time delta or socket poisoning",
+        "runtime_discovery": "raw-socket timing probe (OOB-style oracle); new engine dependency",
+        "frameworks": [
+          "agnostic",
+          "Nginx",
+          "HAProxy",
+          "Node.js"
+        ],
+        "suggested_pack": "injection"
+      },
+      {
+        "name": "insecure-deserialization",
+        "canonical_class": "insecure-deserialization",
+        "severity": "critical",
+        "why": "Coverage-gaps: generic insecure deserialization has no cluster (aspnet-viewstate is the only narrow representative). Critical-RCE, black-box detectable via OOB gadget callback. Genuine gap distinct from the framework-specific viewstate entry.",
+        "detection_signal": "send crafted serialized payload (Java/PHP/Python pickle/.NET) with OOB callback gadget; observe DNS/HTTP callback",
+        "runtime_discovery": "OOB-callback oracle; shares engine need with ssrf/xxe",
+        "frameworks": [
+          "Java",
+          "PHP",
+          "Python",
+          "Ruby",
+          ".NET"
+        ],
+        "suggested_pack": "injection"
+      },
+      {
+        "name": "account-takeover-chain",
+        "canonical_class": "auth-takeover",
+        "severity": "critical",
+        "why": "Realist add: explicit ATO-chain class fusing reset-token + response-leaked-OTP + identity-claim confusion (the 'economic center of bounty'). Not a single existing cluster — it is a chained-detection orchestration over otp-in-response + password-reset-flaw + oidc-email-claim-trust. Worth a dedicated meta-detection rather than scattering the signal.",
+        "detection_signal": "correlate OTP-in-response + predictable/leaked reset token + unverified email-claim acceptance in one auth flow",
+        "runtime_discovery": "chained multi-step auth-flow probe; orchestrates existing authn-pack signals",
+        "frameworks": [
+          "agnostic"
+        ],
+        "suggested_pack": "authn"
+      },
+      {
+        "name": "websocket-auth-origin-bypass",
+        "canonical_class": "websocket-security",
+        "severity": "high",
+        "why": "Coverage-gaps: WebSocket auth / cross-site WebSocket hijacking (CSWSH) has zero cluster representation. Black-box detectable by opening a WS with a foreign Origin and observing authenticated data. Genuine gap on real-time-heavy apps.",
+        "detection_signal": "WS handshake with attacker Origin / no token; receive authenticated stream = CSWSH",
+        "runtime_discovery": "active WS handshake probe; new but well-bounded engine",
+        "frameworks": [
+          "agnostic",
+          "Socket.IO",
+          "ws",
+          "Phoenix Channels"
+        ],
+        "suggested_pack": "appsec"
+      }
+    ],
+    "removed": [],
+    "rationale": "RECONCILIATION METHOD. I grounded every architecture claim in the code before re-ranking. Verified in-repo: (a) detectors.py is overwhelmingly validation_status='lead' (regex over fetched static content) for sqli/ssrf/xss/idor_direct/auth_bypass/ssti/open_redirect/mass_assignment — confirming the runtime-detectability lens; (b) baas_validator.py is the ONLY genuine active engine, emitting validation_status='confirmed' for anon table read, storage list, write-probe (Prefer tx=rollback), and service_role JWT-claim decode; (c) access_control.py compare_access_control_urls is the real 2-user IDOR diff; (d) browser_scanner.py genuinely reads localStorage/sessionStorage/IndexedDB + bundle/sourcemap mining; (e) NO cookie-flag parsing (HttpOnly/SameSite/Secure) exists anywhere — insecure-cookie-flags is listed-but-unbuilt; (f) NO active-injection signatures exist (grepped Origin-replay, 7*7, $ne/$gt, __proto__, alg=none, x-middleware-subrequest, /actuator, /h2-console, /debug/pprof, __schema, X-Forwarded-Host — none present); (g) the only path-probe family is the generic /admin,/wp-admin,/phpmyadmin,/server-status list, so every framework debug path (actuator/h2/pprof/telescope/werkzeug/docs/phpinfo) is currently undetected; (h) site_scanner.py already does subdomain enumeration (crt.sh/subfinder), making subdomain-takeover cheaply buildable.\n\nWEIGHTING. (1) runtime-detectability = authority on confirmed-active vs lead-only; it drove the structural re-tiering. (2) bug-bounty-realist = authority on dedup-resistance/payout; it corrected comp= inflation and elevated subdomain-takeover, default-credentials, the BaaS family. (3) coverage-gaps = authority on taxonomy holes; it supplied the net-new RCE/critical classes and the missing top-tier classes.\n\nKEY MOVES. PROMOTED to a confirmed-active top tier: the BaaS family (supabase-rls #3, service-role-key #5, baas-config #6) and the read-only file/header/bundle/storage + 2-user-IDOR detectors — these are KeyLeak's defensible, low-FP, implemented strengths. subdomain-takeover #52->#9 (realist's strongest single correction) and default-credentials (not previously in 51)->#10. directory-listing #41->#30 (genuinely implemented). cmd-injection, xxe-injection, resource-id-enumeration, password-reset-token-predictable promoted into the 51 on impact + clean oracles per coverage-gaps. DEMOTED but KEPT-in-51: the entire active-injection tier (sqli/ssrf/nosql/ssti/path-traversal/mass-assignment/prototype-pollution/jwt-flaw/cors/nextjs-middleware/host-header/weak-session-secret/rate-limit/oidc) sits BELOW the confirmed-active strengths because the 'mint a forged token / replay attacker Origin / send $ne / inject ../' rationale strings describe capabilities the engine does not have; each 'why' now flags lead-only/unbuilt to avoid a Fail-Loud violation. insecure-cookie-flags #25->#37 (informational + unbuilt). DEMOTED to the EXTENDED list (two-lens agreement on near-zero payout): security-headers-missing, missing-sri, server-version-disclosure, clickjacking, robots-sitemap-path-disclosure, csrf, session-fixation, http-method-unrestricted, type-coercion-validation-bypass, phpinfo-exposure, openapi-docs-exposed (comp=94 wildly inflated for recon), plus rails-default-catchall and postmessage-origin-bypass.\n\nADDITIONS (deduped). FOLDED into existing merge_keys (no taxonomy churn, per coverage-gaps' own guidance): jwt-kid-injection -> jwt-flaw (#18); password-reset-token-leakage -> password-reset-token-predictable (#51); exposed-vcs-and-backup-artifacts & api-key-validation-live -> secrets-exposure cluster; oauth-redirect-uri-pkce-flaw -> oidc-email-claim-trust/oauth-oidc-flaw (#49); generic-cors-active-replay -> cors-misconfig (#19); graphql-alias-field-duplication-dos & graphql-batching-amplification -> existing graphql clusters; xss-stored-blind -> xss-reflected-stored-dom (#31). NET-NEW genuinely-missing, common, runtime-detectable classes: exposed-git-directory (named by realist + verified real gap), web-cache-deception-poisoning (named by all three lenses, zero representation), open-cloud-storage-bucket (reuses confirmed-active BaaS prober — promoted straight into #34), http-request-smuggling, insecure-deserialization, websocket-auth-origin-bypass (coverage-gaps top-tier zero-representation classes), and account-takeover-chain (realist's chained-ATO meta-detection over otp/reset/identity-claim).\n\nREMOVALS. Empty by unanimous panel position: all three reviews list remove: (empty) and coverage-gaps states explicitly 'nothing in the Top 51 is mis-scoped enough to drop.' The under-built items (cookie-flags, debug paths, active-injection tier) are retained-with-flags rather than removed, because the gap is in the engine, not the taxonomy — the correct response is build-the-probe, not drop-the-class."
+  }
+}

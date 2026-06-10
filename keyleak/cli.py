@@ -36,6 +36,13 @@ def main(argv: Optional[List[str]] = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
 
+    if args.command == "bundles":
+        return _print_bundles()
+
+    if getattr(args, "bundle", ""):
+        if _apply_bundle_selection(args) != 0:
+            return 1
+
     try:
         proxy = resolve_proxy(getattr(args, "proxy", "") or "")
     except ProxyError as exc:
@@ -97,7 +104,7 @@ def main(argv: Optional[List[str]] = None) -> int:
 
         canonical_id = args.detector_id
         if not canonical_id:
-            print("explain requires a detector canonical_id (e.g. leak.openai_api_key)", file=sys.stderr)
+            print("explain requires a detector canonical_id (e.g. leak.source_map_reference)", file=sys.stderr)
             return 1
         detector = find_detector(canonical_id)
         if detector is None:
@@ -306,12 +313,15 @@ def build_parser() -> argparse.ArgumentParser:
     )
     subparsers = parser.add_subparsers(dest="command")
 
+    subparsers.add_parser("bundles", help="List scan bundles (named groups of detector packs + scan phases).")
+
     scan = subparsers.add_parser("scan", help="Scan a running web app through the local KeyLeak web scanner.")
     scan.add_argument("url")
     scan.add_argument("--server", default=DEFAULT_SERVER)
     scan.add_argument("--profile", default="browser", choices=["browser", "authenticated"])
     scan.add_argument("--launch-profile", default="launch-gate", choices=["launch-gate", "local-dev", "bug-bounty", "ci", "full"])
     scan.add_argument("--packs", default="", help=f"Comma-separated detector packs. Available: {', '.join(DETECTOR_PACKS)}")
+    scan.add_argument("--bundle", default="", help="Scan bundle (named group of packs + phases). Run `keyleak bundles` to list. Selects the bundle's packs; overrides --packs.")
     scan.add_argument("--bearer", default="")
     scan.add_argument("--cookie", default="")
     scan.add_argument("--bearer-b", default="", help="Second throwaway user's bearer token for access-control comparison.")
@@ -326,6 +336,7 @@ def build_parser() -> argparse.ArgumentParser:
     local.add_argument("--include", default=",".join(DEFAULT_INCLUDES))
     local.add_argument("--launch-profile", default="launch-gate", choices=["launch-gate", "local-dev", "bug-bounty", "ci", "full"])
     local.add_argument("--packs", default="", help=f"Comma-separated detector packs. Available: {', '.join(DETECTOR_PACKS)}")
+    local.add_argument("--bundle", default="", help="Scan bundle (named group of packs). Run `keyleak bundles` to list. Selects the bundle's packs; overrides --packs.")
     local.add_argument("--fail-on", default="high", choices=["low", "medium", "high", "critical"])
     local.add_argument("--baseline", default="", help="Suppress findings already present in a previous KeyLeak JSON report.")
     local.add_argument("--allowlist", default="", help="Suppress known findings from a JSON or line-based allowlist.")
@@ -555,6 +566,72 @@ def _add_format_flags(parser: argparse.ArgumentParser) -> None:
     group.add_argument("--sarif", action="store_true", help="Emit SARIF 2.1.0 report.")
     group.add_argument("--markdown", action="store_true", help="Emit Markdown report.")
     group.add_argument("--html", action="store_true", help="Emit self-contained HTML report.")
+
+
+def _print_bundles() -> int:
+    from .bundles import BUNDLES, runnable_packs, unpopulated_packs
+    print("Scan bundles  (keyleak scan --bundle <id>  /  keyleak local --bundle <id>):\n")
+    for bundle in BUNDLES.values():
+        kind = "probing" if bundle.is_probing else "navigation" if bundle.sends_requests else "passive"
+        runnable = runnable_packs(bundle)
+        status = "" if runnable else "  (NO runnable detectors yet)"
+        print(f"  {bundle.id:<9} {bundle.title}  [{kind}]{status}")
+        print(f"            {bundle.description}")
+        print(f"            packs:  {', '.join(bundle.packs)}")
+        print(f"            phases: {', '.join(bundle.phases)}")
+        empties = unpopulated_packs(bundle)
+        if empties:
+            print(f"            note: packs not yet populated (later milestones): {', '.join(empties)}")
+        print()
+    return 0
+
+
+def _apply_bundle_selection(args: argparse.Namespace) -> int:
+    """Resolve --bundle into args.packs (the bundle's runtime packs).
+
+    Honesty contract (audit W4): a bundle must either run what it advertises or
+    say loudly that it does not. So we (a) HARD-FAIL a bundle with no runnable
+    detectors instead of running an empty scan that "passes", and (b) emit an
+    unmistakable WARNING naming the active phases this command does NOT execute,
+    so a passive-only run is never mistaken for active coverage.
+    """
+    from .bundles import (
+        NAVIGATION_PHASES, PROBING_PHASES, REPO_ONLY_PACKS,
+        resolve_bundle, runnable_packs, unpopulated_packs,
+    )
+    try:
+        bundle = resolve_bundle(args.bundle)
+    except KeyError as exc:
+        print(str(exc), file=sys.stderr)
+        return 1
+
+    if not runnable_packs(bundle):
+        print(
+            f"[bundle] ERROR: bundle {bundle.id!r} has NO runnable detectors yet — "
+            f"its packs ({', '.join(bundle.packs)}) land in later milestones. Refusing "
+            f"to run a scan that would find nothing. Pick another bundle (`keyleak bundles`).",
+            file=sys.stderr,
+        )
+        return 1
+
+    runtime_packs = [pack for pack in bundle.packs if pack not in REPO_ONLY_PACKS]
+    args.packs = ",".join(runtime_packs)
+    print(f"[bundle] {bundle.id}: packs={','.join(runtime_packs)} phases={','.join(bundle.phases)}", file=sys.stderr)
+
+    empties = unpopulated_packs(bundle)
+    if empties:
+        print(f"[bundle] note: packs not yet populated (skipped; land in later milestones): {', '.join(empties)}", file=sys.stderr)
+
+    not_run = [p for p in bundle.phases if p in NAVIGATION_PHASES or p in PROBING_PHASES]
+    if not_run:
+        print(
+            f"[bundle] WARNING: this command runs PASSIVE detection only. The bundle's "
+            f"active phases are NOT executed here: {', '.join(not_run)}. "
+            f"Use `site-scan` (crawl/subdomain) or `browser-scan --baas-validate` (BaaS probes) "
+            f"to run them; do not read this passive result as active coverage.",
+            file=sys.stderr,
+        )
+    return 0
 
 
 def _split_includes(value: str):

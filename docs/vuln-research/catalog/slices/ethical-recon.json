@@ -1,0 +1,300 @@
+[
+  {
+    "id": "exposed-git-repository",
+    "name": "Exposed .git Directory",
+    "owasp_category": "A05:2021 Security Misconfiguration",
+    "frameworks": [
+      "agnostic"
+    ],
+    "description": "The .git directory is publicly accessible on the web root, allowing an attacker to reconstruct full source code, commit history, secrets, and internal paths by fetching objects from /.git/HEAD, /.git/config, and /.git/COMMIT_EDITMSG.",
+    "runtime_discovery": "Probe /.git/HEAD with a GET request. A 200 response containing the string 'ref: refs/heads/' is a definitive hit. Follow up with /.git/config to extract remote URLs and branch names.",
+    "detection_signal": "HTTP 200 on /.git/HEAD with body matching 'ref: refs/heads/'. HTTP 200 on /.git/config with '[core]' or '[remote' in body. Any non-404/403 status on /.git/COMMIT_EDITMSG.",
+    "active_probe": true,
+    "severity": "critical",
+    "prevalence": "common",
+    "slice": "ethical-recon",
+    "uid": "ethical-recon__exposed-git-repository",
+    "class_hint": "exposed-vcs"
+  },
+  {
+    "id": "exposed-env-file",
+    "name": "Exposed .env / Environment File",
+    "owasp_category": "A05:2021 Security Misconfiguration",
+    "frameworks": [
+      "Laravel",
+      "Django",
+      "Node.js/Express",
+      "Next.js",
+      "Rails",
+      "agnostic"
+    ],
+    "description": "The application's .env file (or variants like .env.local, .env.production, .env.backup) is served directly by the web server, exposing database credentials, API keys, and other secrets in plaintext.",
+    "runtime_discovery": "Request /.env, /.env.local, /.env.production, /.env.backup, /.env.example in sequence. Check for KEY=VALUE patterns in the response body.",
+    "detection_signal": "HTTP 200 with response body containing lines matching the pattern VARIABLE=value, APP_KEY=, DB_PASSWORD=, SECRET_KEY=, or DATABASE_URL=.",
+    "active_probe": true,
+    "severity": "critical",
+    "prevalence": "common",
+    "slice": "ethical-recon",
+    "uid": "ethical-recon__exposed-env-file",
+    "class_hint": "secrets-exposure"
+  },
+  {
+    "id": "directory-listing-enabled",
+    "name": "Directory Listing Enabled",
+    "owasp_category": "A05:2021 Security Misconfiguration",
+    "frameworks": [
+      "Apache",
+      "Nginx",
+      "IIS",
+      "agnostic"
+    ],
+    "description": "The web server returns a file-system index for directories that lack an index file, allowing an attacker to enumerate uploads, backups, configuration files, and source archives without any credentials.",
+    "runtime_discovery": "Crawl the app and follow links to paths ending without a filename extension. Probe common upload/static directories (/uploads/, /backup/, /files/, /static/, /assets/). Check if the response contains an HTML index listing.",
+    "detection_signal": "HTTP 200 response body containing 'Index of /' or '<title>Directory listing' or an Apache/Nginx autoindex block with <a href> file entries. Also detectable via IIS server 'Directory Listing' title.",
+    "active_probe": true,
+    "severity": "medium",
+    "prevalence": "common",
+    "slice": "ethical-recon",
+    "uid": "ethical-recon__directory-listing-enabled",
+    "class_hint": "directory-listing"
+  },
+  {
+    "id": "stack-trace-disclosure",
+    "name": "Verbose Error / Stack Trace Disclosure",
+    "owasp_category": "A05:2021 Security Misconfiguration",
+    "frameworks": [
+      "Django",
+      "Rails",
+      "Laravel",
+      "Spring Boot",
+      "Express",
+      "ASP.NET",
+      "agnostic"
+    ],
+    "description": "When input triggers an unhandled exception, the application returns a full stack trace including framework version, file paths, class names, and sometimes environment variable values, giving attackers an internal roadmap.",
+    "runtime_discovery": "Submit malformed input to every form and URL parameter: empty required fields, extremely long strings, type-mismatches (string where integer expected), special characters (', \", <, ;, null bytes). Observe whether the error response leaks framework internals.",
+    "detection_signal": "Response body contains 'Traceback (most recent call last)', 'at com.', 'java.lang.NullPointerException', 'RuntimeError', 'ActionView::Template::Error', 'Whoops\\Exception', 'Exception in thread', or full file-system paths like '/var/www/', '/home/deploy/'.",
+    "active_probe": true,
+    "severity": "medium",
+    "prevalence": "common",
+    "slice": "ethical-recon",
+    "uid": "ethical-recon__stack-trace-disclosure",
+    "class_hint": "debug-endpoint"
+  },
+  {
+    "id": "missing-security-headers",
+    "name": "Missing / Weak Security Response Headers",
+    "owasp_category": "A05:2021 Security Misconfiguration",
+    "frameworks": [
+      "agnostic"
+    ],
+    "description": "The application does not set one or more defensive HTTP response headers (Content-Security-Policy, X-Frame-Options, X-Content-Type-Options, Strict-Transport-Security, Referrer-Policy, Permissions-Policy), leaving it open to clickjacking, MIME-sniffing, protocol downgrade, and data-leakage attacks.",
+    "runtime_discovery": "Fetch the app root and any authenticated page with a plain GET. Inspect all response headers for presence and correct values of the standard defensive set.",
+    "detection_signal": "Absence of Content-Security-Policy header, or X-Frame-Options missing or set to an invalid value such as 'ALLOWALL', or X-Content-Type-Options not set to 'nosniff', or Strict-Transport-Security absent on HTTPS responses, or Server header exposing exact version string (e.g., 'Apache/2.4.51').",
+    "active_probe": false,
+    "severity": "medium",
+    "prevalence": "ubiquitous",
+    "slice": "ethical-recon",
+    "uid": "ethical-recon__missing-security-headers",
+    "class_hint": "security-headers"
+  },
+  {
+    "id": "insecure-cookie-flags",
+    "name": "Session Cookie Missing Secure / HttpOnly / SameSite Flags",
+    "owasp_category": "A05:2021 Security Misconfiguration",
+    "frameworks": [
+      "agnostic"
+    ],
+    "description": "Session or authentication cookies are issued without the Secure flag (transmittable over HTTP), HttpOnly flag (accessible via JavaScript), or SameSite=Strict/Lax (vulnerable to CSRF), enabling cookie theft via network sniffing, XSS, or cross-site request forgery.",
+    "runtime_discovery": "Perform a login flow and capture Set-Cookie headers on the authentication response. Parse flag presence for every cookie that appears to carry a session token or authentication value.",
+    "detection_signal": "Set-Cookie header for a session/auth cookie (name matches session, token, auth, _session, JSESSIONID, PHPSESSID, connect.sid, etc.) where the header string does not contain 'HttpOnly', does not contain 'Secure', or contains 'SameSite=None' without 'Secure'.",
+    "active_probe": false,
+    "severity": "high",
+    "prevalence": "common",
+    "slice": "ethical-recon",
+    "uid": "ethical-recon__insecure-cookie-flags",
+    "class_hint": "xss"
+  },
+  {
+    "id": "server-technology-disclosure",
+    "name": "Server / Framework Version Disclosure via Response Headers",
+    "owasp_category": "A05:2021 Security Misconfiguration",
+    "frameworks": [
+      "agnostic"
+    ],
+    "description": "Response headers such as Server, X-Powered-By, X-AspNet-Version, X-Generator, and Via expose the exact software stack and version, allowing attackers to target known CVEs for that version without any further reconnaissance.",
+    "runtime_discovery": "Fetch any page (even a 404) and inspect Server, X-Powered-By, X-AspNet-Version, X-Runtime, X-Generator, and Via headers. Version strings confirm the technology fingerprint.",
+    "detection_signal": "X-Powered-By header present with value like 'PHP/8.1.3', 'Express', 'ASP.NET'; Server header containing version like 'Apache/2.4.51 (Ubuntu)' or 'nginx/1.18.0'; X-AspNet-Version header present; X-Generator set to 'WordPress 6.x'.",
+    "active_probe": false,
+    "severity": "low",
+    "prevalence": "ubiquitous",
+    "slice": "ethical-recon",
+    "uid": "ethical-recon__server-technology-disclosure",
+    "class_hint": "other"
+  },
+  {
+    "id": "debug-admin-endpoint-exposure",
+    "name": "Debug / Admin Endpoint Publicly Accessible",
+    "owasp_category": "A05:2021 Security Misconfiguration",
+    "frameworks": [
+      "Django",
+      "Spring Boot",
+      "Laravel",
+      "Express",
+      "Rails",
+      "WordPress",
+      "agnostic"
+    ],
+    "description": "Framework-specific debug or admin endpoints (Django /admin/, Spring Actuator /actuator/env, Laravel /telescope, Rails /rails/info/properties, phpMyAdmin, Adminer) are reachable without authentication or with default credentials, exposing full application state, configuration, and management capabilities.",
+    "runtime_discovery": "Enumerate a wordlist of common debug/admin paths: /admin, /admin/, /django-admin/, /actuator, /actuator/env, /actuator/heapdump, /_profiler, /telescope, /horizon, /rails/info, /phpMyAdmin/, /adminer.php, /wp-admin/, /_ah/admin, /debug/pprof. Record HTTP status codes and response bodies.",
+    "detection_signal": "HTTP 200 (or 302 redirect to a login form) for any probed admin/debug path. For Spring Actuator specifically, a 200 on /actuator/env with JSON body containing 'propertySources'. For Django admin, a login form with 'Django administration' in the title. For /actuator/heapdump, a binary download response.",
+    "active_probe": true,
+    "severity": "high",
+    "prevalence": "common",
+    "slice": "ethical-recon",
+    "uid": "ethical-recon__debug-admin-endpoint-exposure",
+    "class_hint": "bfla"
+  },
+  {
+    "id": "default-credentials",
+    "name": "Default / Weak Credentials on Admin Interfaces",
+    "owasp_category": "A07:2021 Identification and Authentication Failures",
+    "frameworks": [
+      "WordPress",
+      "Jenkins",
+      "Grafana",
+      "Adminer",
+      "phpMyAdmin",
+      "agnostic"
+    ],
+    "description": "Administrative interfaces retain factory-default credentials (admin/admin, admin/password, root/root, user/user) that are widely published and trivially attempted, granting full management access without any prior knowledge of the target.",
+    "runtime_discovery": "Locate any admin login form (discovered via path enumeration or crawl). Submit a short list of known default credential pairs: admin/admin, admin/password, admin/123456, root/root, user/user. For WordPress, also try admin/<domain-name>. Observe whether the authentication succeeds.",
+    "detection_signal": "HTTP 302 redirect to a dashboard URL (e.g., /wp-admin/index.php, /dashboard, /home) after POST to login endpoint, or HTTP 200 with a page title containing 'Dashboard', 'Welcome', or the application name without an error message. Absence of CAPTCHA or lockout on first attempt also signals weak auth hygiene.",
+    "active_probe": true,
+    "severity": "critical",
+    "prevalence": "common",
+    "slice": "ethical-recon",
+    "uid": "ethical-recon__default-credentials",
+    "class_hint": "secrets-exposure"
+  },
+  {
+    "id": "js-secret-mining",
+    "name": "Hardcoded Secrets / API Keys in Served JavaScript",
+    "owasp_category": "A02:2021 Cryptographic Failures",
+    "frameworks": [
+      "React",
+      "Vue",
+      "Angular",
+      "Next.js",
+      "agnostic"
+    ],
+    "description": "Client-side JavaScript bundles contain hardcoded API keys, service tokens, or other credentials that were baked in at build time, making them retrievable by anyone who loads the page \u2014 no authentication required.",
+    "runtime_discovery": "Crawl the app and collect all <script src> URLs. Fetch each JS file (including webpack chunks named like main.chunk.js, vendor.js, runtime~main.js). Scan the text content for high-entropy strings and patterns matching common API key formats (AWS, Stripe, Twilio, Google, SendGrid, etc.).",
+    "detection_signal": "JS response body containing patterns like AKIA[0-9A-Z]{16} (AWS access key), sk_live_[0-9a-zA-Z]{24,} (Stripe secret), AIza[0-9A-Za-z_-]{35} (Google API), SG\\.[a-zA-Z0-9]{22}\\.[a-zA-Z0-9_-]{43} (SendGrid), or generic high-entropy assignments (apiKey: 'XXXX', secret = 'XXXX').",
+    "active_probe": false,
+    "severity": "critical",
+    "prevalence": "common",
+    "slice": "ethical-recon",
+    "uid": "ethical-recon__js-secret-mining",
+    "class_hint": "secrets-exposure"
+  },
+  {
+    "id": "js-hidden-endpoint-discovery",
+    "name": "Hidden API Endpoints Leaked in JavaScript Bundles",
+    "owasp_category": "A01:2021 Broken Access Control",
+    "frameworks": [
+      "React",
+      "Vue",
+      "Angular",
+      "Next.js",
+      "agnostic"
+    ],
+    "description": "JavaScript bundles contain string literals for API paths, route definitions, and fetch/axios calls that reference internal, undocumented, or administrative endpoints not linked from the UI, bypassing intended access controls.",
+    "runtime_discovery": "Fetch all JavaScript files delivered to unauthenticated and authenticated sessions. Extract all string literals matching URL path patterns (/api/, /v1/, /internal/, /admin/, /graphql, /rpc/). Diff the two sets to find endpoints only visible post-auth. Probe extracted paths to determine which respond without authentication.",
+    "detection_signal": "String literals in JS matching path patterns /api/admin/, /internal/, /v[0-9]/, /_debug/, /rpc/ that return HTTP 200 or 401 (rather than 404) when probed. A 200 response to a path found only in JS (not in crawled HTML links) confirms a hidden-but-live endpoint.",
+    "active_probe": true,
+    "severity": "high",
+    "prevalence": "common",
+    "slice": "ethical-recon",
+    "uid": "ethical-recon__js-hidden-endpoint-discovery",
+    "class_hint": "other"
+  },
+  {
+    "id": "cors-misconfiguration",
+    "name": "Overly Permissive CORS Policy",
+    "owasp_category": "A01:2021 Broken Access Control",
+    "frameworks": [
+      "Express",
+      "Django",
+      "Spring",
+      "Rails",
+      "FastAPI",
+      "agnostic"
+    ],
+    "description": "The API reflects arbitrary Origin header values in Access-Control-Allow-Origin (or uses wildcard with credentials), allowing a malicious website to make credentialed cross-origin requests and read authenticated API responses.",
+    "runtime_discovery": "Send requests to API endpoints with crafted Origin headers: a random domain (Origin: https://evil.com), the target with a suffix (Origin: https://target.com.evil.com), and null (Origin: null). Observe if Access-Control-Allow-Origin mirrors the submitted value and whether Access-Control-Allow-Credentials is 'true' simultaneously.",
+    "detection_signal": "Response header Access-Control-Allow-Origin: https://evil.com (mirroring the injected origin) combined with Access-Control-Allow-Credentials: true. OR Access-Control-Allow-Origin: * on an endpoint that also sets a session cookie. OR Access-Control-Allow-Origin: null allowing null-origin requests.",
+    "active_probe": true,
+    "severity": "high",
+    "prevalence": "common",
+    "slice": "ethical-recon",
+    "uid": "ethical-recon__cors-misconfiguration",
+    "class_hint": "cors"
+  },
+  {
+    "id": "sourcemap-exposure",
+    "name": "JavaScript Source Map Files Publicly Accessible",
+    "owasp_category": "A05:2021 Security Misconfiguration",
+    "frameworks": [
+      "React",
+      "Vue",
+      "Angular",
+      "Webpack",
+      "Vite",
+      "agnostic"
+    ],
+    "description": "Minified JavaScript bundles contain a //# sourceMappingURL comment referencing a .map file that is served publicly, exposing the full original source tree including developer comments, internal logic, and any secrets that were in pre-build source files.",
+    "runtime_discovery": "Fetch each JavaScript bundle and scan the last lines for //# sourceMappingURL=. Construct the full URL for the referenced .map file and attempt to fetch it. Parse the sources and sourcesContent fields of the JSON to enumerate original file paths.",
+    "detection_signal": "HTTP 200 response to a .js.map URL with a JSON body containing a 'sources' array of original file paths (e.g., src/config/api.js, src/utils/auth.js) and optionally a 'sourcesContent' array with the raw source code. Presence of sourcesContent confirms full source reconstruction is possible.",
+    "active_probe": true,
+    "severity": "medium",
+    "prevalence": "common",
+    "slice": "ethical-recon",
+    "uid": "ethical-recon__sourcemap-exposure",
+    "class_hint": "exposed-source-maps"
+  },
+  {
+    "id": "robots-sitemap-path-disclosure",
+    "name": "Path / Endpoint Disclosure via robots.txt and sitemap.xml",
+    "owasp_category": "A01:2021 Broken Access Control",
+    "frameworks": [
+      "agnostic"
+    ],
+    "description": "The robots.txt Disallow entries and sitemap.xml URLs advertise internal, admin, or sensitive paths that the developer intended to hide from search engines but inadvertently mapped as an enumeration guide for attackers.",
+    "runtime_discovery": "Fetch /robots.txt and /sitemap.xml (and /sitemap_index.xml) as the very first step. Extract all Disallow and Allow paths from robots.txt and all <loc> values from sitemaps. Probe each discovered path to determine accessibility without authentication.",
+    "detection_signal": "robots.txt Disallow lines containing /admin, /internal, /api/, /backup, /staging, /private, or /debug. sitemap.xml <loc> entries pointing to pages not linked from public navigation. Any Disallow path that responds with 200 rather than 401/403 when probed.",
+    "active_probe": true,
+    "severity": "low",
+    "prevalence": "ubiquitous",
+    "slice": "ethical-recon",
+    "uid": "ethical-recon__robots-sitemap-path-disclosure",
+    "class_hint": "rate-limit-enum"
+  },
+  {
+    "id": "subdomain-takeover",
+    "name": "Dangling DNS / Subdomain Takeover",
+    "owasp_category": "A05:2021 Security Misconfiguration",
+    "frameworks": [
+      "agnostic"
+    ],
+    "description": "A subdomain's DNS record points to an external service (GitHub Pages, Heroku, Fastly, Azure, AWS S3, Netlify) that no longer has the application deployed, allowing an attacker to claim the service slot and serve malicious content under the victim's trusted subdomain.",
+    "runtime_discovery": "Enumerate subdomains via certificate transparency (crt.sh), DNS brute-force, and permutation scanning. For each live CNAME, resolve the final target and send an HTTP request. Check for service-specific 'unclaimed' fingerprints in the response body.",
+    "detection_signal": "HTTP response body matching known dangling-service fingerprints: 'There is no app here yet' (Heroku), 'NoSuchBucket' (AWS S3), '404 \u2014 There is nothing here' (GitHub Pages), 'Repository not found' (Bitbucket), 'The site you were looking for couldn\\'t be found' (Netlify), or NXDOMAIN on a CNAME chain target while the apex subdomain still resolves.",
+    "active_probe": true,
+    "severity": "high",
+    "prevalence": "occasional",
+    "slice": "ethical-recon",
+    "uid": "ethical-recon__subdomain-takeover",
+    "class_hint": "subdomain-takeover"
+  }
+]

@@ -1,0 +1,281 @@
+[
+  {
+    "id": "go-missing-cors-middleware",
+    "name": "Missing or Misconfigured CORS in Go HTTP Handlers",
+    "owasp_category": "A01:2021 Broken Access Control",
+    "frameworks": [
+      "net/http",
+      "gin",
+      "echo"
+    ],
+    "description": "Go's net/http default mux and popular routers (gin, echo) ship with no CORS headers unless the developer explicitly adds them. A common misconfiguration is setting Access-Control-Allow-Origin to the request's Origin header verbatim, or to '*' while also allowing credentials, enabling cross-origin data theft.",
+    "runtime_discovery": "Send a cross-origin preflight OPTIONS request with an arbitrary Origin header (e.g., Origin: https://attacker.example). Observe the response for reflected origin or wildcard in Access-Control-Allow-Origin combined with Access-Control-Allow-Credentials: true.",
+    "detection_signal": "Response contains Access-Control-Allow-Origin equal to the attacker-supplied Origin value AND Access-Control-Allow-Credentials: true; or Access-Control-Allow-Origin: * on an authenticated endpoint (credentialed cookie present in session).",
+    "active_probe": true,
+    "severity": "high",
+    "prevalence": "common",
+    "slice": "go-web",
+    "uid": "go-web__go-missing-cors-middleware",
+    "class_hint": "cors"
+  },
+  {
+    "id": "go-default-mux-debug-pprof",
+    "name": "net/http pprof Debug Endpoints Exposed on Default Mux",
+    "owasp_category": "A05:2021 Security Misconfiguration",
+    "frameworks": [
+      "net/http"
+    ],
+    "description": "Importing net/http/pprof registers /debug/pprof/* routes on the default ServeMux as a side effect. If the server uses the default mux (http.ListenAndServe with nil handler) and the pprof import is present anywhere in the binary, goroutine dumps, heap profiles, and CPU traces are publicly accessible\u2014leaking stack traces, memory contents, and internal paths.",
+    "runtime_discovery": "Crawl /debug/pprof/, /debug/pprof/goroutine, /debug/pprof/heap, /debug/pprof/cmdline without authentication. Check for HTTP 200 with profiling data.",
+    "detection_signal": "HTTP 200 response body at /debug/pprof/ containing 'goroutine', 'heap', 'allocs', or 'cmdline' index links; or /debug/pprof/goroutine?debug=1 returning a live goroutine stack dump.",
+    "active_probe": true,
+    "severity": "high",
+    "prevalence": "common",
+    "slice": "go-web",
+    "uid": "go-web__go-default-mux-debug-pprof",
+    "class_hint": "debug-endpoint"
+  },
+  {
+    "id": "go-verbose-error-leakage",
+    "name": "Go Runtime / Database Error Messages Leaked in HTTP Responses",
+    "owasp_category": "A05:2021 Security Misconfiguration",
+    "frameworks": [
+      "net/http",
+      "gin",
+      "echo"
+    ],
+    "description": "Go applications frequently pass raw error values (database/sql, gorm, pgx, os.Open) directly into http.Error or JSON responses. This exposes internal SQL queries, table names, file paths, driver strings, and connection strings to the client in plain text.",
+    "runtime_discovery": "Trigger validation errors by submitting malformed input, invalid IDs, or non-existent resources. Observe 4xx/5xx response bodies for Go-specific error strings and internal details.",
+    "detection_signal": "Response body contains strings matching Go error patterns: 'sql:', 'pq:', 'no rows in result', 'dial tcp', 'connection refused', absolute Unix file paths (/home/*, /var/*, /go/src/), or goroutine stack trace markers like 'goroutine \\d+ [running]'.",
+    "active_probe": true,
+    "severity": "medium",
+    "prevalence": "common",
+    "slice": "go-web",
+    "uid": "go-web__go-verbose-error-leakage",
+    "class_hint": "other"
+  },
+  {
+    "id": "go-gin-missing-auth-middleware",
+    "name": "Gin/Echo Route Groups Missing Authentication Middleware",
+    "owasp_category": "A01:2021 Broken Access Control",
+    "frameworks": [
+      "gin",
+      "echo"
+    ],
+    "description": "In gin and echo, authentication middleware is applied per route group. Developers frequently add a new route to the wrong group (the unauthenticated group) or forget to apply the middleware to a group, leaving sensitive endpoints accessible without a token or session cookie.",
+    "runtime_discovery": "Crawl the application with two sessions: authenticated and unauthenticated. Compare the HTTP status codes and response body sizes for all discovered endpoints. Any endpoint returning 200 with substantial data for the unauthenticated session is a candidate.",
+    "detection_signal": "Unauthenticated request to an API endpoint returns HTTP 200 with a non-empty JSON body identical or similar in size/structure to the authenticated response, where the endpoint is not explicitly public (e.g., /api/v1/admin/*, /api/v1/users/*).",
+    "active_probe": true,
+    "severity": "critical",
+    "prevalence": "common",
+    "slice": "go-web",
+    "uid": "go-web__go-gin-missing-auth-middleware",
+    "class_hint": "session"
+  },
+  {
+    "id": "go-http-host-header-injection",
+    "name": "HTTP Host Header Injection (Password Reset / Redirect Poisoning)",
+    "owasp_category": "A03:2021 Injection",
+    "frameworks": [
+      "net/http",
+      "gin",
+      "echo"
+    ],
+    "description": "Go's net/http gives handlers full access to r.Host. Applications that use r.Host to construct password-reset URLs, redirect targets, or canonical links without validation allow an attacker to inject an arbitrary hostname, redirecting victims to attacker-controlled infrastructure.",
+    "runtime_discovery": "Submit password-reset or email-confirmation requests with a modified Host header (Host: attacker.example). Observe whether the link in the email or the Location response header reflects the attacker-supplied host.",
+    "detection_signal": "The Location response header or response body URL contains the injected Host value verbatim. Alternatively, a redirect response (3xx) target host matches the probe value rather than the application's canonical domain.",
+    "active_probe": true,
+    "severity": "high",
+    "prevalence": "occasional",
+    "slice": "go-web",
+    "uid": "go-web__go-http-host-header-injection",
+    "class_hint": "host-header-injection"
+  },
+  {
+    "id": "go-open-redirect",
+    "name": "Open Redirect via Unvalidated URL Parameter",
+    "owasp_category": "A01:2021 Broken Access Control",
+    "frameworks": [
+      "net/http",
+      "gin",
+      "echo"
+    ],
+    "description": "Go handlers that call http.Redirect with a URL taken directly from a query parameter (e.g., ?next=, ?redirect=, ?return_to=) without validating that the destination is within the same origin can be abused for phishing and OAuth token harvesting.",
+    "runtime_discovery": "Fuzz common redirect parameters (?next=, ?redirect_uri=, ?return=, ?url=, ?dest=) with an external URL (https://attacker.example). Follow the redirect chain and observe the final destination.",
+    "detection_signal": "HTTP 3xx response where the Location header value matches or starts with the injected external URL, or a redirect chain that ultimately lands on the attacker-supplied domain.",
+    "active_probe": true,
+    "severity": "medium",
+    "prevalence": "common",
+    "slice": "go-web",
+    "uid": "go-web__go-open-redirect",
+    "class_hint": "open-redirect"
+  },
+  {
+    "id": "go-missing-security-headers",
+    "name": "Missing Security Response Headers (CSP, HSTS, X-Frame-Options)",
+    "owasp_category": "A05:2021 Security Misconfiguration",
+    "frameworks": [
+      "net/http",
+      "gin",
+      "echo"
+    ],
+    "description": "Go's net/http and the gin/echo frameworks write no security headers by default. Applications that do not apply a security-headers middleware (or equivalent) are missing Content-Security-Policy, Strict-Transport-Security, X-Content-Type-Options, X-Frame-Options, and Referrer-Policy, enabling clickjacking, MIME-sniffing, and mixed-content attacks.",
+    "runtime_discovery": "Issue a GET request to the application root and any rendered HTML pages. Inspect all response headers for the presence of security-relevant headers.",
+    "detection_signal": "Response is missing two or more of: Content-Security-Policy, Strict-Transport-Security, X-Content-Type-Options: nosniff, X-Frame-Options (or CSP frame-ancestors), Referrer-Policy. Absence confirmed by header enumeration on 200 responses.",
+    "active_probe": false,
+    "severity": "medium",
+    "prevalence": "ubiquitous",
+    "slice": "go-web",
+    "uid": "go-web__go-missing-security-headers",
+    "class_hint": "security-headers"
+  },
+  {
+    "id": "go-idor-numeric-id",
+    "name": "Insecure Direct Object Reference via Sequential Numeric ID",
+    "owasp_category": "A01:2021 Broken Access Control",
+    "frameworks": [
+      "net/http",
+      "gin",
+      "echo"
+    ],
+    "description": "Go REST APIs built with gin or echo commonly use integer route parameters (/api/v1/users/:id, /api/v1/orders/:id). Without server-side ownership checks, an authenticated user can increment or decrement the ID to access resources belonging to other users.",
+    "runtime_discovery": "Authenticate as user A, obtain a resource ID from a normal workflow, then enumerate adjacent IDs (id-1, id-2, id+1) as user B (or unauthenticated). Compare response body ownership fields.",
+    "detection_signal": "HTTP 200 response for an ID outside the authenticated user's known resource set, where the response body contains user-identifying fields (email, user_id, name) differing from the requesting user's identity.",
+    "active_probe": true,
+    "severity": "high",
+    "prevalence": "ubiquitous",
+    "slice": "go-web",
+    "uid": "go-web__go-idor-numeric-id",
+    "class_hint": "idor-bola"
+  },
+  {
+    "id": "go-jwt-none-alg",
+    "name": "JWT 'none' Algorithm Accepted or HS256/RS256 Confusion",
+    "owasp_category": "A02:2021 Cryptographic Failures",
+    "frameworks": [
+      "net/http",
+      "gin",
+      "echo"
+    ],
+    "description": "Go JWT libraries (dgrijalva/jwt-go, golang-jwt/jwt) have historically required explicit algorithm allowlisting. Applications that accept any algorithm in the header allow an attacker to forge tokens using the 'none' algorithm or to switch RS256 to HS256 and sign with the public key.",
+    "runtime_discovery": "Obtain a valid JWT, modify the header to alg:none and strip the signature, then replay the token to authenticated endpoints. Separately, attempt alg:HS256 with the server's public key as the HMAC secret.",
+    "detection_signal": "Authenticated endpoint returns HTTP 200 (or same data as a valid token) when presented with a JWT bearing alg:none and no signature, or alg:HS256 signed with the public RSA key bytes.",
+    "active_probe": true,
+    "severity": "critical",
+    "prevalence": "occasional",
+    "slice": "go-web",
+    "uid": "go-web__go-jwt-none-alg",
+    "class_hint": "jwt"
+  },
+  {
+    "id": "go-ssrf-url-param",
+    "name": "Server-Side Request Forgery via URL Parameter in Go HTTP Client",
+    "owasp_category": "A10:2021 Server-Side Request Forgery",
+    "frameworks": [
+      "net/http",
+      "gin",
+      "echo"
+    ],
+    "description": "Go services that accept a URL parameter and pass it to http.Get or http.Client.Do without restricting the scheme or host are vulnerable to SSRF. Go's http.Client will follow redirects by default and supports file://, gopher://, and http:// to internal hosts including cloud metadata services.",
+    "runtime_discovery": "Submit URL parameters pointing to internal addresses: http://169.254.169.254/latest/meta-data/ (AWS), http://metadata.google.internal/computeMetadata/v1/, http://127.0.0.1:<common port>. Observe whether the response body contains metadata content or internal service responses.",
+    "detection_signal": "Response body contains cloud metadata markers ('ami-id', 'instance-id', 'computeMetadata', 'iam/security-credentials') or internal service banners; or response timing/size differs significantly from an invalid host, indicating a live internal connection.",
+    "active_probe": true,
+    "severity": "critical",
+    "prevalence": "common",
+    "slice": "go-web",
+    "uid": "go-web__go-ssrf-url-param",
+    "class_hint": "ssrf"
+  },
+  {
+    "id": "go-gin-path-traversal",
+    "name": "Path Traversal in Static File Serving (gin Static / echo Static)",
+    "owasp_category": "A01:2021 Broken Access Control",
+    "frameworks": [
+      "gin",
+      "echo",
+      "net/http"
+    ],
+    "description": "Gin's router.Static and echo's e.Static, as well as http.FileServer, can be configured to serve a directory. Insufficient path sanitization or misconfigured root paths can allow traversal sequences (../) to escape the intended directory and read arbitrary files on the server, including Go source, config files, or .env files.",
+    "runtime_discovery": "Fuzz static-serving routes with URL-encoded and double-encoded path traversal sequences: /static/../../etc/passwd, /static/%2e%2e%2f%2e%2e%2fetc%2fpasswd. Observe response content-type and body.",
+    "detection_signal": "HTTP 200 response with body containing Unix passwd-file content ('root:x:0:0'), Go source file content ('package main'), or .env file markers ('DB_PASSWORD=', 'SECRET_KEY=') when traversal sequences are submitted.",
+    "active_probe": true,
+    "severity": "high",
+    "prevalence": "occasional",
+    "slice": "go-web",
+    "uid": "go-web__go-gin-path-traversal",
+    "class_hint": "path-traversal"
+  },
+  {
+    "id": "go-missing-csrf-protection",
+    "name": "Missing CSRF Protection on State-Changing Endpoints",
+    "owasp_category": "A01:2021 Broken Access Control",
+    "frameworks": [
+      "net/http",
+      "gin",
+      "echo"
+    ],
+    "description": "Go web applications that use cookie-based sessions and do not apply CSRF middleware (gorilla/csrf, echo CSRF middleware) on POST/PUT/DELETE endpoints are vulnerable to cross-site request forgery. The default mux and gin/echo have no built-in CSRF protection.",
+    "runtime_discovery": "Identify state-changing endpoints using session cookies. Submit cross-origin POST requests (via a crafted HTML form or fetch with no CSRF token) and observe whether the server processes the request successfully.",
+    "detection_signal": "HTTP 200 or 204 response to a state-changing POST/PUT/DELETE request submitted without a CSRF token header or body parameter, when a valid session cookie is present. Confirmed when the same request without the session cookie returns 401/403.",
+    "active_probe": true,
+    "severity": "high",
+    "prevalence": "common",
+    "slice": "go-web",
+    "uid": "go-web__go-missing-csrf-protection",
+    "class_hint": "csrf"
+  },
+  {
+    "id": "go-excessive-http-methods",
+    "name": "Unrestricted HTTP Methods on Go Endpoints",
+    "owasp_category": "A05:2021 Security Misconfiguration",
+    "frameworks": [
+      "net/http"
+    ],
+    "description": "net/http's default ServeMux routes match any HTTP method. A handler registered with http.HandleFunc('/api/data', ...) responds to GET, POST, PUT, DELETE, TRACE, and OPTIONS equally unless the handler explicitly checks r.Method. TRACE responses can expose cookies and headers; unexpected method acceptance may bypass authorization logic.",
+    "runtime_discovery": "Issue TRACE, OPTIONS, and arbitrary HTTP method (FUZZ, HACK) requests to all discovered endpoints. Observe which methods return non-405 responses. Check TRACE responses for cookie/header reflection.",
+    "detection_signal": "TRACE request returns HTTP 200 with request headers reflected in the response body (including Cookie and Authorization headers). Or OPTIONS response lists methods including TRACE/CONNECT/arbitrary verbs not expected for the endpoint.",
+    "active_probe": true,
+    "severity": "low",
+    "prevalence": "common",
+    "slice": "go-web",
+    "uid": "go-web__go-excessive-http-methods",
+    "class_hint": "other"
+  },
+  {
+    "id": "go-rate-limit-absence",
+    "name": "No Rate Limiting on Authentication and Sensitive Endpoints",
+    "owasp_category": "A07:2021 Identification and Authentication Failures",
+    "frameworks": [
+      "net/http",
+      "gin",
+      "echo"
+    ],
+    "description": "Go frameworks provide no built-in rate limiting. Applications that omit golang.org/x/time/rate, a middleware package, or a reverse-proxy rule on login, password-reset, OTP verification, and account enumeration endpoints are vulnerable to brute-force and credential-stuffing attacks.",
+    "runtime_discovery": "Send 50-100 rapid successive POST requests to /login, /forgot-password, or /verify-otp with varying credentials. Measure whether response time, status code, or body changes to indicate throttling or lockout.",
+    "detection_signal": "All 100 requests return the same HTTP status code and response time distribution with no 429 Too Many Requests, no Retry-After header, and no CAPTCHA challenge; response body remains consistent (no lockout message) across all attempts.",
+    "active_probe": true,
+    "severity": "high",
+    "prevalence": "ubiquitous",
+    "slice": "go-web",
+    "uid": "go-web__go-rate-limit-absence",
+    "class_hint": "rate-limit"
+  },
+  {
+    "id": "go-echo-bind-mass-assignment",
+    "name": "Mass Assignment via Echo/Gin Struct Binding",
+    "owasp_category": "A03:2021 Injection",
+    "frameworks": [
+      "gin",
+      "echo"
+    ],
+    "description": "Gin's c.ShouldBindJSON and echo's c.Bind bind the entire request body to a struct. If the struct includes sensitive fields (IsAdmin, Role, Balance, OwnerID) that the developer did not intend to be settable by the client, an attacker can include those fields in the request body to escalate privileges or tamper with data.",
+    "runtime_discovery": "Submit POST/PUT requests with additional JSON fields beyond those expected by the API (is_admin:true, role:'admin', balance:9999999, owner_id:<other user>). Observe whether a subsequent GET of the resource reflects the injected values.",
+    "detection_signal": "A subsequent GET request for the resource shows the injected field value persisted (e.g., role field changed to 'admin', balance field reflects the attacker-supplied number), or the application returns elevated-privilege responses after the injection.",
+    "active_probe": true,
+    "severity": "high",
+    "prevalence": "common",
+    "slice": "go-web",
+    "uid": "go-web__go-echo-bind-mass-assignment",
+    "class_hint": "mass-assignment"
+  }
+]

@@ -1,0 +1,273 @@
+[
+  {
+    "id": "spring-actuator-exposed",
+    "name": "Spring Boot Actuator Endpoints Exposed",
+    "owasp_category": "A05:2021 Security Misconfiguration",
+    "frameworks": [
+      "Spring Boot",
+      "Spring Actuator"
+    ],
+    "description": "Spring Boot Actuator exposes management endpoints (e.g., /actuator/env, /actuator/heapdump, /actuator/beans, /actuator/mappings) that can reveal environment variables, secrets, full class graphs, and live heap dumps when not properly secured. In many default configurations these endpoints are unauthenticated.",
+    "runtime_discovery": "Crawl the running app for /actuator and its children (/actuator/env, /actuator/health, /actuator/heapdump, /actuator/mappings, /actuator/beans, /actuator/loggers, /actuator/trace, /actuator/httptrace). Enumerate both /actuator/* and legacy /management/* paths. Probe each without auth tokens.",
+    "detection_signal": "HTTP 200 with JSON body containing keys like 'propertySources', 'contexts', 'beans', 'mappings', or a binary response (heapdump) from /actuator/heapdump. A 404 on /actuator but 200 on /actuator/health (partial exposure) is also flagged.",
+    "active_probe": true,
+    "severity": "critical",
+    "prevalence": "common",
+    "slice": "java-spring",
+    "uid": "java-spring__spring-actuator-exposed",
+    "class_hint": "debug-endpoint"
+  },
+  {
+    "id": "spring-actuator-env-secrets",
+    "name": "Actuator /env Leaks Credentials via Partial Masking Bypass",
+    "owasp_category": "A02:2021 Cryptographic Failures",
+    "frameworks": [
+      "Spring Boot",
+      "Spring Actuator"
+    ],
+    "description": "Even when /actuator/env masks secret values with '******', the property keys themselves (e.g., DB_PASSWORD, AWS_SECRET_KEY, STRIPE_SECRET) are still returned. Additionally, prior to Spring Boot 2.3, the /actuator/env/{name} single-property endpoint returns the raw unmasked value for some property sources.",
+    "runtime_discovery": "GET /actuator/env without credentials. Then probe /actuator/env/{property-name} for individual entries (e.g., /actuator/env/spring.datasource.password). Compare key list against a dictionary of known secret property names.",
+    "detection_signal": "Response body from /actuator/env contains property keys matching regex (password|secret|key|token|credential|api[-_]?key) even if values show '******'. A single-key probe /actuator/env/spring.datasource.password returning 200 with an unmasked value is a direct hit.",
+    "active_probe": true,
+    "severity": "high",
+    "prevalence": "common",
+    "slice": "java-spring",
+    "uid": "java-spring__spring-actuator-env-secrets",
+    "class_hint": "debug-endpoint"
+  },
+  {
+    "id": "spring-security-method-bypass-idor",
+    "name": "Broken Object-Level Authorization (IDOR) via Missing @PreAuthorize",
+    "owasp_category": "A01:2021 Broken Access Control",
+    "frameworks": [
+      "Spring Boot",
+      "Spring Security"
+    ],
+    "description": "Spring MVC REST endpoints that accept a resource ID in the path or query string (e.g., /api/orders/{id}) but rely only on URL-pattern security (HttpSecurity.antMatchers) without method-level @PreAuthorize checks allow any authenticated user to access any other user's resource by incrementing or fuzzing the ID.",
+    "runtime_discovery": "Auth as user A, collect resource IDs from their normal responses. Auth as user B, substitute user A's IDs into identical requests. If user B receives user A's data, IDOR is confirmed. Also fuzz sequential/UUIDs in path and query parameters.",
+    "detection_signal": "User B's request for /api/orders/{userA_id} returns HTTP 200 with user A's data rather than 403/404. Auth-differential comparison: same endpoint, same ID, different session tokens produces matching response bodies.",
+    "active_probe": true,
+    "severity": "high",
+    "prevalence": "ubiquitous",
+    "slice": "java-spring",
+    "uid": "java-spring__spring-security-method-bypass-idor",
+    "class_hint": "idor-bola"
+  },
+  {
+    "id": "spring-data-mass-assignment",
+    "name": "Mass Assignment via Spring Data / @RequestBody Binding",
+    "owasp_category": "A08:2021 Software and Data Integrity Failures",
+    "frameworks": [
+      "Spring Boot",
+      "Spring Data",
+      "Spring MVC"
+    ],
+    "description": "When a Spring MVC controller uses @RequestBody to bind a JPA entity or DTO directly, an attacker can inject extra fields (e.g., 'role', 'isAdmin', 'accountBalance') into the JSON body that the application did not intend to be user-settable. Without explicit @JsonIgnoreProperties or a dedicated DTO, Spring's Jackson binding sets those fields.",
+    "runtime_discovery": "Intercept a normal POST/PUT request body. Inject extra fields by appending 'role':'admin', 'isAdmin':true, 'enabled':true, 'balance':99999 to the JSON payload. Submit and observe whether the server reflects the injected values back in subsequent GET responses or login behavior changes.",
+    "detection_signal": "A follow-up GET for the same resource returns the injected field value (e.g., 'role':'admin'). HTTP 200 on the mutating request with the injected field reflected in the response body. Elevation detected via auth-differential: re-auth after injection shows elevated permissions.",
+    "active_probe": true,
+    "severity": "high",
+    "prevalence": "common",
+    "slice": "java-spring",
+    "uid": "java-spring__spring-data-mass-assignment",
+    "class_hint": "mass-assignment"
+  },
+  {
+    "id": "spring-csrf-disabled",
+    "name": "CSRF Protection Disabled in Spring Security Config",
+    "owasp_category": "A01:2021 Broken Access Control",
+    "frameworks": [
+      "Spring Boot",
+      "Spring Security"
+    ],
+    "description": "Spring Security enables CSRF protection by default, but many applications explicitly call http.csrf().disable() for REST API convenience. When the app also supports cookie-based sessions (as opposed to stateless JWT-only), this allows cross-site request forgery attacks against state-changing endpoints.",
+    "runtime_discovery": "Authenticate via browser session. Check whether state-changing endpoints (POST /api/transfer, POST /api/settings) succeed without a CSRF token header or parameter. Observe Set-Cookie response header for session cookies lacking SameSite=Strict/Lax.",
+    "detection_signal": "POST to a state-changing endpoint returns HTTP 200/201 when no X-XSRF-TOKEN or _csrf parameter is included, and the session cookie is present. Also: absence of XSRF-TOKEN cookie in Set-Cookie headers that would normally accompany Angular/Axios auto-CSRF.",
+    "active_probe": true,
+    "severity": "medium",
+    "prevalence": "common",
+    "slice": "java-spring",
+    "uid": "java-spring__spring-csrf-disabled",
+    "class_hint": "csrf"
+  },
+  {
+    "id": "spring-h2-console-exposed",
+    "name": "H2 Database Console Exposed in Production",
+    "owasp_category": "A05:2021 Security Misconfiguration",
+    "frameworks": [
+      "Spring Boot"
+    ],
+    "description": "Spring Boot auto-configures the H2 in-memory database console at /h2-console when H2 is on the classpath and spring.h2.console.enabled=true. This web-based SQL console is often left enabled in staging/production, allowing unauthenticated full database access.",
+    "runtime_discovery": "Probe /h2-console and /h2-console/login.jsp. Also check /console (alternate path). Attempt access without authentication.",
+    "detection_signal": "HTTP 200 response from /h2-console with HTML containing 'H2 Console' title or a login form with 'JDBC URL' and 'User Name' fields. Any successful connection to the console without prior app authentication is a critical finding.",
+    "active_probe": true,
+    "severity": "critical",
+    "prevalence": "occasional",
+    "slice": "java-spring",
+    "uid": "java-spring__spring-h2-console-exposed",
+    "class_hint": "debug-endpoint"
+  },
+  {
+    "id": "spring-open-redirect",
+    "name": "Open Redirect via Spring Security Login Redirect Parameter",
+    "owasp_category": "A01:2021 Broken Access Control",
+    "frameworks": [
+      "Spring Boot",
+      "Spring Security"
+    ],
+    "description": "Spring Security's default login flow accepts a redirect_to or spring-security-redirect parameter (or a custom 'continue' / 'next' query param) after authentication. If not validated against an allowlist of internal paths, an attacker can craft a login URL that redirects users to an external phishing site post-authentication.",
+    "runtime_discovery": "Append ?redirect_to=https://evil.com, ?spring-security-redirect=https://evil.com, or ?continue=//evil.com to the login URL. Authenticate successfully and observe the Location header in the 302 response.",
+    "detection_signal": "HTTP 302 Location header after successful login points to an external or non-origin URL (e.g., https://evil.com or //evil.com). Any redirect leaving the application's origin after auth is flagged.",
+    "active_probe": true,
+    "severity": "medium",
+    "prevalence": "common",
+    "slice": "java-spring",
+    "uid": "java-spring__spring-open-redirect",
+    "class_hint": "open-redirect"
+  },
+  {
+    "id": "spring-jwt-none-alg",
+    "name": "JWT 'none' Algorithm Accepted by Spring Security",
+    "owasp_category": "A02:2021 Cryptographic Failures",
+    "frameworks": [
+      "Spring Boot",
+      "Spring Security"
+    ],
+    "description": "Some Spring Security JWT configurations (especially custom or older libraries) accept tokens with the 'none' algorithm or allow algorithm confusion (RS256 \u2192 HS256 downgrade), letting an attacker forge arbitrary JWT claims including elevated roles without knowing the signing secret.",
+    "runtime_discovery": "Capture a valid JWT from a normal login response. Modify the header alg to 'none' and strip the signature. Also try alg:'HS256' with the public key as the HMAC secret. Replay the modified token on protected endpoints.",
+    "detection_signal": "HTTP 200 on a protected endpoint when the tampered token (alg:none, no signature) is sent in the Authorization header. Any successful authenticated response with a forged/unsigned JWT is a critical hit.",
+    "active_probe": true,
+    "severity": "critical",
+    "prevalence": "occasional",
+    "slice": "java-spring",
+    "uid": "java-spring__spring-jwt-none-alg",
+    "class_hint": "jwt"
+  },
+  {
+    "id": "spring-data-jpql-injection",
+    "name": "JPQL / HQL Injection via Spring Data @Query",
+    "owasp_category": "A03:2021 Injection",
+    "frameworks": [
+      "Spring Boot",
+      "Spring Data",
+      "Hibernate"
+    ],
+    "description": "When Spring Data repositories use @Query annotations with string concatenation (instead of named parameters) or when controllers pass user input directly into EntityManager.createQuery(), attackers can inject JPQL/HQL fragments to bypass WHERE clauses, extract additional entity properties, or cause errors that reveal the schema.",
+    "runtime_discovery": "Inject JPQL metacharacters into search/filter form fields and query parameters: single quote ('), ' OR '1'='1, ' AND 1=2--, LIKE %'. Observe whether the response changes (returns extra records), throws a 500 with a Hibernate exception, or changes record count.",
+    "detection_signal": "HTTP 500 response body containing 'org.hibernate.', 'QuerySyntaxException', 'antlr', or 'unexpected token' when a single quote or JPQL keyword is injected. Alternatively, injecting ' OR '1'='1 causes the endpoint to return all records instead of filtered results.",
+    "active_probe": true,
+    "severity": "high",
+    "prevalence": "occasional",
+    "slice": "java-spring",
+    "uid": "java-spring__spring-data-jpql-injection",
+    "class_hint": "sqli"
+  },
+  {
+    "id": "spring-cors-wildcard",
+    "name": "Overly Permissive CORS Configuration with allowCredentials",
+    "owasp_category": "A05:2021 Security Misconfiguration",
+    "frameworks": [
+      "Spring Boot",
+      "Spring MVC",
+      "Spring Security"
+    ],
+    "description": "Spring MVC @CrossOrigin or WebMvcConfigurer CORS configurations sometimes set allowedOrigins('*') combined with allowCredentials(true), or use regex origin reflection (echoing back any Origin header) which creates a nearly identical risk. This allows any site to make credentialed cross-origin requests.",
+    "runtime_discovery": "Send requests with arbitrary Origin headers (Origin: https://evil.com) to API endpoints. Inspect the Access-Control-Allow-Origin response header \u2014 if it reflects back the attacker origin AND Access-Control-Allow-Credentials: true is also present, the configuration is exploitable.",
+    "detection_signal": "Response contains both 'Access-Control-Allow-Origin: https://evil.com' (reflected attacker origin) and 'Access-Control-Allow-Credentials: true'. Any combination of a non-null, non-same-origin ACAO with ACAC:true is flagged.",
+    "active_probe": true,
+    "severity": "high",
+    "prevalence": "common",
+    "slice": "java-spring",
+    "uid": "java-spring__spring-cors-wildcard",
+    "class_hint": "cors"
+  },
+  {
+    "id": "spring-security-verbose-errors",
+    "name": "Spring Security / Whitelabel Error Page Leaks Stack Traces",
+    "owasp_category": "A05:2021 Security Misconfiguration",
+    "frameworks": [
+      "Spring Boot"
+    ],
+    "description": "Spring Boot's default Whitelabel error page and unhandled exceptions surface full Java stack traces, exception messages, and internal class/package names in HTTP responses when server.error.include-stacktrace is not set to 'never'. This reveals framework versions, internal paths, and dependency information useful for chaining attacks.",
+    "runtime_discovery": "Trigger errors by sending malformed JSON bodies, unexpected content types (Content-Type: text/xml instead of application/json), invalid path parameters (e.g., /api/users/notanumber for a Long param), and oversized payloads. Observe the response body for stack traces.",
+    "detection_signal": "HTTP 500 response body containing 'java.lang.', 'org.springframework.', 'at com.', or a JSON object with 'trace' key containing multiline stack frame strings. Also: HTML response with 'Whitelabel Error Page' and an exception message.",
+    "active_probe": true,
+    "severity": "medium",
+    "prevalence": "ubiquitous",
+    "slice": "java-spring",
+    "uid": "java-spring__spring-security-verbose-errors",
+    "class_hint": "debug-endpoint"
+  },
+  {
+    "id": "spring-actuator-loggers-rce",
+    "name": "Actuator /loggers Endpoint Allows Log Level Manipulation",
+    "owasp_category": "A05:2021 Security Misconfiguration",
+    "frameworks": [
+      "Spring Boot",
+      "Spring Actuator"
+    ],
+    "description": "The /actuator/loggers endpoint accepts POST requests to change log levels at runtime. An attacker with access to this endpoint can enable TRACE/DEBUG logging for security-sensitive packages (e.g., org.springframework.security) to cause the app to log passwords, tokens, and session IDs to logs they may also be able to read via /actuator/logfile.",
+    "runtime_discovery": "GET /actuator/loggers to confirm access. Then POST to /actuator/loggers/org.springframework.security with body {\"configuredLevel\":\"TRACE\"}. Attempt to read /actuator/logfile afterward. Also attempt POST to /actuator/loggers/ROOT to set all logging to DEBUG.",
+    "detection_signal": "HTTP 200 on POST to /actuator/loggers/{name} without authentication. Subsequent /actuator/logfile or /actuator/httptrace responses containing authentication credentials, tokens, or sensitive request parameters in log lines.",
+    "active_probe": true,
+    "severity": "high",
+    "prevalence": "occasional",
+    "slice": "java-spring",
+    "uid": "java-spring__spring-actuator-loggers-rce",
+    "class_hint": "debug-endpoint"
+  },
+  {
+    "id": "spring-security-privilege-escalation-role-check",
+    "name": "Vertical Privilege Escalation via Missing Role Checks on Admin Endpoints",
+    "owasp_category": "A01:2021 Broken Access Control",
+    "frameworks": [
+      "Spring Boot",
+      "Spring Security"
+    ],
+    "description": "Spring Security URL matchers use first-match semantics and are case-sensitive on some configurations. Admin endpoints like /api/admin/users might be protected by .antMatchers('/api/admin/**').hasRole('ADMIN') but bypassed via path variations (/api/Admin/users, /api/admin/users/, /api/admin/users;x=y) or HTTP verb confusion (POST vs GET).",
+    "runtime_discovery": "With a low-privilege authenticated session, enumerate admin-looking paths discovered from error messages, JS source, or /actuator/mappings. Try path case variations, trailing slashes, semicolon injection, and double slashes. Compare HTTP response codes and body content between admin and non-admin sessions.",
+    "detection_signal": "Low-privilege session receives HTTP 200 with admin-level data on a path variant (e.g., /API/Admin/users or /api/admin/users/) that the canonical path would have returned 403 for. Auth-differential: same path variant returns different body for admin vs regular user.",
+    "active_probe": true,
+    "severity": "critical",
+    "prevalence": "common",
+    "slice": "java-spring",
+    "uid": "java-spring__spring-security-privilege-escalation-role-check",
+    "class_hint": "bfla"
+  },
+  {
+    "id": "spring-session-fixation",
+    "name": "Session Fixation \u2014 Session ID Not Rotated After Authentication",
+    "owasp_category": "A07:2021 Identification and Authentication Failures",
+    "frameworks": [
+      "Spring Boot",
+      "Spring Security"
+    ],
+    "description": "When Spring Security's session fixation protection is misconfigured (SessionCreationPolicy.NEVER or sessionFixation().none()), the session ID issued before login is reused after successful authentication. An attacker who pre-plants a known session cookie can hijack the session once the victim logs in.",
+    "runtime_discovery": "Record the session cookie (JSESSIONID) value from a pre-authentication request. Authenticate successfully. Compare the session cookie value in the post-authentication response \u2014 if it is identical to the pre-auth value, session fixation protection is absent.",
+    "detection_signal": "JSESSIONID (or equivalent Spring Session cookie) value is identical before and after a successful POST to /login. The Set-Cookie header in the login success response is absent (no new cookie issued) or contains the same token value.",
+    "active_probe": true,
+    "severity": "medium",
+    "prevalence": "occasional",
+    "slice": "java-spring",
+    "uid": "java-spring__spring-session-fixation",
+    "class_hint": "session"
+  },
+  {
+    "id": "spring-data-rest-exposure",
+    "name": "Spring Data REST Auto-Exports All Repositories as Unauthenticated HATEOAS Endpoints",
+    "owasp_category": "A01:2021 Broken Access Control",
+    "frameworks": [
+      "Spring Boot",
+      "Spring Data REST"
+    ],
+    "description": "Spring Data REST auto-exports every JPA repository as a discoverable REST endpoint under /api or a configured base path. Without explicit @RepositoryRestResource(exported=false) or method-level security, all entities including internal ones (users, roles, audit logs) are readable and writable by any caller.",
+    "runtime_discovery": "GET the HATEOAS discovery root (/ or /api) to enumerate all auto-exported collection endpoints from _links. Probe each collection without authentication. Attempt GET (list), POST (create), PATCH (modify), DELETE on each endpoint as an unauthenticated user and as a low-privilege user.",
+    "detection_signal": "Unauthenticated GET to /api returns JSON with _links listing multiple entity collections. Fetching any collection link without a session returns HTTP 200 with entity data. A POST or PATCH returning 201/200 without authentication or for a resource the user should not own is a direct finding.",
+    "active_probe": true,
+    "severity": "critical",
+    "prevalence": "occasional",
+    "slice": "java-spring",
+    "uid": "java-spring__spring-data-rest-exposure",
+    "class_hint": "spring-data-rest-exposure"
+  }
+]

@@ -1,0 +1,266 @@
+[
+  {
+    "id": "angular-csti-double-curly",
+    "name": "Angular Client-Side Template Injection (CSTI) via Expression Sandbox Escape",
+    "owasp_category": "A03:2021 Injection",
+    "frameworks": [
+      "Angular",
+      "AngularJS"
+    ],
+    "description": "User-supplied input is interpolated directly into Angular template expressions (e.g., {{userInput}}) or bound with [innerHTML], allowing an attacker to execute arbitrary JavaScript via crafted payloads like {{constructor.constructor('alert(1)')()}} in AngularJS or trigger DOM-XSS in Angular 2+ through unsafe bindings.",
+    "runtime_discovery": "Submit payloads like {{7*7}}, {{constructor.constructor('alert(1)')()}} or <img [src]='x' (error)='constructor.constructor(\"alert(1)\")()'> into every text input, URL parameter, and search field. Observe the rendered DOM for evaluated arithmetic (49 appearing instead of {{7*7}}) or JS execution.",
+    "detection_signal": "Response body or live DOM contains '49' when input '{{7*7}}' was submitted; or JavaScript alert fires; or Angular error overlay references 'unsafe value used in a resource URL context' paired with reflected input.",
+    "active_probe": true,
+    "severity": "critical",
+    "prevalence": "common",
+    "slice": "angular-vue",
+    "uid": "angular-vue__angular-csti-double-curly",
+    "class_hint": "ssti"
+  },
+  {
+    "id": "angular-bypass-route-guard",
+    "name": "Angular Client-Side Route Guard Bypass",
+    "owasp_category": "A01:2021 Broken Access Control",
+    "frameworks": [
+      "Angular"
+    ],
+    "description": "Angular route guards (canActivate, canLoad) are enforced only in the browser; the API endpoints they protect are often reachable directly. An unauthenticated user who navigates to a guarded route may see a redirect, but the underlying REST calls can still succeed because server-side authorization is missing or insufficient.",
+    "runtime_discovery": "Crawl the SPA to discover all route paths from the JS bundle (look for RouterModule.forRoot or loadChildren chunks). Issue direct HTTP requests to the backing API endpoints using an unauthenticated or low-privilege session token. Compare HTTP response codes and data payloads between an admin session and the unauthenticated direct call.",
+    "detection_signal": "Direct API call (e.g., GET /api/admin/users) returns HTTP 200 with full payload while the same call with the unauthenticated browser session returns HTTP 302 to /login \u2014 confirming guard bypass. Alternatively, the guarded route renders in the browser with no valid JWT present in localStorage/sessionStorage.",
+    "active_probe": true,
+    "severity": "high",
+    "prevalence": "common",
+    "slice": "angular-vue",
+    "uid": "angular-vue__angular-bypass-route-guard",
+    "class_hint": "client-side-authz"
+  },
+  {
+    "id": "vue-csti-v-html-xss",
+    "name": "Vue v-html Directive XSS",
+    "owasp_category": "A03:2021 Injection",
+    "frameworks": [
+      "Vue"
+    ],
+    "description": "The v-html directive renders raw HTML without sanitization. When user-supplied content is bound with v-html, any HTML/JavaScript payload is executed directly in the victim's browser DOM, bypassing Vue's default text-escaping that would otherwise render angle brackets as entities.",
+    "runtime_discovery": "Identify input fields whose values appear rendered as rich text or formatted content in the UI (e.g., comment bodies, profile bios, message previews). Submit <img src=x onerror=alert(1)> and <script>alert(1)</script> payloads. Inspect the rendered DOM via DevTools to see if HTML is injected as a node rather than escaped text.",
+    "detection_signal": "Submitted payload <img src=x onerror=alert(1)> appears in the DOM as an actual <img> element (not &lt;img&gt;) and triggers the onerror handler; or DevTools Elements panel shows raw HTML nodes rather than escaped text content inside a Vue-controlled element.",
+    "active_probe": true,
+    "severity": "high",
+    "prevalence": "common",
+    "slice": "angular-vue",
+    "uid": "angular-vue__vue-csti-v-html-xss",
+    "class_hint": "xss"
+  },
+  {
+    "id": "spa-open-redirect-router",
+    "name": "Open Redirect via SPA Router redirect_uri / returnUrl Parameter",
+    "owasp_category": "A01:2021 Broken Access Control",
+    "frameworks": [
+      "Angular",
+      "Vue"
+    ],
+    "description": "Angular and Vue routers commonly accept a returnUrl or redirect query parameter after login to restore the user's intended destination. If the SPA navigates to this value without validating it is a same-origin path, an attacker can craft a login URL that redirects victims to an external phishing site after successful authentication.",
+    "runtime_discovery": "Capture the login redirect URL (e.g., /login?returnUrl=/dashboard). Replace the returnUrl value with https://evil.com or //evil.com and complete authentication. Observe whether the post-login redirect lands on the external domain.",
+    "detection_signal": "After authentication, the browser Location header or window.location.href contains the attacker-supplied external domain. HTTP 302 response Location value matches the injected URL rather than an allowed same-origin path.",
+    "active_probe": true,
+    "severity": "medium",
+    "prevalence": "common",
+    "slice": "angular-vue",
+    "uid": "angular-vue__spa-open-redirect-router",
+    "class_hint": "open-redirect"
+  },
+  {
+    "id": "spa-sensitive-data-localstorage",
+    "name": "Sensitive Tokens Stored in localStorage / sessionStorage",
+    "owasp_category": "A02:2021 Cryptographic Failures",
+    "frameworks": [
+      "Angular",
+      "Vue"
+    ],
+    "description": "SPAs often store JWTs, OAuth access tokens, or API keys in localStorage or sessionStorage, making them accessible to any JavaScript on the page including injected scripts from XSS. A successful XSS then becomes a persistent credential harvest without user interaction.",
+    "runtime_discovery": "Open browser DevTools Application tab after authenticating. Inspect localStorage and sessionStorage keys for any entries whose values decode as JWTs (header.payload.signature), Bearer tokens, or API key patterns. Also observe Network panel Authorization headers to confirm what was read from storage.",
+    "detection_signal": "localStorage or sessionStorage contains a key (e.g., access_token, jwt, auth_token) whose value matches a JWT regex (^[A-Za-z0-9-_]+\\.[A-Za-z0-9-_]+\\.[A-Za-z0-9-_]+$) or an API key pattern. Presence is a finding; no active injection needed.",
+    "active_probe": false,
+    "severity": "medium",
+    "prevalence": "ubiquitous",
+    "slice": "angular-vue",
+    "uid": "angular-vue__spa-sensitive-data-localstorage",
+    "class_hint": "xss"
+  },
+  {
+    "id": "spa-cors-misconfiguration",
+    "name": "Overly Permissive CORS on SPA API Endpoints",
+    "owasp_category": "A05:2021 Security Misconfiguration",
+    "frameworks": [
+      "Angular",
+      "Vue"
+    ],
+    "description": "API servers backing Angular/Vue SPAs are commonly configured with Access-Control-Allow-Origin: * or echo back the request Origin without validation. This lets attacker-controlled pages make credentialed cross-origin requests and read responses, defeating the SPA's same-origin protections.",
+    "runtime_discovery": "Send preflight and simple cross-origin requests to API endpoints (e.g., GET /api/user/me) with an Origin: https://attacker.com header. Check the response for Access-Control-Allow-Origin mirroring the attacker domain and Access-Control-Allow-Credentials: true simultaneously.",
+    "detection_signal": "Response headers contain both Access-Control-Allow-Origin: https://attacker.com (reflecting injected origin) and Access-Control-Allow-Credentials: true on an endpoint that returns sensitive data. Or Access-Control-Allow-Origin: * on any endpoint accepting cookies or Authorization headers.",
+    "active_probe": true,
+    "severity": "high",
+    "prevalence": "common",
+    "slice": "angular-vue",
+    "uid": "angular-vue__spa-cors-misconfiguration",
+    "class_hint": "cors"
+  },
+  {
+    "id": "angular-ssr-ssrf-httpbackend",
+    "name": "Angular Universal SSR \u2014 SSRF via Server-Side HTTP Fetches",
+    "owasp_category": "A10:2021 Server-Side Request Forgery",
+    "frameworks": [
+      "Angular"
+    ],
+    "description": "Angular Universal applications perform HTTP requests server-side during pre-rendering. If route parameters or query strings are used unsanitized to construct backend fetch URLs, an attacker can redirect the server's HTTP client to internal network resources (metadata endpoints, internal APIs, cloud IMDSv1).",
+    "runtime_discovery": "Identify URL parameters that appear to drive content fetching in SSR responses (e.g., ?src=, ?url=, ?apiUrl=). Replace values with http://169.254.169.254/latest/meta-data/ or http://localhost:9200/_cat/indices. Observe whether the server-rendered HTML contains cloud metadata or internal service data.",
+    "detection_signal": "Pre-rendered HTML response body contains cloud metadata strings (ami-id, instance-id, security-credentials/) or internal service signatures (Elasticsearch index listing, Redis info output) after submitting a crafted URL-scheme parameter. Response time increase >1 s vs baseline also indicates a live internal probe.",
+    "active_probe": true,
+    "severity": "critical",
+    "prevalence": "occasional",
+    "slice": "angular-vue",
+    "uid": "angular-vue__angular-ssr-ssrf-httpbackend",
+    "class_hint": "ssrf"
+  },
+  {
+    "id": "vue-vuex-devtools-state-leak",
+    "name": "Vuex / Pinia State Exposed via Vue DevTools Protocol",
+    "owasp_category": "A02:2021 Cryptographic Failures",
+    "frameworks": [
+      "Vue"
+    ],
+    "description": "Production Vue apps that ship with Vue DevTools hooks enabled (window.__VUE_DEVTOOLS_GLOBAL_HOOK__ or __VUE__) expose the full reactive state tree, including auth tokens, user PII, and feature flags, to any browser extension or injected script that speaks the DevTools protocol.",
+    "runtime_discovery": "In the browser console, evaluate window.__VUE__ or window.__VUE_DEVTOOLS_GLOBAL_HOOK__. If present, inspect ._instance.appContext.config.globalProperties.$store.state (Vuex) or enumerate Pinia stores via window.__pinia.state.value. No extension required.",
+    "detection_signal": "window.__VUE__ or window.__VUE_DEVTOOLS_GLOBAL_HOOK__ is defined on the production page (truthy in DevTools console). Subsequent store state read returns auth tokens, session data, or PII objects. Also detectable by scanning the response JS bundle for the string devtools hook installed.",
+    "active_probe": true,
+    "severity": "medium",
+    "prevalence": "occasional",
+    "slice": "angular-vue",
+    "uid": "angular-vue__vue-vuex-devtools-state-leak",
+    "class_hint": "secrets-exposure"
+  },
+  {
+    "id": "spa-jwt-alg-none",
+    "name": "JWT 'alg:none' Acceptance on SPA API",
+    "owasp_category": "A02:2021 Cryptographic Failures",
+    "frameworks": [
+      "Angular",
+      "Vue"
+    ],
+    "description": "Some API backends consumed by SPAs accept JWTs with the algorithm field set to 'none', bypassing signature verification entirely. An attacker can craft a token with arbitrary claims (admin role, elevated user ID) and submit it with an empty signature.",
+    "runtime_discovery": "Capture a valid JWT from localStorage or the Authorization header. Base64-decode and modify the header to {\"alg\":\"none\",\"typ\":\"JWT\"}, re-encode the desired payload (e.g., role: admin), append a trailing dot with no signature, and resubmit to protected API endpoints. Observe whether the server accepts the unsigned token.",
+    "detection_signal": "HTTP 200 response (or data change) on a privileged endpoint after submitting a forged alg:none JWT, where the original signed JWT with lower privileges returns HTTP 403. Response body reflects the tampered claim (e.g., admin: true in the JSON).",
+    "active_probe": true,
+    "severity": "critical",
+    "prevalence": "occasional",
+    "slice": "angular-vue",
+    "uid": "angular-vue__spa-jwt-alg-none",
+    "class_hint": "jwt"
+  },
+  {
+    "id": "spa-idor-numeric-ids",
+    "name": "Insecure Direct Object Reference (IDOR) on SPA REST/GraphQL Endpoints",
+    "owasp_category": "A01:2021 Broken Access Control",
+    "frameworks": [
+      "Angular",
+      "Vue"
+    ],
+    "description": "SPA frameworks expose object identifiers in the URL path and API payloads. Without server-side ownership checks, incrementing or substituting a numeric/UUID resource ID in an API call returns another user's data. SPAs make the attack surface especially visible because route parameters and API calls are observable in the browser network tab.",
+    "runtime_discovery": "Authenticate as User A, capture API calls containing resource IDs (e.g., GET /api/orders/1042). Authenticate as User B in a second session, replay User B's token against User A's resource IDs. Alternatively enumerate IDs sequentially from the observed value.",
+    "detection_signal": "HTTP 200 with User A's data body when the request uses User B's Bearer token and User A's resource ID. Auth-differential comparison: same endpoint returns different ownership metadata (userId, email) for the two sessions, confirming cross-user access.",
+    "active_probe": true,
+    "severity": "high",
+    "prevalence": "ubiquitous",
+    "slice": "angular-vue",
+    "uid": "angular-vue__spa-idor-numeric-ids",
+    "class_hint": "idor-bola"
+  },
+  {
+    "id": "angular-csp-bypass-inline",
+    "name": "Content Security Policy Misconfiguration Allowing Inline Script in Angular App",
+    "owasp_category": "A05:2021 Security Misconfiguration",
+    "frameworks": [
+      "Angular",
+      "Vue"
+    ],
+    "description": "Angular and Vue production bundles commonly ship with weak or absent CSP headers, or with unsafe-inline / unsafe-eval in the script-src directive. This negates XSS mitigations that CSP is intended to provide, meaning any XSS payload executes without browser-level blocking.",
+    "runtime_discovery": "Inspect the Content-Security-Policy response header (or <meta http-equiv=Content-Security-Policy>) on the SPA shell page and API responses. Parse the script-src directive for unsafe-inline, unsafe-eval, wildcard hosts (*), or the absence of CSP entirely.",
+    "detection_signal": "Response header Content-Security-Policy is absent; or contains script-src directives with 'unsafe-inline', 'unsafe-eval', or * wildcards. Observable purely from response headers of the initial page load \u2014 no additional requests needed.",
+    "active_probe": false,
+    "severity": "medium",
+    "prevalence": "ubiquitous",
+    "slice": "angular-vue",
+    "uid": "angular-vue__angular-csp-bypass-inline",
+    "class_hint": "xss"
+  },
+  {
+    "id": "vue-router-hash-xss",
+    "name": "DOM-XSS via Vue Router Hash Fragment Reflection",
+    "owasp_category": "A03:2021 Injection",
+    "frameworks": [
+      "Vue"
+    ],
+    "description": "Vue applications using hash-mode routing (#/) sometimes display route parameters or hash fragments in the DOM (e.g., as page titles, breadcrumbs, or error messages) without encoding. Because the hash is never sent to the server, server-side WAFs cannot block it, making it a reliable DOM-XSS vector.",
+    "runtime_discovery": "Append XSS payloads to the URL hash and named route parameters: /#/<script>alert(1)</script>, /#/page?q=<img src=x onerror=alert(1)>. Observe whether the Vue component renders the raw value into the DOM. Also test history-mode routes if hash mode is not used.",
+    "detection_signal": "After navigation to a crafted hash URL, browser DevTools Elements panel shows unescaped HTML in a Vue-rendered element (e.g., <h1> contains <script> as a child node rather than escaped text); or JavaScript executes. Console errors referencing 'vue-router' params alongside script execution confirm the vector.",
+    "active_probe": true,
+    "severity": "high",
+    "prevalence": "occasional",
+    "slice": "angular-vue",
+    "uid": "angular-vue__vue-router-hash-xss",
+    "class_hint": "xss"
+  },
+  {
+    "id": "spa-graphql-introspection-enabled",
+    "name": "GraphQL Introspection Enabled in Production SPA Backend",
+    "owasp_category": "A05:2021 Security Misconfiguration",
+    "frameworks": [
+      "Angular",
+      "Vue"
+    ],
+    "description": "Angular and Vue apps frequently back onto a GraphQL API. When introspection is enabled in production, any user can enumerate the full schema \u2014 all types, queries, mutations, and field names \u2014 providing a complete attack surface map that accelerates IDOR, privilege escalation, and injection testing.",
+    "runtime_discovery": "Send a POST to the GraphQL endpoint (commonly /graphql, /api/graphql) with the standard introspection query {__schema{types{name,fields{name}}}}. Check whether the response includes the full schema rather than an error or empty data.",
+    "detection_signal": "HTTP 200 response body contains __schema with a populated types array listing application-specific type names (e.g., User, Order, AdminPanel). Response Content-Type is application/json and the data.__schema.types array length is >10.",
+    "active_probe": true,
+    "severity": "medium",
+    "prevalence": "common",
+    "slice": "angular-vue",
+    "uid": "angular-vue__spa-graphql-introspection-enabled",
+    "class_hint": "idor-bola"
+  },
+  {
+    "id": "angular-httpinterceptor-token-log",
+    "name": "Auth Token Leaked in Angular Error Logs / Sentry Breadcrumbs",
+    "owasp_category": "A09:2021 Security Logging and Monitoring Failures",
+    "frameworks": [
+      "Angular"
+    ],
+    "description": "Angular HttpInterceptors that log request objects (for debugging) commonly include the full Authorization header in error reports sent to Sentry, Datadog RUM, or a custom logging endpoint. These tokens then appear in third-party dashboards accessible to anyone with logging access.",
+    "runtime_discovery": "Intercept outbound HTTP requests from the SPA using the browser Network panel. Filter for requests to known error-reporting endpoints (sentry.io, browser.sentry-cdn.com, rum.browser-intake-datadoghq.com). Inspect the POST body for breadcrumb objects containing Authorization, x-api-key, or Cookie header values from previous requests.",
+    "detection_signal": "Outbound POST to a telemetry/logging endpoint contains a JSON body with a breadcrumbs or data field that includes an Authorization or x-api-key value matching a token observed in the application's own API calls. Observable purely from passive network traffic interception.",
+    "active_probe": false,
+    "severity": "high",
+    "prevalence": "occasional",
+    "slice": "angular-vue",
+    "uid": "angular-vue__angular-httpinterceptor-token-log",
+    "class_hint": "secrets-exposure"
+  },
+  {
+    "id": "spa-prototype-pollution",
+    "name": "Client-Side Prototype Pollution in SPA Utility Libraries",
+    "owasp_category": "A08:2021 Software and Data Integrity Failures",
+    "frameworks": [
+      "Angular",
+      "Vue"
+    ],
+    "description": "Many Angular and Vue apps import utility libraries (lodash.merge, jQuery extend, query-string) that are vulnerable to prototype pollution. An attacker supplies a JSON payload with __proto__ or constructor.prototype keys through URL query strings, form data, or API responses, poisoning Object.prototype and potentially escalating to XSS or logic bypass.",
+    "runtime_discovery": "Submit payloads containing __proto__[test]=polluted or constructor[prototype][test]=polluted through URL query parameters (e.g., ?__proto__[admin]=true) and form fields processed by vulnerable merge/assign functions. After submission, execute Object.prototype.test in the browser console to check if it equals 'polluted'.",
+    "detection_signal": "After submitting a __proto__ or constructor.prototype payload via URL parameter or form, browser console evaluation of ({}).test returns 'polluted' rather than undefined. In automated scanning, a subsequent request that reads from a property gated by Object.prototype returns unexpected truthy behavior (e.g., isAdmin becomes true on a non-admin object).",
+    "active_probe": true,
+    "severity": "high",
+    "prevalence": "common",
+    "slice": "angular-vue",
+    "uid": "angular-vue__spa-prototype-pollution",
+    "class_hint": "xss"
+  }
+]

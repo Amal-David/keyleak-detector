@@ -1,0 +1,3487 @@
+[
+  {
+    "uid": "java-spring__spring-actuator-exposed",
+    "name": "Spring Boot Actuator Endpoints Exposed",
+    "class_hint": "debug-endpoint",
+    "slice": "java-spring",
+    "frameworks": [
+      "Spring Boot",
+      "Spring Actuator"
+    ],
+    "severity": "critical",
+    "prevalence": "common",
+    "active_probe": true
+  },
+  {
+    "uid": "java-spring__spring-actuator-env-secrets",
+    "name": "Actuator /env Leaks Credentials via Partial Masking Bypass",
+    "class_hint": "debug-endpoint",
+    "slice": "java-spring",
+    "frameworks": [
+      "Spring Boot",
+      "Spring Actuator"
+    ],
+    "severity": "high",
+    "prevalence": "common",
+    "active_probe": true
+  },
+  {
+    "uid": "java-spring__spring-security-method-bypass-idor",
+    "name": "Broken Object-Level Authorization (IDOR) via Missing @PreAuthorize",
+    "class_hint": "idor-bola",
+    "slice": "java-spring",
+    "frameworks": [
+      "Spring Boot",
+      "Spring Security"
+    ],
+    "severity": "high",
+    "prevalence": "ubiquitous",
+    "active_probe": true
+  },
+  {
+    "uid": "java-spring__spring-data-mass-assignment",
+    "name": "Mass Assignment via Spring Data / @RequestBody Binding",
+    "class_hint": "mass-assignment",
+    "slice": "java-spring",
+    "frameworks": [
+      "Spring Boot",
+      "Spring Data",
+      "Spring MVC"
+    ],
+    "severity": "high",
+    "prevalence": "common",
+    "active_probe": true
+  },
+  {
+    "uid": "java-spring__spring-csrf-disabled",
+    "name": "CSRF Protection Disabled in Spring Security Config",
+    "class_hint": "csrf",
+    "slice": "java-spring",
+    "frameworks": [
+      "Spring Boot",
+      "Spring Security"
+    ],
+    "severity": "medium",
+    "prevalence": "common",
+    "active_probe": true
+  },
+  {
+    "uid": "java-spring__spring-h2-console-exposed",
+    "name": "H2 Database Console Exposed in Production",
+    "class_hint": "debug-endpoint",
+    "slice": "java-spring",
+    "frameworks": [
+      "Spring Boot"
+    ],
+    "severity": "critical",
+    "prevalence": "occasional",
+    "active_probe": true
+  },
+  {
+    "uid": "java-spring__spring-open-redirect",
+    "name": "Open Redirect via Spring Security Login Redirect Parameter",
+    "class_hint": "open-redirect",
+    "slice": "java-spring",
+    "frameworks": [
+      "Spring Boot",
+      "Spring Security"
+    ],
+    "severity": "medium",
+    "prevalence": "common",
+    "active_probe": true
+  },
+  {
+    "uid": "java-spring__spring-jwt-none-alg",
+    "name": "JWT 'none' Algorithm Accepted by Spring Security",
+    "class_hint": "jwt",
+    "slice": "java-spring",
+    "frameworks": [
+      "Spring Boot",
+      "Spring Security"
+    ],
+    "severity": "critical",
+    "prevalence": "occasional",
+    "active_probe": true
+  },
+  {
+    "uid": "java-spring__spring-data-jpql-injection",
+    "name": "JPQL / HQL Injection via Spring Data @Query",
+    "class_hint": "sqli",
+    "slice": "java-spring",
+    "frameworks": [
+      "Spring Boot",
+      "Spring Data",
+      "Hibernate"
+    ],
+    "severity": "high",
+    "prevalence": "occasional",
+    "active_probe": true
+  },
+  {
+    "uid": "java-spring__spring-cors-wildcard",
+    "name": "Overly Permissive CORS Configuration with allowCredentials",
+    "class_hint": "cors",
+    "slice": "java-spring",
+    "frameworks": [
+      "Spring Boot",
+      "Spring MVC",
+      "Spring Security"
+    ],
+    "severity": "high",
+    "prevalence": "common",
+    "active_probe": true
+  },
+  {
+    "uid": "java-spring__spring-security-verbose-errors",
+    "name": "Spring Security / Whitelabel Error Page Leaks Stack Traces",
+    "class_hint": "debug-endpoint",
+    "slice": "java-spring",
+    "frameworks": [
+      "Spring Boot"
+    ],
+    "severity": "medium",
+    "prevalence": "ubiquitous",
+    "active_probe": true
+  },
+  {
+    "uid": "java-spring__spring-actuator-loggers-rce",
+    "name": "Actuator /loggers Endpoint Allows Log Level Manipulation",
+    "class_hint": "debug-endpoint",
+    "slice": "java-spring",
+    "frameworks": [
+      "Spring Boot",
+      "Spring Actuator"
+    ],
+    "severity": "high",
+    "prevalence": "occasional",
+    "active_probe": true
+  },
+  {
+    "uid": "java-spring__spring-security-privilege-escalation-role-check",
+    "name": "Vertical Privilege Escalation via Missing Role Checks on Admin Endpoints",
+    "class_hint": "bfla",
+    "slice": "java-spring",
+    "frameworks": [
+      "Spring Boot",
+      "Spring Security"
+    ],
+    "severity": "critical",
+    "prevalence": "common",
+    "active_probe": true
+  },
+  {
+    "uid": "java-spring__spring-session-fixation",
+    "name": "Session Fixation \u2014 Session ID Not Rotated After Authentication",
+    "class_hint": "session",
+    "slice": "java-spring",
+    "frameworks": [
+      "Spring Boot",
+      "Spring Security"
+    ],
+    "severity": "medium",
+    "prevalence": "occasional",
+    "active_probe": true
+  },
+  {
+    "uid": "java-spring__spring-data-rest-exposure",
+    "name": "Spring Data REST Auto-Exports All Repositories as Unauthenticated HATEOAS Endpoints",
+    "class_hint": "spring-data-rest-exposure",
+    "slice": "java-spring",
+    "frameworks": [
+      "Spring Boot",
+      "Spring Data REST"
+    ],
+    "severity": "critical",
+    "prevalence": "occasional",
+    "active_probe": true
+  },
+  {
+    "uid": "node-express__express-x-powered-by-disclosure",
+    "name": "Express X-Powered-By Header Technology Disclosure",
+    "class_hint": "other",
+    "slice": "node-express",
+    "frameworks": [
+      "express",
+      "node.js"
+    ],
+    "severity": "low",
+    "prevalence": "ubiquitous",
+    "active_probe": false
+  },
+  {
+    "uid": "node-express__express-cors-wildcard-credentialed",
+    "name": "CORS Wildcard + Credentialed Request Misconfiguration",
+    "class_hint": "cors",
+    "slice": "node-express",
+    "frameworks": [
+      "express",
+      "node.js",
+      "cors npm package"
+    ],
+    "severity": "high",
+    "prevalence": "common",
+    "active_probe": true
+  },
+  {
+    "uid": "node-express__express-directory-listing",
+    "name": "serve-static / express.static Directory Listing Enabled",
+    "class_hint": "directory-listing",
+    "slice": "node-express",
+    "frameworks": [
+      "express",
+      "serve-static"
+    ],
+    "severity": "medium",
+    "prevalence": "occasional",
+    "active_probe": true
+  },
+  {
+    "uid": "node-express__express-body-parser-json-prototype-pollution",
+    "name": "JSON Body Prototype Pollution via body-parser",
+    "class_hint": "prototype-pollution",
+    "slice": "node-express",
+    "frameworks": [
+      "express",
+      "body-parser",
+      "node.js"
+    ],
+    "severity": "critical",
+    "prevalence": "common",
+    "active_probe": true
+  },
+  {
+    "uid": "node-express__express-mass-assignment-req-body",
+    "name": "Mass Assignment via Unsanitized req.body",
+    "class_hint": "mass-assignment",
+    "slice": "node-express",
+    "frameworks": [
+      "express",
+      "mongoose",
+      "sequelize",
+      "node.js"
+    ],
+    "severity": "high",
+    "prevalence": "common",
+    "active_probe": true
+  },
+  {
+    "uid": "node-express__express-helmet-missing-csp",
+    "name": "Missing or Weak Content-Security-Policy (helmet not applied)",
+    "class_hint": "xss",
+    "slice": "node-express",
+    "frameworks": [
+      "express",
+      "helmet",
+      "node.js"
+    ],
+    "severity": "medium",
+    "prevalence": "common",
+    "active_probe": false
+  },
+  {
+    "uid": "node-express__express-session-insecure-defaults",
+    "name": "express-session Insecure Cookie Defaults (no Secure/HttpOnly/SameSite)",
+    "class_hint": "csrf",
+    "slice": "node-express",
+    "frameworks": [
+      "express",
+      "express-session",
+      "node.js"
+    ],
+    "severity": "high",
+    "prevalence": "common",
+    "active_probe": false
+  },
+  {
+    "uid": "node-express__express-path-traversal-serve-static",
+    "name": "Path Traversal Through Static File Middleware",
+    "class_hint": "path-traversal",
+    "slice": "node-express",
+    "frameworks": [
+      "express",
+      "serve-static",
+      "node.js"
+    ],
+    "severity": "critical",
+    "prevalence": "occasional",
+    "active_probe": true
+  },
+  {
+    "uid": "node-express__express-open-redirect",
+    "name": "Open Redirect in res.redirect() with User-Supplied URL",
+    "class_hint": "open-redirect",
+    "slice": "node-express",
+    "frameworks": [
+      "express",
+      "node.js"
+    ],
+    "severity": "medium",
+    "prevalence": "common",
+    "active_probe": true
+  },
+  {
+    "uid": "node-express__express-jwt-alg-none",
+    "name": "JWT Algorithm Confusion / 'alg:none' Acceptance",
+    "class_hint": "jwt",
+    "slice": "node-express",
+    "frameworks": [
+      "express",
+      "jsonwebtoken",
+      "node.js"
+    ],
+    "severity": "critical",
+    "prevalence": "occasional",
+    "active_probe": true
+  },
+  {
+    "uid": "node-express__express-nosql-injection-mongodb",
+    "name": "NoSQL Injection via MongoDB Operator Injection",
+    "class_hint": "nosqli",
+    "slice": "node-express",
+    "frameworks": [
+      "express",
+      "mongoose",
+      "mongodb",
+      "node.js"
+    ],
+    "severity": "critical",
+    "prevalence": "common",
+    "active_probe": true
+  },
+  {
+    "uid": "node-express__express-debug-route-exposed",
+    "name": "Debug / Admin Routes Exposed Without Authentication",
+    "class_hint": "debug-endpoint",
+    "slice": "node-express",
+    "frameworks": [
+      "express",
+      "node.js"
+    ],
+    "severity": "high",
+    "prevalence": "common",
+    "active_probe": true
+  },
+  {
+    "uid": "node-express__express-idor-sequential-id",
+    "name": "Insecure Direct Object Reference via Sequential / Guessable IDs",
+    "class_hint": "idor-bola",
+    "slice": "node-express",
+    "frameworks": [
+      "express",
+      "node.js",
+      "agnostic"
+    ],
+    "severity": "high",
+    "prevalence": "ubiquitous",
+    "active_probe": true
+  },
+  {
+    "uid": "node-express__express-rate-limit-bypass",
+    "name": "Rate Limiting Absent or Bypassable on Sensitive Endpoints",
+    "class_hint": "rate-limit-enum",
+    "slice": "node-express",
+    "frameworks": [
+      "express",
+      "express-rate-limit",
+      "node.js"
+    ],
+    "severity": "high",
+    "prevalence": "common",
+    "active_probe": true
+  },
+  {
+    "uid": "node-express__express-ssrf-axios-got",
+    "name": "Server-Side Request Forgery via User-Controlled URL in axios / got",
+    "class_hint": "ssrf",
+    "slice": "node-express",
+    "frameworks": [
+      "express",
+      "axios",
+      "got",
+      "node-fetch",
+      "node.js"
+    ],
+    "severity": "critical",
+    "prevalence": "common",
+    "active_probe": true
+  },
+  {
+    "uid": "nextjs__nextjs-api-route-missing-method-check",
+    "name": "Next.js API Route Missing HTTP Method Guard",
+    "class_hint": "bfla",
+    "slice": "nextjs",
+    "frameworks": [
+      "Next.js"
+    ],
+    "severity": "high",
+    "prevalence": "common",
+    "active_probe": true
+  },
+  {
+    "uid": "nextjs__nextjs-api-route-unprotected-auth",
+    "name": "Next.js API Route Unauthenticated Access (Missing Session Check)",
+    "class_hint": "jwt",
+    "slice": "nextjs",
+    "frameworks": [
+      "Next.js"
+    ],
+    "severity": "critical",
+    "prevalence": "common",
+    "active_probe": true
+  },
+  {
+    "uid": "nextjs__nextjs-middleware-bypass-x-middleware-subrequest",
+    "name": "Next.js Middleware Auth Bypass via `x-middleware-subrequest` Header (CVE-2025-29927)",
+    "class_hint": "jwt",
+    "slice": "nextjs",
+    "frameworks": [
+      "Next.js"
+    ],
+    "severity": "critical",
+    "prevalence": "common",
+    "active_probe": true
+  },
+  {
+    "uid": "nextjs__nextjs-server-action-idor",
+    "name": "Next.js Server Action IDOR / Missing Ownership Check",
+    "class_hint": "idor-bola",
+    "slice": "nextjs",
+    "frameworks": [
+      "Next.js"
+    ],
+    "severity": "high",
+    "prevalence": "common",
+    "active_probe": true
+  },
+  {
+    "uid": "nextjs__nextjs-rsc-sensitive-data-in-client-component",
+    "name": "Next.js RSC Sensitive Props Leaked to Client Bundle",
+    "class_hint": "secrets-exposure",
+    "slice": "nextjs",
+    "frameworks": [
+      "Next.js"
+    ],
+    "severity": "high",
+    "prevalence": "occasional",
+    "active_probe": false
+  },
+  {
+    "uid": "nextjs__nextjs-open-redirect-redirect-api",
+    "name": "Next.js Open Redirect in API Route or `next.config.js` Redirects",
+    "class_hint": "open-redirect",
+    "slice": "nextjs",
+    "frameworks": [
+      "Next.js"
+    ],
+    "severity": "medium",
+    "prevalence": "common",
+    "active_probe": true
+  },
+  {
+    "uid": "nextjs__nextjs-ssrf-via-server-side-fetch",
+    "name": "Next.js SSR/API Route SSRF via User-Controlled URL",
+    "class_hint": "ssrf",
+    "slice": "nextjs",
+    "frameworks": [
+      "Next.js"
+    ],
+    "severity": "critical",
+    "prevalence": "occasional",
+    "active_probe": true
+  },
+  {
+    "uid": "nextjs__nextjs-cors-wildcard-api-routes",
+    "name": "Next.js API Route Overly Permissive CORS",
+    "class_hint": "cors",
+    "slice": "nextjs",
+    "frameworks": [
+      "Next.js"
+    ],
+    "severity": "high",
+    "prevalence": "common",
+    "active_probe": true
+  },
+  {
+    "uid": "nextjs__nextjs-path-traversal-static-file-serving",
+    "name": "Next.js Path Traversal in Custom Static File / Image Serving Routes",
+    "class_hint": "path-traversal",
+    "slice": "nextjs",
+    "frameworks": [
+      "Next.js"
+    ],
+    "severity": "critical",
+    "prevalence": "occasional",
+    "active_probe": true
+  },
+  {
+    "uid": "nextjs__nextjs-env-var-leak-client-side",
+    "name": "Next.js `NEXT_PUBLIC_` Secret Leakage in Client Bundle",
+    "class_hint": "secrets-exposure",
+    "slice": "nextjs",
+    "frameworks": [
+      "Next.js"
+    ],
+    "severity": "critical",
+    "prevalence": "common",
+    "active_probe": false
+  },
+  {
+    "uid": "nextjs__nextjs-debug-error-overlay-in-prod",
+    "name": "Next.js Error Overlay / Stack Trace Exposure in Production",
+    "class_hint": "debug-endpoint",
+    "slice": "nextjs",
+    "frameworks": [
+      "Next.js"
+    ],
+    "severity": "medium",
+    "prevalence": "occasional",
+    "active_probe": true
+  },
+  {
+    "uid": "nextjs__nextjs-server-action-csrf",
+    "name": "Next.js Server Action Cross-Site Request Forgery",
+    "class_hint": "csrf",
+    "slice": "nextjs",
+    "frameworks": [
+      "Next.js"
+    ],
+    "severity": "high",
+    "prevalence": "occasional",
+    "active_probe": true
+  },
+  {
+    "uid": "nextjs__nextjs-prototype-pollution-query-parser",
+    "name": "Next.js / Node.js Prototype Pollution via Query String Parsing",
+    "class_hint": "prototype-pollution",
+    "slice": "nextjs",
+    "frameworks": [
+      "Next.js",
+      "Express",
+      "Node.js"
+    ],
+    "severity": "high",
+    "prevalence": "occasional",
+    "active_probe": true
+  },
+  {
+    "uid": "nextjs__nextjs-i18n-route-auth-bypass",
+    "name": "Next.js i18n Locale Prefix Middleware Auth Bypass",
+    "class_hint": "other",
+    "slice": "nextjs",
+    "frameworks": [
+      "Next.js"
+    ],
+    "severity": "high",
+    "prevalence": "occasional",
+    "active_probe": true
+  },
+  {
+    "uid": "nextjs__nextjs-rewrite-internal-api-exposure",
+    "name": "Next.js `rewrites()` Exposing Internal / Admin API Routes",
+    "class_hint": "other",
+    "slice": "nextjs",
+    "frameworks": [
+      "Next.js"
+    ],
+    "severity": "high",
+    "prevalence": "occasional",
+    "active_probe": true
+  },
+  {
+    "uid": "react-spa__react-env-vars-in-bundle",
+    "name": "REACT_APP_* / VITE_ Secrets Baked Into JS Bundle",
+    "class_hint": "secrets-exposure",
+    "slice": "react-spa",
+    "frameworks": [
+      "React",
+      "Create React App",
+      "Vite",
+      "Next.js"
+    ],
+    "severity": "critical",
+    "prevalence": "ubiquitous",
+    "active_probe": false
+  },
+  {
+    "uid": "react-spa__react-client-side-authz-ui-only",
+    "name": "Client-Side-Only Authorization (Hidden Route / Conditional Render Bypass)",
+    "class_hint": "bfla",
+    "slice": "react-spa",
+    "frameworks": [
+      "React",
+      "React Router",
+      "Next.js"
+    ],
+    "severity": "high",
+    "prevalence": "ubiquitous",
+    "active_probe": true
+  },
+  {
+    "uid": "react-spa__react-redux-state-exposure",
+    "name": "Redux / Zustand Store Exposed in Window or DevTools",
+    "class_hint": "secrets-exposure",
+    "slice": "react-spa",
+    "frameworks": [
+      "React",
+      "Redux",
+      "Zustand",
+      "MobX"
+    ],
+    "severity": "high",
+    "prevalence": "common",
+    "active_probe": true
+  },
+  {
+    "uid": "react-spa__react-cors-wildcard-api",
+    "name": "Overly Permissive CORS on the Backing REST/GraphQL API",
+    "class_hint": "cors",
+    "slice": "react-spa",
+    "frameworks": [
+      "React",
+      "agnostic"
+    ],
+    "severity": "high",
+    "prevalence": "common",
+    "active_probe": true
+  },
+  {
+    "uid": "react-spa__react-jwt-stored-localstorage",
+    "name": "JWT / Bearer Token Stored in localStorage (XSS-Accessible)",
+    "class_hint": "xss",
+    "slice": "react-spa",
+    "frameworks": [
+      "React",
+      "agnostic"
+    ],
+    "severity": "high",
+    "prevalence": "ubiquitous",
+    "active_probe": true
+  },
+  {
+    "uid": "react-spa__react-dangerouslysetinnerhtml-xss",
+    "name": "dangerouslySetInnerHTML / innerHTML Sink Leading to Stored/Reflected XSS",
+    "class_hint": "xss",
+    "slice": "react-spa",
+    "frameworks": [
+      "React"
+    ],
+    "severity": "high",
+    "prevalence": "common",
+    "active_probe": true
+  },
+  {
+    "uid": "react-spa__react-open-redirect-spa-router",
+    "name": "Open Redirect via SPA Router ?redirect= / returnTo= Parameter",
+    "class_hint": "open-redirect",
+    "slice": "react-spa",
+    "frameworks": [
+      "React",
+      "React Router",
+      "Next.js"
+    ],
+    "severity": "medium",
+    "prevalence": "common",
+    "active_probe": true
+  },
+  {
+    "uid": "react-spa__react-firebase-api-key-exposed",
+    "name": "Firebase / Supabase / BaaS Config Object Exposed in Bundle",
+    "class_hint": "secrets-exposure",
+    "slice": "react-spa",
+    "frameworks": [
+      "React",
+      "Firebase",
+      "Supabase",
+      "Amplify"
+    ],
+    "severity": "critical",
+    "prevalence": "common",
+    "active_probe": true
+  },
+  {
+    "uid": "react-spa__react-idor-client-controlled-id",
+    "name": "IDOR via Client-Controlled Object IDs in API Calls",
+    "class_hint": "idor-bola",
+    "slice": "react-spa",
+    "frameworks": [
+      "React",
+      "agnostic"
+    ],
+    "severity": "high",
+    "prevalence": "ubiquitous",
+    "active_probe": true
+  },
+  {
+    "uid": "react-spa__react-source-map-exposed",
+    "name": "Production Source Maps Publicly Accessible",
+    "class_hint": "exposed-source-maps",
+    "slice": "react-spa",
+    "frameworks": [
+      "React",
+      "Create React App",
+      "Vite",
+      "Webpack"
+    ],
+    "severity": "medium",
+    "prevalence": "common",
+    "active_probe": true
+  },
+  {
+    "uid": "react-spa__react-graphql-introspection-enabled",
+    "name": "GraphQL Introspection Enabled in Production",
+    "class_hint": "graphql",
+    "slice": "react-spa",
+    "frameworks": [
+      "React",
+      "Apollo Client",
+      "Relay",
+      "urql"
+    ],
+    "severity": "medium",
+    "prevalence": "common",
+    "active_probe": true
+  },
+  {
+    "uid": "react-spa__react-sensitive-data-in-url",
+    "name": "Sensitive Data Leaked in URL Query Parameters / Hash Fragment",
+    "class_hint": "secrets-exposure",
+    "slice": "react-spa",
+    "frameworks": [
+      "React",
+      "React Router",
+      "Next.js"
+    ],
+    "severity": "medium",
+    "prevalence": "common",
+    "active_probe": false
+  },
+  {
+    "uid": "react-spa__react-postmessage-origin-wildcard",
+    "name": "Insecure postMessage Origin Validation (Wildcard or Missing)",
+    "class_hint": "xss",
+    "slice": "react-spa",
+    "frameworks": [
+      "React",
+      "agnostic"
+    ],
+    "severity": "high",
+    "prevalence": "occasional",
+    "active_probe": true
+  },
+  {
+    "uid": "react-spa__react-feature-flags-client-bypass",
+    "name": "Client-Side Feature Flag / Role Check Bypass",
+    "class_hint": "bfla",
+    "slice": "react-spa",
+    "frameworks": [
+      "React",
+      "LaunchDarkly",
+      "Unleash",
+      "agnostic"
+    ],
+    "severity": "high",
+    "prevalence": "common",
+    "active_probe": true
+  },
+  {
+    "uid": "react-spa__react-third-party-script-supply-chain",
+    "name": "Third-Party Script Loaded Without SRI / From Uncontrolled CDN",
+    "class_hint": "supply-chain",
+    "slice": "react-spa",
+    "frameworks": [
+      "React",
+      "agnostic"
+    ],
+    "severity": "medium",
+    "prevalence": "ubiquitous",
+    "active_probe": false
+  },
+  {
+    "uid": "angular-vue__angular-csti-double-curly",
+    "name": "Angular Client-Side Template Injection (CSTI) via Expression Sandbox Escape",
+    "class_hint": "ssti",
+    "slice": "angular-vue",
+    "frameworks": [
+      "Angular",
+      "AngularJS"
+    ],
+    "severity": "critical",
+    "prevalence": "common",
+    "active_probe": true
+  },
+  {
+    "uid": "angular-vue__angular-bypass-route-guard",
+    "name": "Angular Client-Side Route Guard Bypass",
+    "class_hint": "client-side-authz",
+    "slice": "angular-vue",
+    "frameworks": [
+      "Angular"
+    ],
+    "severity": "high",
+    "prevalence": "common",
+    "active_probe": true
+  },
+  {
+    "uid": "angular-vue__vue-csti-v-html-xss",
+    "name": "Vue v-html Directive XSS",
+    "class_hint": "xss",
+    "slice": "angular-vue",
+    "frameworks": [
+      "Vue"
+    ],
+    "severity": "high",
+    "prevalence": "common",
+    "active_probe": true
+  },
+  {
+    "uid": "angular-vue__spa-open-redirect-router",
+    "name": "Open Redirect via SPA Router redirect_uri / returnUrl Parameter",
+    "class_hint": "open-redirect",
+    "slice": "angular-vue",
+    "frameworks": [
+      "Angular",
+      "Vue"
+    ],
+    "severity": "medium",
+    "prevalence": "common",
+    "active_probe": true
+  },
+  {
+    "uid": "angular-vue__spa-sensitive-data-localstorage",
+    "name": "Sensitive Tokens Stored in localStorage / sessionStorage",
+    "class_hint": "xss",
+    "slice": "angular-vue",
+    "frameworks": [
+      "Angular",
+      "Vue"
+    ],
+    "severity": "medium",
+    "prevalence": "ubiquitous",
+    "active_probe": false
+  },
+  {
+    "uid": "angular-vue__spa-cors-misconfiguration",
+    "name": "Overly Permissive CORS on SPA API Endpoints",
+    "class_hint": "cors",
+    "slice": "angular-vue",
+    "frameworks": [
+      "Angular",
+      "Vue"
+    ],
+    "severity": "high",
+    "prevalence": "common",
+    "active_probe": true
+  },
+  {
+    "uid": "angular-vue__angular-ssr-ssrf-httpbackend",
+    "name": "Angular Universal SSR \u2014 SSRF via Server-Side HTTP Fetches",
+    "class_hint": "ssrf",
+    "slice": "angular-vue",
+    "frameworks": [
+      "Angular"
+    ],
+    "severity": "critical",
+    "prevalence": "occasional",
+    "active_probe": true
+  },
+  {
+    "uid": "angular-vue__vue-vuex-devtools-state-leak",
+    "name": "Vuex / Pinia State Exposed via Vue DevTools Protocol",
+    "class_hint": "secrets-exposure",
+    "slice": "angular-vue",
+    "frameworks": [
+      "Vue"
+    ],
+    "severity": "medium",
+    "prevalence": "occasional",
+    "active_probe": true
+  },
+  {
+    "uid": "angular-vue__spa-jwt-alg-none",
+    "name": "JWT 'alg:none' Acceptance on SPA API",
+    "class_hint": "jwt",
+    "slice": "angular-vue",
+    "frameworks": [
+      "Angular",
+      "Vue"
+    ],
+    "severity": "critical",
+    "prevalence": "occasional",
+    "active_probe": true
+  },
+  {
+    "uid": "angular-vue__spa-idor-numeric-ids",
+    "name": "Insecure Direct Object Reference (IDOR) on SPA REST/GraphQL Endpoints",
+    "class_hint": "idor-bola",
+    "slice": "angular-vue",
+    "frameworks": [
+      "Angular",
+      "Vue"
+    ],
+    "severity": "high",
+    "prevalence": "ubiquitous",
+    "active_probe": true
+  },
+  {
+    "uid": "angular-vue__angular-csp-bypass-inline",
+    "name": "Content Security Policy Misconfiguration Allowing Inline Script in Angular App",
+    "class_hint": "xss",
+    "slice": "angular-vue",
+    "frameworks": [
+      "Angular",
+      "Vue"
+    ],
+    "severity": "medium",
+    "prevalence": "ubiquitous",
+    "active_probe": false
+  },
+  {
+    "uid": "angular-vue__vue-router-hash-xss",
+    "name": "DOM-XSS via Vue Router Hash Fragment Reflection",
+    "class_hint": "xss",
+    "slice": "angular-vue",
+    "frameworks": [
+      "Vue"
+    ],
+    "severity": "high",
+    "prevalence": "occasional",
+    "active_probe": true
+  },
+  {
+    "uid": "angular-vue__spa-graphql-introspection-enabled",
+    "name": "GraphQL Introspection Enabled in Production SPA Backend",
+    "class_hint": "idor-bola",
+    "slice": "angular-vue",
+    "frameworks": [
+      "Angular",
+      "Vue"
+    ],
+    "severity": "medium",
+    "prevalence": "common",
+    "active_probe": true
+  },
+  {
+    "uid": "angular-vue__angular-httpinterceptor-token-log",
+    "name": "Auth Token Leaked in Angular Error Logs / Sentry Breadcrumbs",
+    "class_hint": "secrets-exposure",
+    "slice": "angular-vue",
+    "frameworks": [
+      "Angular"
+    ],
+    "severity": "high",
+    "prevalence": "occasional",
+    "active_probe": false
+  },
+  {
+    "uid": "angular-vue__spa-prototype-pollution",
+    "name": "Client-Side Prototype Pollution in SPA Utility Libraries",
+    "class_hint": "xss",
+    "slice": "angular-vue",
+    "frameworks": [
+      "Angular",
+      "Vue"
+    ],
+    "severity": "high",
+    "prevalence": "common",
+    "active_probe": true
+  },
+  {
+    "uid": "flask__flask-jinja2-ssti",
+    "name": "Jinja2 Server-Side Template Injection (SSTI)",
+    "class_hint": "ssti",
+    "slice": "flask",
+    "frameworks": [
+      "Flask",
+      "Jinja2"
+    ],
+    "severity": "critical",
+    "prevalence": "common",
+    "active_probe": true
+  },
+  {
+    "uid": "flask__flask-debug-mode-exposed",
+    "name": "Flask Werkzeug Debugger Exposed in Production",
+    "class_hint": "debug-endpoint",
+    "slice": "flask",
+    "frameworks": [
+      "Flask",
+      "Werkzeug"
+    ],
+    "severity": "critical",
+    "prevalence": "occasional",
+    "active_probe": true
+  },
+  {
+    "uid": "flask__flask-session-cookie-unsigned",
+    "name": "Flask Session Cookie Signed with Weak or Default SECRET_KEY",
+    "class_hint": "session",
+    "slice": "flask",
+    "frameworks": [
+      "Flask"
+    ],
+    "severity": "critical",
+    "prevalence": "common",
+    "active_probe": true
+  },
+  {
+    "uid": "flask__flask-session-cookie-none-algo",
+    "name": "Flask itsdangerous Algorithm Confusion (alg:none / RS\u2192HS)",
+    "class_hint": "jwt",
+    "slice": "flask",
+    "frameworks": [
+      "Flask",
+      "itsdangerous"
+    ],
+    "severity": "high",
+    "prevalence": "occasional",
+    "active_probe": true
+  },
+  {
+    "uid": "flask__flask-open-redirect",
+    "name": "Open Redirect via next / redirect_to Parameter",
+    "class_hint": "open-redirect",
+    "slice": "flask",
+    "frameworks": [
+      "Flask"
+    ],
+    "severity": "medium",
+    "prevalence": "common",
+    "active_probe": true
+  },
+  {
+    "uid": "flask__flask-idor-numeric-id",
+    "name": "Insecure Direct Object Reference on Flask Route Parameters",
+    "class_hint": "idor-bola",
+    "slice": "flask",
+    "frameworks": [
+      "Flask"
+    ],
+    "severity": "high",
+    "prevalence": "ubiquitous",
+    "active_probe": true
+  },
+  {
+    "uid": "flask__flask-missing-csrf-protection",
+    "name": "Missing CSRF Protection on State-Changing Flask Endpoints",
+    "class_hint": "csrf",
+    "slice": "flask",
+    "frameworks": [
+      "Flask",
+      "Flask-WTF"
+    ],
+    "severity": "high",
+    "prevalence": "common",
+    "active_probe": true
+  },
+  {
+    "uid": "flask__flask-jinja2-xss-autoescape-off",
+    "name": "Reflected XSS via Jinja2 Autoescape Disabled",
+    "class_hint": "ssti",
+    "slice": "flask",
+    "frameworks": [
+      "Flask",
+      "Jinja2"
+    ],
+    "severity": "high",
+    "prevalence": "common",
+    "active_probe": true
+  },
+  {
+    "uid": "flask__flask-debug-pin-bruteforce",
+    "name": "Werkzeug Debug PIN Derivable from Exposed System Info",
+    "class_hint": "ssrf",
+    "slice": "flask",
+    "frameworks": [
+      "Flask",
+      "Werkzeug"
+    ],
+    "severity": "critical",
+    "prevalence": "occasional",
+    "active_probe": true
+  },
+  {
+    "uid": "flask__flask-path-traversal",
+    "name": "Path Traversal via Flask send_file / Custom File Serving",
+    "class_hint": "path-traversal",
+    "slice": "flask",
+    "frameworks": [
+      "Flask"
+    ],
+    "severity": "high",
+    "prevalence": "common",
+    "active_probe": true
+  },
+  {
+    "uid": "flask__flask-sqli-via-raw-query",
+    "name": "SQL Injection in Flask/SQLAlchemy Raw Query",
+    "class_hint": "sqli",
+    "slice": "flask",
+    "frameworks": [
+      "Flask",
+      "SQLAlchemy",
+      "Flask-SQLAlchemy"
+    ],
+    "severity": "critical",
+    "prevalence": "common",
+    "active_probe": true
+  },
+  {
+    "uid": "flask__flask-cors-misconfiguration",
+    "name": "Flask-CORS Wildcard or Credential-Permissive Misconfiguration",
+    "class_hint": "cors",
+    "slice": "flask",
+    "frameworks": [
+      "Flask",
+      "Flask-CORS"
+    ],
+    "severity": "high",
+    "prevalence": "common",
+    "active_probe": true
+  },
+  {
+    "uid": "flask__flask-session-fixation",
+    "name": "Session Fixation \u2014 Session Not Rotated After Login",
+    "class_hint": "session",
+    "slice": "flask",
+    "frameworks": [
+      "Flask",
+      "Flask-Login"
+    ],
+    "severity": "medium",
+    "prevalence": "occasional",
+    "active_probe": true
+  },
+  {
+    "uid": "flask__flask-exposed-config-endpoint",
+    "name": "Flask Configuration / Environment Disclosure via Debug Endpoints",
+    "class_hint": "debug-endpoint",
+    "slice": "flask",
+    "frameworks": [
+      "Flask"
+    ],
+    "severity": "critical",
+    "prevalence": "occasional",
+    "active_probe": true
+  },
+  {
+    "uid": "flask__flask-insecure-cookie-flags",
+    "name": "Flask Session Cookie Missing Secure / HttpOnly / SameSite Flags",
+    "class_hint": "xss",
+    "slice": "flask",
+    "frameworks": [
+      "Flask"
+    ],
+    "severity": "medium",
+    "prevalence": "common",
+    "active_probe": false
+  },
+  {
+    "uid": "django-drf__django-admin-exposed",
+    "name": "Django Admin Interface Publicly Accessible",
+    "class_hint": "debug-endpoint",
+    "slice": "django-drf",
+    "frameworks": [
+      "Django"
+    ],
+    "severity": "high",
+    "prevalence": "common",
+    "active_probe": true
+  },
+  {
+    "uid": "django-drf__drf-browsable-api-exposed",
+    "name": "DRF Browsable API Exposed in Production",
+    "class_hint": "rate-limit-enum",
+    "slice": "django-drf",
+    "frameworks": [
+      "Django",
+      "Django REST Framework"
+    ],
+    "severity": "medium",
+    "prevalence": "common",
+    "active_probe": true
+  },
+  {
+    "uid": "django-drf__drf-object-level-authz-bypass",
+    "name": "DRF Missing Object-Level Permission (IDOR via API)",
+    "class_hint": "idor-bola",
+    "slice": "django-drf",
+    "frameworks": [
+      "Django REST Framework"
+    ],
+    "severity": "critical",
+    "prevalence": "ubiquitous",
+    "active_probe": true
+  },
+  {
+    "uid": "django-drf__django-debug-mode-on",
+    "name": "Django DEBUG=True Enabled in Production",
+    "class_hint": "debug-endpoint",
+    "slice": "django-drf",
+    "frameworks": [
+      "Django"
+    ],
+    "severity": "high",
+    "prevalence": "common",
+    "active_probe": true
+  },
+  {
+    "uid": "django-drf__django-csrf-exempt-api",
+    "name": "Django CSRF Exemption on State-Changing Endpoints",
+    "class_hint": "csrf",
+    "slice": "django-drf",
+    "frameworks": [
+      "Django",
+      "Django REST Framework"
+    ],
+    "severity": "high",
+    "prevalence": "common",
+    "active_probe": true
+  },
+  {
+    "uid": "django-drf__drf-jwt-none-algorithm",
+    "name": "DRF JWT Accepts 'none' Algorithm or Weak Secret",
+    "class_hint": "jwt",
+    "slice": "django-drf",
+    "frameworks": [
+      "Django REST Framework"
+    ],
+    "severity": "critical",
+    "prevalence": "occasional",
+    "active_probe": true
+  },
+  {
+    "uid": "django-drf__django-orm-mass-assignment",
+    "name": "DRF Serializer Mass Assignment (Missing read_only / extra_kwargs)",
+    "class_hint": "mass-assignment",
+    "slice": "django-drf",
+    "frameworks": [
+      "Django REST Framework"
+    ],
+    "severity": "high",
+    "prevalence": "common",
+    "active_probe": true
+  },
+  {
+    "uid": "django-drf__django-user-enumeration-login",
+    "name": "Django User Enumeration via Login/Password-Reset Timing or Message",
+    "class_hint": "rate-limit-enum",
+    "slice": "django-drf",
+    "frameworks": [
+      "Django"
+    ],
+    "severity": "medium",
+    "prevalence": "common",
+    "active_probe": true
+  },
+  {
+    "uid": "django-drf__django-secret-key-exposed",
+    "name": "Django SECRET_KEY Leaked in Response or Headers",
+    "class_hint": "csrf",
+    "slice": "django-drf",
+    "frameworks": [
+      "Django"
+    ],
+    "severity": "critical",
+    "prevalence": "occasional",
+    "active_probe": true
+  },
+  {
+    "uid": "django-drf__drf-pagination-off-bola",
+    "name": "DRF List Endpoint Returns All Objects Across Tenants (Missing Queryset Scoping)",
+    "class_hint": "idor-bola",
+    "slice": "django-drf",
+    "frameworks": [
+      "Django REST Framework"
+    ],
+    "severity": "critical",
+    "prevalence": "common",
+    "active_probe": true
+  },
+  {
+    "uid": "django-drf__django-cors-wildcard-credentials",
+    "name": "Django CORS Wildcard with credentials=true (django-cors-headers Misconfiguration)",
+    "class_hint": "cors",
+    "slice": "django-drf",
+    "frameworks": [
+      "Django"
+    ],
+    "severity": "high",
+    "prevalence": "common",
+    "active_probe": true
+  },
+  {
+    "uid": "django-drf__django-admin-custom-actions-unauth",
+    "name": "Django Admin Custom Action Without Superuser Check",
+    "class_hint": "other",
+    "slice": "django-drf",
+    "frameworks": [
+      "Django"
+    ],
+    "severity": "high",
+    "prevalence": "occasional",
+    "active_probe": true
+  },
+  {
+    "uid": "django-drf__drf-host-header-injection",
+    "name": "Django Password-Reset Poisoning via Host Header Injection",
+    "class_hint": "host-header-injection",
+    "slice": "django-drf",
+    "frameworks": [
+      "Django"
+    ],
+    "severity": "high",
+    "prevalence": "common",
+    "active_probe": true
+  },
+  {
+    "uid": "django-drf__drf-verbose-400-orm-field-leak",
+    "name": "DRF 400 Validation Errors Leaking ORM Field Names and Choices",
+    "class_hint": "mass-assignment",
+    "slice": "django-drf",
+    "frameworks": [
+      "Django REST Framework"
+    ],
+    "severity": "low",
+    "prevalence": "ubiquitous",
+    "active_probe": true
+  },
+  {
+    "uid": "django-drf__django-session-fixation-no-rotation",
+    "name": "Django Session ID Not Rotated After Login",
+    "class_hint": "session",
+    "slice": "django-drf",
+    "frameworks": [
+      "Django"
+    ],
+    "severity": "medium",
+    "prevalence": "occasional",
+    "active_probe": true
+  },
+  {
+    "uid": "fastapi__fastapi-docs-exposure",
+    "name": "FastAPI Auto-Generated Docs Exposed in Production",
+    "class_hint": "other",
+    "slice": "fastapi",
+    "frameworks": [
+      "FastAPI",
+      "Starlette"
+    ],
+    "severity": "medium",
+    "prevalence": "ubiquitous",
+    "active_probe": true
+  },
+  {
+    "uid": "fastapi__fastapi-missing-auth-dependency",
+    "name": "FastAPI Route Missing Depends(get_current_user) Auth Guard",
+    "class_hint": "other",
+    "slice": "fastapi",
+    "frameworks": [
+      "FastAPI"
+    ],
+    "severity": "high",
+    "prevalence": "common",
+    "active_probe": true
+  },
+  {
+    "uid": "fastapi__fastapi-idor-path-param",
+    "name": "IDOR via FastAPI Path Parameter (Object-Level Authorization Missing)",
+    "class_hint": "idor-bola",
+    "slice": "fastapi",
+    "frameworks": [
+      "FastAPI",
+      "agnostic"
+    ],
+    "severity": "high",
+    "prevalence": "ubiquitous",
+    "active_probe": true
+  },
+  {
+    "uid": "fastapi__fastapi-pydantic-mass-assignment",
+    "name": "Pydantic Model Mass Assignment / Over-Posting",
+    "class_hint": "mass-assignment",
+    "slice": "fastapi",
+    "frameworks": [
+      "FastAPI",
+      "Pydantic"
+    ],
+    "severity": "high",
+    "prevalence": "common",
+    "active_probe": true
+  },
+  {
+    "uid": "fastapi__fastapi-cors-wildcard",
+    "name": "Overly Permissive CORS (allow_origins=['*'] with allow_credentials)",
+    "class_hint": "cors",
+    "slice": "fastapi",
+    "frameworks": [
+      "FastAPI",
+      "Starlette"
+    ],
+    "severity": "high",
+    "prevalence": "common",
+    "active_probe": true
+  },
+  {
+    "uid": "fastapi__fastapi-jwt-algorithm-confusion",
+    "name": "JWT Algorithm Confusion / None Algorithm Acceptance",
+    "class_hint": "jwt",
+    "slice": "fastapi",
+    "frameworks": [
+      "FastAPI",
+      "python-jose",
+      "PyJWT"
+    ],
+    "severity": "critical",
+    "prevalence": "occasional",
+    "active_probe": true
+  },
+  {
+    "uid": "fastapi__fastapi-debug-mode-500-traceback",
+    "name": "Python Traceback / Debug Info Leaked in 500 Response",
+    "class_hint": "debug-endpoint",
+    "slice": "fastapi",
+    "frameworks": [
+      "FastAPI",
+      "Starlette",
+      "Uvicorn"
+    ],
+    "severity": "medium",
+    "prevalence": "common",
+    "active_probe": true
+  },
+  {
+    "uid": "fastapi__fastapi-sql-injection-orm-bypass",
+    "name": "SQL Injection via Raw Query Fallback in FastAPI/SQLAlchemy Routes",
+    "class_hint": "sqli",
+    "slice": "fastapi",
+    "frameworks": [
+      "FastAPI",
+      "SQLAlchemy",
+      "Tortoise ORM",
+      "databases"
+    ],
+    "severity": "critical",
+    "prevalence": "occasional",
+    "active_probe": true
+  },
+  {
+    "uid": "fastapi__fastapi-pydantic-validation-bypass-coercion",
+    "name": "Pydantic Type Coercion Bypasses Semantic Validation",
+    "class_hint": "input-validation-bypass",
+    "slice": "fastapi",
+    "frameworks": [
+      "FastAPI",
+      "Pydantic"
+    ],
+    "severity": "medium",
+    "prevalence": "common",
+    "active_probe": true
+  },
+  {
+    "uid": "fastapi__fastapi-ssrf-httpx-requests",
+    "name": "SSRF via User-Controlled URL Parameter in FastAPI Endpoint",
+    "class_hint": "ssrf",
+    "slice": "fastapi",
+    "frameworks": [
+      "FastAPI",
+      "httpx",
+      "aiohttp",
+      "requests"
+    ],
+    "severity": "critical",
+    "prevalence": "occasional",
+    "active_probe": true
+  },
+  {
+    "uid": "fastapi__fastapi-security-headers-missing",
+    "name": "Missing Security Headers on FastAPI Responses",
+    "class_hint": "security-headers",
+    "slice": "fastapi",
+    "frameworks": [
+      "FastAPI",
+      "Starlette",
+      "agnostic"
+    ],
+    "severity": "medium",
+    "prevalence": "ubiquitous",
+    "active_probe": false
+  },
+  {
+    "uid": "fastapi__fastapi-rate-limit-absent",
+    "name": "No Rate Limiting on Authentication / Sensitive Endpoints",
+    "class_hint": "rate-limit",
+    "slice": "fastapi",
+    "frameworks": [
+      "FastAPI",
+      "agnostic"
+    ],
+    "severity": "high",
+    "prevalence": "common",
+    "active_probe": true
+  },
+  {
+    "uid": "fastapi__fastapi-token-in-query-string",
+    "name": "API Token / JWT Passed in Query String (Server Log Exposure)",
+    "class_hint": "jwt",
+    "slice": "fastapi",
+    "frameworks": [
+      "FastAPI",
+      "agnostic"
+    ],
+    "severity": "medium",
+    "prevalence": "common",
+    "active_probe": false
+  },
+  {
+    "uid": "fastapi__fastapi-background-task-info-leak",
+    "name": "FastAPI BackgroundTask / Celery Task ID Enumeration",
+    "class_hint": "rate-limit-enum",
+    "slice": "fastapi",
+    "frameworks": [
+      "FastAPI",
+      "Celery",
+      "ARQ"
+    ],
+    "severity": "medium",
+    "prevalence": "occasional",
+    "active_probe": true
+  },
+  {
+    "uid": "fastapi__fastapi-dependency-override-env-leak",
+    "name": "Environment / Config Variables Echoed in FastAPI Health or Debug Endpoints",
+    "class_hint": "debug-endpoint",
+    "slice": "fastapi",
+    "frameworks": [
+      "FastAPI",
+      "Pydantic Settings",
+      "agnostic"
+    ],
+    "severity": "critical",
+    "prevalence": "occasional",
+    "active_probe": true
+  },
+  {
+    "uid": "rails__rails-mass-assignment-admin-flag",
+    "name": "Mass Assignment \u2014 Privilege Escalation via Admin/Role Field",
+    "class_hint": "bfla",
+    "slice": "rails",
+    "frameworks": [
+      "Ruby on Rails"
+    ],
+    "severity": "critical",
+    "prevalence": "common",
+    "active_probe": true
+  },
+  {
+    "uid": "rails__rails-default-route-action-exposure",
+    "name": "Default Catch-All Route Exposing Unintended Controller Actions",
+    "class_hint": "other",
+    "slice": "rails",
+    "frameworks": [
+      "Ruby on Rails"
+    ],
+    "severity": "high",
+    "prevalence": "occasional",
+    "active_probe": true
+  },
+  {
+    "uid": "rails__rails-idor-activerecord-id",
+    "name": "IDOR via Unscoped ActiveRecord Lookups (Direct Object Reference)",
+    "class_hint": "idor-bola",
+    "slice": "rails",
+    "frameworks": [
+      "Ruby on Rails"
+    ],
+    "severity": "high",
+    "prevalence": "ubiquitous",
+    "active_probe": true
+  },
+  {
+    "uid": "rails__rails-strong-params-permit-bang",
+    "name": "Strong Params `permit!` Whitelisting Everything",
+    "class_hint": "mass-assignment",
+    "slice": "rails",
+    "frameworks": [
+      "Ruby on Rails"
+    ],
+    "severity": "high",
+    "prevalence": "occasional",
+    "active_probe": true
+  },
+  {
+    "uid": "rails__rails-csrf-token-missing",
+    "name": "Missing or Bypassable CSRF Protection on State-Changing Endpoints",
+    "class_hint": "csrf",
+    "slice": "rails",
+    "frameworks": [
+      "Ruby on Rails"
+    ],
+    "severity": "high",
+    "prevalence": "common",
+    "active_probe": true
+  },
+  {
+    "uid": "rails__rails-open-redirect-redirect-to",
+    "name": "Open Redirect via Unsafe `redirect_to params[:return_to]`",
+    "class_hint": "open-redirect",
+    "slice": "rails",
+    "frameworks": [
+      "Ruby on Rails"
+    ],
+    "severity": "medium",
+    "prevalence": "common",
+    "active_probe": true
+  },
+  {
+    "uid": "rails__rails-sql-injection-activerecord-string-interpolation",
+    "name": "SQL Injection via ActiveRecord String Interpolation",
+    "class_hint": "sqli",
+    "slice": "rails",
+    "frameworks": [
+      "Ruby on Rails"
+    ],
+    "severity": "critical",
+    "prevalence": "occasional",
+    "active_probe": true
+  },
+  {
+    "uid": "rails__rails-xss-raw-html-output",
+    "name": "Reflected/Stored XSS via `raw`, `html_safe`, or Missing ERB Escaping",
+    "class_hint": "xss",
+    "slice": "rails",
+    "frameworks": [
+      "Ruby on Rails"
+    ],
+    "severity": "high",
+    "prevalence": "common",
+    "active_probe": true
+  },
+  {
+    "uid": "rails__rails-devise-user-enumeration",
+    "name": "User Enumeration via Devise Login/Reset Timing or Message Differences",
+    "class_hint": "rate-limit-enum",
+    "slice": "rails",
+    "frameworks": [
+      "Ruby on Rails"
+    ],
+    "severity": "medium",
+    "prevalence": "common",
+    "active_probe": true
+  },
+  {
+    "uid": "rails__rails-json-api-unpermitted-field-write",
+    "name": "JSON API Mass Assignment via Unpermitted Nested Attributes",
+    "class_hint": "mass-assignment",
+    "slice": "rails",
+    "frameworks": [
+      "Ruby on Rails"
+    ],
+    "severity": "high",
+    "prevalence": "occasional",
+    "active_probe": true
+  },
+  {
+    "uid": "rails__rails-cookie-session-tampering",
+    "name": "Insecure Cookie-Based Session \u2014 Known/Weak Secret Key Base",
+    "class_hint": "session",
+    "slice": "rails",
+    "frameworks": [
+      "Ruby on Rails"
+    ],
+    "severity": "critical",
+    "prevalence": "occasional",
+    "active_probe": true
+  },
+  {
+    "uid": "rails__rails-path-traversal-send-file",
+    "name": "Path Traversal via `send_file` / `send_data` with User-Controlled Path",
+    "class_hint": "path-traversal",
+    "slice": "rails",
+    "frameworks": [
+      "Ruby on Rails"
+    ],
+    "severity": "critical",
+    "prevalence": "occasional",
+    "active_probe": true
+  },
+  {
+    "uid": "rails__rails-verbose-error-pages-in-production",
+    "name": "Rails Verbose Error Pages Enabled in Production (config.consider_all_requests_local)",
+    "class_hint": "debug-endpoint",
+    "slice": "rails",
+    "frameworks": [
+      "Ruby on Rails"
+    ],
+    "severity": "medium",
+    "prevalence": "occasional",
+    "active_probe": true
+  },
+  {
+    "uid": "rails__rails-exposed-rails-routes-endpoint",
+    "name": "Exposed `/rails/info/routes` and `/rails/info/properties` in Production",
+    "class_hint": "other",
+    "slice": "rails",
+    "frameworks": [
+      "Ruby on Rails"
+    ],
+    "severity": "medium",
+    "prevalence": "occasional",
+    "active_probe": true
+  },
+  {
+    "uid": "rails__rails-insecure-direct-object-reference-globalize-locale",
+    "name": "Insecure Locale/Tenant Parameter Switching (Subdomain or `locale` Param Hijack)",
+    "class_hint": "bfla",
+    "slice": "rails",
+    "frameworks": [
+      "Ruby on Rails"
+    ],
+    "severity": "critical",
+    "prevalence": "occasional",
+    "active_probe": true
+  },
+  {
+    "uid": "laravel-php__laravel-app-debug-enabled",
+    "name": "Laravel APP_DEBUG=true Information Disclosure",
+    "class_hint": "debug-endpoint",
+    "slice": "laravel-php",
+    "frameworks": [
+      "Laravel",
+      "PHP"
+    ],
+    "severity": "high",
+    "prevalence": "common",
+    "active_probe": true
+  },
+  {
+    "uid": "laravel-php__laravel-mass-assignment",
+    "name": "Eloquent Mass Assignment Privilege Escalation",
+    "class_hint": "mass-assignment",
+    "slice": "laravel-php",
+    "frameworks": [
+      "Laravel"
+    ],
+    "severity": "critical",
+    "prevalence": "common",
+    "active_probe": true
+  },
+  {
+    "uid": "laravel-php__laravel-debug-bar-exposed",
+    "name": "Laravel Debugbar / Telescope Endpoint Exposed in Production",
+    "class_hint": "debug-endpoint",
+    "slice": "laravel-php",
+    "frameworks": [
+      "Laravel"
+    ],
+    "severity": "high",
+    "prevalence": "common",
+    "active_probe": true
+  },
+  {
+    "uid": "laravel-php__php-phpinfo-exposure",
+    "name": "phpinfo() Page Exposed",
+    "class_hint": "secrets-exposure",
+    "slice": "laravel-php",
+    "frameworks": [
+      "PHP"
+    ],
+    "severity": "medium",
+    "prevalence": "common",
+    "active_probe": true
+  },
+  {
+    "uid": "laravel-php__laravel-env-direct-access",
+    "name": "Laravel .env File Accessible via Web Root",
+    "class_hint": "secrets-exposure",
+    "slice": "laravel-php",
+    "frameworks": [
+      "Laravel",
+      "PHP"
+    ],
+    "severity": "critical",
+    "prevalence": "common",
+    "active_probe": true
+  },
+  {
+    "uid": "laravel-php__laravel-storage-link-unprotected",
+    "name": "Laravel Storage Public Symlink Exposes Private Files",
+    "class_hint": "rate-limit-enum",
+    "slice": "laravel-php",
+    "frameworks": [
+      "Laravel"
+    ],
+    "severity": "high",
+    "prevalence": "occasional",
+    "active_probe": true
+  },
+  {
+    "uid": "laravel-php__php-sql-injection-error-based",
+    "name": "PHP SQL Injection via Error-Based Leakage",
+    "class_hint": "sqli",
+    "slice": "laravel-php",
+    "frameworks": [
+      "PHP"
+    ],
+    "severity": "critical",
+    "prevalence": "common",
+    "active_probe": true
+  },
+  {
+    "uid": "laravel-php__laravel-missing-route-auth-middleware",
+    "name": "Laravel Route Missing auth Middleware (IDOR / Unauthenticated Access)",
+    "class_hint": "idor-bola",
+    "slice": "laravel-php",
+    "frameworks": [
+      "Laravel"
+    ],
+    "severity": "high",
+    "prevalence": "common",
+    "active_probe": true
+  },
+  {
+    "uid": "laravel-php__php-deserialization-phar",
+    "name": "PHP Object Deserialization via unserialize()",
+    "class_hint": "deserialization",
+    "slice": "laravel-php",
+    "frameworks": [
+      "PHP"
+    ],
+    "severity": "critical",
+    "prevalence": "occasional",
+    "active_probe": true
+  },
+  {
+    "uid": "laravel-php__laravel-sanctum-token-response-leak",
+    "name": "Laravel Sanctum / Passport Token Returned in API Response Body",
+    "class_hint": "xss",
+    "slice": "laravel-php",
+    "frameworks": [
+      "Laravel"
+    ],
+    "severity": "medium",
+    "prevalence": "common",
+    "active_probe": true
+  },
+  {
+    "uid": "laravel-php__laravel-cors-misconfiguration",
+    "name": "Laravel Overly Permissive CORS Configuration",
+    "class_hint": "cors",
+    "slice": "laravel-php",
+    "frameworks": [
+      "Laravel"
+    ],
+    "severity": "high",
+    "prevalence": "common",
+    "active_probe": true
+  },
+  {
+    "uid": "laravel-php__laravel-forced-browsing-backup-files",
+    "name": "PHP/Laravel Backup and Config Files Accessible",
+    "class_hint": "secrets-exposure",
+    "slice": "laravel-php",
+    "frameworks": [
+      "Laravel",
+      "PHP"
+    ],
+    "severity": "high",
+    "prevalence": "common",
+    "active_probe": true
+  },
+  {
+    "uid": "laravel-php__laravel-idor-eloquent-id",
+    "name": "Insecure Direct Object Reference on Eloquent Auto-Increment IDs",
+    "class_hint": "idor-bola",
+    "slice": "laravel-php",
+    "frameworks": [
+      "Laravel"
+    ],
+    "severity": "high",
+    "prevalence": "ubiquitous",
+    "active_probe": true
+  },
+  {
+    "uid": "laravel-php__php-file-upload-unrestricted",
+    "name": "Unrestricted PHP File Upload Leading to Webshell",
+    "class_hint": "file-upload",
+    "slice": "laravel-php",
+    "frameworks": [
+      "PHP",
+      "Laravel"
+    ],
+    "severity": "critical",
+    "prevalence": "occasional",
+    "active_probe": true
+  },
+  {
+    "uid": "laravel-php__laravel-session-fixation-cookie",
+    "name": "Laravel Session Cookie Missing Secure/HttpOnly/SameSite Flags",
+    "class_hint": "xss",
+    "slice": "laravel-php",
+    "frameworks": [
+      "Laravel"
+    ],
+    "severity": "medium",
+    "prevalence": "common",
+    "active_probe": false
+  },
+  {
+    "uid": "aspnet__aspnet-mass-assignment-overposting",
+    "name": "ASP.NET Model Binding Mass Assignment (Overposting)",
+    "class_hint": "mass-assignment",
+    "slice": "aspnet",
+    "frameworks": [
+      "ASP.NET MVC",
+      "ASP.NET Core"
+    ],
+    "severity": "high",
+    "prevalence": "common",
+    "active_probe": true
+  },
+  {
+    "uid": "aspnet__aspnet-viewstate-mac-disabled",
+    "name": "ASP.NET ViewState MAC Disabled / Weak Machine Key",
+    "class_hint": "insecure-deserialization",
+    "slice": "aspnet",
+    "frameworks": [
+      "ASP.NET WebForms"
+    ],
+    "severity": "critical",
+    "prevalence": "occasional",
+    "active_probe": true
+  },
+  {
+    "uid": "aspnet__aspnet-debug-pages-yellow-screen",
+    "name": "ASP.NET Yellow Screen of Death / Detailed Error Pages Exposed",
+    "class_hint": "debug-endpoint",
+    "slice": "aspnet",
+    "frameworks": [
+      "ASP.NET WebForms",
+      "ASP.NET MVC",
+      "ASP.NET Core"
+    ],
+    "severity": "medium",
+    "prevalence": "common",
+    "active_probe": true
+  },
+  {
+    "uid": "aspnet__aspnet-forms-auth-cookie-insecure",
+    "name": "ASP.NET Forms Authentication Ticket in Non-Secure Cookie",
+    "class_hint": "insecure-cookie",
+    "slice": "aspnet",
+    "frameworks": [
+      "ASP.NET WebForms",
+      "ASP.NET MVC"
+    ],
+    "severity": "high",
+    "prevalence": "common",
+    "active_probe": false
+  },
+  {
+    "uid": "aspnet__aspnet-open-redirect-returnurl",
+    "name": "ASP.NET Open Redirect via ReturnUrl / ReturnURL Parameter",
+    "class_hint": "open-redirect",
+    "slice": "aspnet",
+    "frameworks": [
+      "ASP.NET WebForms",
+      "ASP.NET MVC",
+      "ASP.NET Core"
+    ],
+    "severity": "medium",
+    "prevalence": "common",
+    "active_probe": true
+  },
+  {
+    "uid": "aspnet__aspnet-antiforgery-csrf",
+    "name": "ASP.NET Anti-Forgery Token Missing (CSRF)",
+    "class_hint": "csrf",
+    "slice": "aspnet",
+    "frameworks": [
+      "ASP.NET MVC",
+      "ASP.NET Core",
+      "ASP.NET WebForms"
+    ],
+    "severity": "high",
+    "prevalence": "common",
+    "active_probe": true
+  },
+  {
+    "uid": "aspnet__aspnet-sql-injection-entity-raw-query",
+    "name": "SQL Injection via Raw Queries in ASP.NET (Entity Framework / ADO.NET)",
+    "class_hint": "sqli",
+    "slice": "aspnet",
+    "frameworks": [
+      "ASP.NET MVC",
+      "ASP.NET Core",
+      "ASP.NET WebForms"
+    ],
+    "severity": "critical",
+    "prevalence": "common",
+    "active_probe": true
+  },
+  {
+    "uid": "aspnet__aspnet-idor-id-enumeration",
+    "name": "Insecure Direct Object Reference via Sequential ID in ASP.NET Routes",
+    "class_hint": "idor-bola",
+    "slice": "aspnet",
+    "frameworks": [
+      "ASP.NET MVC",
+      "ASP.NET Core",
+      "ASP.NET WebForms"
+    ],
+    "severity": "high",
+    "prevalence": "ubiquitous",
+    "active_probe": true
+  },
+  {
+    "uid": "aspnet__aspnet-x-powered-by-server-header",
+    "name": "ASP.NET Version Disclosure via X-Powered-By / Server Headers",
+    "class_hint": "other",
+    "slice": "aspnet",
+    "frameworks": [
+      "ASP.NET WebForms",
+      "ASP.NET MVC",
+      "ASP.NET Core"
+    ],
+    "severity": "low",
+    "prevalence": "ubiquitous",
+    "active_probe": false
+  },
+  {
+    "uid": "aspnet__aspnet-session-fixation-sessionid",
+    "name": "ASP.NET Session Fixation (ASP.NET_SessionId Not Rotated on Auth)",
+    "class_hint": "session-fixation",
+    "slice": "aspnet",
+    "frameworks": [
+      "ASP.NET WebForms",
+      "ASP.NET MVC",
+      "ASP.NET Core"
+    ],
+    "severity": "high",
+    "prevalence": "occasional",
+    "active_probe": true
+  },
+  {
+    "uid": "aspnet__aspnet-cors-wildcard-credentialed",
+    "name": "ASP.NET CORS Misconfiguration \u2014 Wildcard or Reflected Origin with Credentials",
+    "class_hint": "cors",
+    "slice": "aspnet",
+    "frameworks": [
+      "ASP.NET Core",
+      "ASP.NET Web API"
+    ],
+    "severity": "high",
+    "prevalence": "common",
+    "active_probe": true
+  },
+  {
+    "uid": "aspnet__aspnet-http-verb-tampering",
+    "name": "ASP.NET HTTP Verb Tampering \u2014 Authorization Bypass via Method Override",
+    "class_hint": "other",
+    "slice": "aspnet",
+    "frameworks": [
+      "ASP.NET MVC",
+      "ASP.NET Core"
+    ],
+    "severity": "high",
+    "prevalence": "occasional",
+    "active_probe": true
+  },
+  {
+    "uid": "aspnet__aspnet-identity-username-enumeration",
+    "name": "ASP.NET Identity Username Enumeration via Differential Login Responses",
+    "class_hint": "rate-limit-enum",
+    "slice": "aspnet",
+    "frameworks": [
+      "ASP.NET Core Identity",
+      "ASP.NET Membership"
+    ],
+    "severity": "medium",
+    "prevalence": "common",
+    "active_probe": true
+  },
+  {
+    "uid": "aspnet__aspnet-path-traversal-static-files",
+    "name": "ASP.NET Path Traversal via Static File Middleware or Physical File Providers",
+    "class_hint": "path-traversal",
+    "slice": "aspnet",
+    "frameworks": [
+      "ASP.NET Core"
+    ],
+    "severity": "high",
+    "prevalence": "occasional",
+    "active_probe": true
+  },
+  {
+    "uid": "aspnet__aspnet-missing-security-headers",
+    "name": "Missing Security Headers on ASP.NET Responses (CSP, HSTS, X-Frame-Options)",
+    "class_hint": "security-headers",
+    "slice": "aspnet",
+    "frameworks": [
+      "ASP.NET Core",
+      "ASP.NET MVC",
+      "ASP.NET WebForms"
+    ],
+    "severity": "medium",
+    "prevalence": "common",
+    "active_probe": false
+  },
+  {
+    "uid": "go-web__go-missing-cors-middleware",
+    "name": "Missing or Misconfigured CORS in Go HTTP Handlers",
+    "class_hint": "cors",
+    "slice": "go-web",
+    "frameworks": [
+      "net/http",
+      "gin",
+      "echo"
+    ],
+    "severity": "high",
+    "prevalence": "common",
+    "active_probe": true
+  },
+  {
+    "uid": "go-web__go-default-mux-debug-pprof",
+    "name": "net/http pprof Debug Endpoints Exposed on Default Mux",
+    "class_hint": "debug-endpoint",
+    "slice": "go-web",
+    "frameworks": [
+      "net/http"
+    ],
+    "severity": "high",
+    "prevalence": "common",
+    "active_probe": true
+  },
+  {
+    "uid": "go-web__go-verbose-error-leakage",
+    "name": "Go Runtime / Database Error Messages Leaked in HTTP Responses",
+    "class_hint": "other",
+    "slice": "go-web",
+    "frameworks": [
+      "net/http",
+      "gin",
+      "echo"
+    ],
+    "severity": "medium",
+    "prevalence": "common",
+    "active_probe": true
+  },
+  {
+    "uid": "go-web__go-gin-missing-auth-middleware",
+    "name": "Gin/Echo Route Groups Missing Authentication Middleware",
+    "class_hint": "session",
+    "slice": "go-web",
+    "frameworks": [
+      "gin",
+      "echo"
+    ],
+    "severity": "critical",
+    "prevalence": "common",
+    "active_probe": true
+  },
+  {
+    "uid": "go-web__go-http-host-header-injection",
+    "name": "HTTP Host Header Injection (Password Reset / Redirect Poisoning)",
+    "class_hint": "host-header-injection",
+    "slice": "go-web",
+    "frameworks": [
+      "net/http",
+      "gin",
+      "echo"
+    ],
+    "severity": "high",
+    "prevalence": "occasional",
+    "active_probe": true
+  },
+  {
+    "uid": "go-web__go-open-redirect",
+    "name": "Open Redirect via Unvalidated URL Parameter",
+    "class_hint": "open-redirect",
+    "slice": "go-web",
+    "frameworks": [
+      "net/http",
+      "gin",
+      "echo"
+    ],
+    "severity": "medium",
+    "prevalence": "common",
+    "active_probe": true
+  },
+  {
+    "uid": "go-web__go-missing-security-headers",
+    "name": "Missing Security Response Headers (CSP, HSTS, X-Frame-Options)",
+    "class_hint": "security-headers",
+    "slice": "go-web",
+    "frameworks": [
+      "net/http",
+      "gin",
+      "echo"
+    ],
+    "severity": "medium",
+    "prevalence": "ubiquitous",
+    "active_probe": false
+  },
+  {
+    "uid": "go-web__go-idor-numeric-id",
+    "name": "Insecure Direct Object Reference via Sequential Numeric ID",
+    "class_hint": "idor-bola",
+    "slice": "go-web",
+    "frameworks": [
+      "net/http",
+      "gin",
+      "echo"
+    ],
+    "severity": "high",
+    "prevalence": "ubiquitous",
+    "active_probe": true
+  },
+  {
+    "uid": "go-web__go-jwt-none-alg",
+    "name": "JWT 'none' Algorithm Accepted or HS256/RS256 Confusion",
+    "class_hint": "jwt",
+    "slice": "go-web",
+    "frameworks": [
+      "net/http",
+      "gin",
+      "echo"
+    ],
+    "severity": "critical",
+    "prevalence": "occasional",
+    "active_probe": true
+  },
+  {
+    "uid": "go-web__go-ssrf-url-param",
+    "name": "Server-Side Request Forgery via URL Parameter in Go HTTP Client",
+    "class_hint": "ssrf",
+    "slice": "go-web",
+    "frameworks": [
+      "net/http",
+      "gin",
+      "echo"
+    ],
+    "severity": "critical",
+    "prevalence": "common",
+    "active_probe": true
+  },
+  {
+    "uid": "go-web__go-gin-path-traversal",
+    "name": "Path Traversal in Static File Serving (gin Static / echo Static)",
+    "class_hint": "path-traversal",
+    "slice": "go-web",
+    "frameworks": [
+      "gin",
+      "echo",
+      "net/http"
+    ],
+    "severity": "high",
+    "prevalence": "occasional",
+    "active_probe": true
+  },
+  {
+    "uid": "go-web__go-missing-csrf-protection",
+    "name": "Missing CSRF Protection on State-Changing Endpoints",
+    "class_hint": "csrf",
+    "slice": "go-web",
+    "frameworks": [
+      "net/http",
+      "gin",
+      "echo"
+    ],
+    "severity": "high",
+    "prevalence": "common",
+    "active_probe": true
+  },
+  {
+    "uid": "go-web__go-excessive-http-methods",
+    "name": "Unrestricted HTTP Methods on Go Endpoints",
+    "class_hint": "other",
+    "slice": "go-web",
+    "frameworks": [
+      "net/http"
+    ],
+    "severity": "low",
+    "prevalence": "common",
+    "active_probe": true
+  },
+  {
+    "uid": "go-web__go-rate-limit-absence",
+    "name": "No Rate Limiting on Authentication and Sensitive Endpoints",
+    "class_hint": "rate-limit",
+    "slice": "go-web",
+    "frameworks": [
+      "net/http",
+      "gin",
+      "echo"
+    ],
+    "severity": "high",
+    "prevalence": "ubiquitous",
+    "active_probe": true
+  },
+  {
+    "uid": "go-web__go-echo-bind-mass-assignment",
+    "name": "Mass Assignment via Echo/Gin Struct Binding",
+    "class_hint": "mass-assignment",
+    "slice": "go-web",
+    "frameworks": [
+      "gin",
+      "echo"
+    ],
+    "severity": "high",
+    "prevalence": "common",
+    "active_probe": true
+  },
+  {
+    "uid": "baas-graphql__supabase-rls-disabled-anon-read",
+    "name": "Supabase Table Readable by Anon Key (RLS Disabled or No SELECT Policy)",
+    "class_hint": "baas-rls",
+    "slice": "baas-graphql",
+    "frameworks": [
+      "Supabase"
+    ],
+    "severity": "critical",
+    "prevalence": "ubiquitous",
+    "active_probe": true
+  },
+  {
+    "uid": "baas-graphql__supabase-rls-disabled-anon-write",
+    "name": "Supabase Table Writable by Anon Key (No INSERT/UPDATE/DELETE Policy)",
+    "class_hint": "baas-rls",
+    "slice": "baas-graphql",
+    "frameworks": [
+      "Supabase"
+    ],
+    "severity": "critical",
+    "prevalence": "common",
+    "active_probe": true
+  },
+  {
+    "uid": "baas-graphql__supabase-service-role-key-exposed",
+    "name": "Supabase service_role Key Exposed in Client Bundle",
+    "class_hint": "jwt",
+    "slice": "baas-graphql",
+    "frameworks": [
+      "Supabase"
+    ],
+    "severity": "critical",
+    "prevalence": "occasional",
+    "active_probe": false
+  },
+  {
+    "uid": "baas-graphql__supabase-rls-bola-user-data",
+    "name": "Supabase BOLA via Insufficient RLS Policy (Auth Filter Missing auth.uid())",
+    "class_hint": "idor-bola",
+    "slice": "baas-graphql",
+    "frameworks": [
+      "Supabase"
+    ],
+    "severity": "high",
+    "prevalence": "common",
+    "active_probe": true
+  },
+  {
+    "uid": "baas-graphql__supabase-rls-bypass-rpc",
+    "name": "Supabase RPC Function Callable by anon Without auth.uid() Check",
+    "class_hint": "baas-rls",
+    "slice": "baas-graphql",
+    "frameworks": [
+      "Supabase"
+    ],
+    "severity": "high",
+    "prevalence": "common",
+    "active_probe": false
+  },
+  {
+    "uid": "baas-graphql__supabase-storage-bucket-public",
+    "name": "Supabase Storage Bucket Publicly Readable (No Storage Policy)",
+    "class_hint": "baas-rls",
+    "slice": "baas-graphql",
+    "frameworks": [
+      "Supabase"
+    ],
+    "severity": "high",
+    "prevalence": "common",
+    "active_probe": true
+  },
+  {
+    "uid": "baas-graphql__supabase-realtime-channel-bola",
+    "name": "Supabase Realtime Channel Subscription Without Authorization (BOLA)",
+    "class_hint": "idor-bola",
+    "slice": "baas-graphql",
+    "frameworks": [
+      "Supabase"
+    ],
+    "severity": "high",
+    "prevalence": "occasional",
+    "active_probe": true
+  },
+  {
+    "uid": "baas-graphql__firebase-rtdb-no-auth-rules",
+    "name": "Firebase Realtime Database Open to Public Read (No Security Rules)",
+    "class_hint": "baas-rls",
+    "slice": "baas-graphql",
+    "frameworks": [
+      "Firebase"
+    ],
+    "severity": "critical",
+    "prevalence": "common",
+    "active_probe": true
+  },
+  {
+    "uid": "baas-graphql__firebase-storage-public-listing",
+    "name": "Firebase Storage Publicly Listable Bucket",
+    "class_hint": "rate-limit-enum",
+    "slice": "baas-graphql",
+    "frameworks": [
+      "Firebase"
+    ],
+    "severity": "high",
+    "prevalence": "common",
+    "active_probe": true
+  },
+  {
+    "uid": "baas-graphql__pocketbase-collection-no-api-rules",
+    "name": "PocketBase Collection Readable Without Auth (No API Rules Set)",
+    "class_hint": "baas-rls",
+    "slice": "baas-graphql",
+    "frameworks": [
+      "PocketBase"
+    ],
+    "severity": "high",
+    "prevalence": "common",
+    "active_probe": true
+  },
+  {
+    "uid": "baas-graphql__graphql-introspection-enabled-prod",
+    "name": "GraphQL Introspection Enabled on Production Endpoint",
+    "class_hint": "idor-bola",
+    "slice": "baas-graphql",
+    "frameworks": [
+      "GraphQL",
+      "Hasura",
+      "Apollo",
+      "agnostic"
+    ],
+    "severity": "medium",
+    "prevalence": "common",
+    "active_probe": true
+  },
+  {
+    "uid": "baas-graphql__graphql-bola-object-level-auth",
+    "name": "GraphQL BOLA \u2014 Direct Object Reference via ID Parameter",
+    "class_hint": "idor-bola",
+    "slice": "baas-graphql",
+    "frameworks": [
+      "GraphQL",
+      "Hasura",
+      "agnostic"
+    ],
+    "severity": "high",
+    "prevalence": "common",
+    "active_probe": true
+  },
+  {
+    "uid": "baas-graphql__graphql-query-batching-dos",
+    "name": "GraphQL Query Batching / Alias Amplification (DoS / Brute-Force)",
+    "class_hint": "dos",
+    "slice": "baas-graphql",
+    "frameworks": [
+      "GraphQL",
+      "Hasura",
+      "Apollo",
+      "agnostic"
+    ],
+    "severity": "medium",
+    "prevalence": "common",
+    "active_probe": true
+  },
+  {
+    "uid": "baas-graphql__hasura-admin-secret-exposed",
+    "name": "Hasura Admin Secret Exposed in Client Bundle or Headers",
+    "class_hint": "secrets-exposure",
+    "slice": "baas-graphql",
+    "frameworks": [
+      "Hasura"
+    ],
+    "severity": "critical",
+    "prevalence": "occasional",
+    "active_probe": true
+  },
+  {
+    "uid": "baas-graphql__appwrite-collection-guest-permission",
+    "name": "Appwrite Collection With Guest Read/Write Permission",
+    "class_hint": "broken-access-control",
+    "slice": "baas-graphql",
+    "frameworks": [
+      "Appwrite"
+    ],
+    "severity": "high",
+    "prevalence": "occasional",
+    "active_probe": true
+  },
+  {
+    "uid": "authn-authz__idor-bola-numeric-id",
+    "name": "IDOR / BOLA via Numeric Object ID",
+    "class_hint": "idor-bola",
+    "slice": "authn-authz",
+    "frameworks": [
+      "agnostic"
+    ],
+    "severity": "high",
+    "prevalence": "ubiquitous",
+    "active_probe": true
+  },
+  {
+    "uid": "authn-authz__bola-uuid-indirect",
+    "name": "BOLA via Non-Sequential (UUID) Object Reference",
+    "class_hint": "idor-bola",
+    "slice": "authn-authz",
+    "frameworks": [
+      "agnostic"
+    ],
+    "severity": "high",
+    "prevalence": "common",
+    "active_probe": true
+  },
+  {
+    "uid": "authn-authz__bfla-admin-function-unauthenticated",
+    "name": "Broken Function-Level Authorization (BFLA) \u2014 Admin Endpoint Reachable by Regular User",
+    "class_hint": "bfla",
+    "slice": "authn-authz",
+    "frameworks": [
+      "agnostic"
+    ],
+    "severity": "critical",
+    "prevalence": "common",
+    "active_probe": true
+  },
+  {
+    "uid": "authn-authz__jwt-alg-none",
+    "name": "JWT Algorithm Confusion \u2014 'none' Algorithm Accepted",
+    "class_hint": "jwt",
+    "slice": "authn-authz",
+    "frameworks": [
+      "agnostic"
+    ],
+    "severity": "critical",
+    "prevalence": "occasional",
+    "active_probe": true
+  },
+  {
+    "uid": "authn-authz__jwt-alg-confusion-rs256-hs256",
+    "name": "JWT Algorithm Confusion \u2014 RS256 Public Key Used as HS256 Secret",
+    "class_hint": "jwt",
+    "slice": "authn-authz",
+    "frameworks": [
+      "agnostic"
+    ],
+    "severity": "critical",
+    "prevalence": "occasional",
+    "active_probe": true
+  },
+  {
+    "uid": "authn-authz__jwt-secret-weak",
+    "name": "JWT Weak HMAC Secret (Brute-Forceable)",
+    "class_hint": "jwt",
+    "slice": "authn-authz",
+    "frameworks": [
+      "agnostic"
+    ],
+    "severity": "high",
+    "prevalence": "common",
+    "active_probe": true
+  },
+  {
+    "uid": "authn-authz__oauth-open-redirect-code-leak",
+    "name": "OAuth Authorization Code Leaked via Open Redirect",
+    "class_hint": "open-redirect",
+    "slice": "authn-authz",
+    "frameworks": [
+      "agnostic"
+    ],
+    "severity": "high",
+    "prevalence": "common",
+    "active_probe": true
+  },
+  {
+    "uid": "authn-authz__oauth-state-csrf-missing",
+    "name": "OAuth CSRF \u2014 Missing or Unvalidated State Parameter",
+    "class_hint": "csrf",
+    "slice": "authn-authz",
+    "frameworks": [
+      "agnostic"
+    ],
+    "severity": "high",
+    "prevalence": "common",
+    "active_probe": true
+  },
+  {
+    "uid": "authn-authz__session-fixation",
+    "name": "Session Fixation",
+    "class_hint": "session-fixation",
+    "slice": "authn-authz",
+    "frameworks": [
+      "agnostic"
+    ],
+    "severity": "high",
+    "prevalence": "occasional",
+    "active_probe": true
+  },
+  {
+    "uid": "authn-authz__password-reset-token-predictable",
+    "name": "Predictable or Short-Lived Password Reset Token Brute-Force",
+    "class_hint": "weak-token",
+    "slice": "authn-authz",
+    "frameworks": [
+      "agnostic"
+    ],
+    "severity": "high",
+    "prevalence": "common",
+    "active_probe": true
+  },
+  {
+    "uid": "authn-authz__password-reset-host-header-injection",
+    "name": "Password Reset Poisoning via Host Header Injection",
+    "class_hint": "host-header-injection",
+    "slice": "authn-authz",
+    "frameworks": [
+      "agnostic"
+    ],
+    "severity": "high",
+    "prevalence": "common",
+    "active_probe": true
+  },
+  {
+    "uid": "authn-authz__otp-in-response",
+    "name": "OTP / 2FA Code Returned in API Response",
+    "class_hint": "otp-2fa",
+    "slice": "authn-authz",
+    "frameworks": [
+      "agnostic"
+    ],
+    "severity": "critical",
+    "prevalence": "occasional",
+    "active_probe": false
+  },
+  {
+    "uid": "authn-authz__2fa-bypass-direct-endpoint",
+    "name": "2FA Bypass by Directly Accessing Post-Auth Endpoint",
+    "class_hint": "otp-2fa",
+    "slice": "authn-authz",
+    "frameworks": [
+      "agnostic"
+    ],
+    "severity": "high",
+    "prevalence": "common",
+    "active_probe": true
+  },
+  {
+    "uid": "authn-authz__2fa-otp-no-rate-limit",
+    "name": "2FA OTP Brute-Force \u2014 No Rate Limiting or Lockout",
+    "class_hint": "rate-limit",
+    "slice": "authn-authz",
+    "frameworks": [
+      "agnostic"
+    ],
+    "severity": "high",
+    "prevalence": "common",
+    "active_probe": true
+  },
+  {
+    "uid": "authn-authz__oidc-id-token-email-claim-trust",
+    "name": "OIDC Account Takeover via Unverified email_verified Claim",
+    "class_hint": "oauth-oidc",
+    "slice": "authn-authz",
+    "frameworks": [
+      "agnostic"
+    ],
+    "severity": "critical",
+    "prevalence": "occasional",
+    "active_probe": true
+  },
+  {
+    "uid": "injection-fuzz__sqli-error-based",
+    "name": "Error-Based SQL Injection",
+    "class_hint": "sqli",
+    "slice": "injection-fuzz",
+    "frameworks": [
+      "agnostic"
+    ],
+    "severity": "critical",
+    "prevalence": "common",
+    "active_probe": true
+  },
+  {
+    "uid": "injection-fuzz__sqli-boolean-blind",
+    "name": "Boolean-Blind SQL Injection",
+    "class_hint": "sqli",
+    "slice": "injection-fuzz",
+    "frameworks": [
+      "agnostic"
+    ],
+    "severity": "critical",
+    "prevalence": "common",
+    "active_probe": true
+  },
+  {
+    "uid": "injection-fuzz__sqli-time-blind",
+    "name": "Time-Based Blind SQL Injection",
+    "class_hint": "sqli",
+    "slice": "injection-fuzz",
+    "frameworks": [
+      "agnostic"
+    ],
+    "severity": "critical",
+    "prevalence": "common",
+    "active_probe": true
+  },
+  {
+    "uid": "injection-fuzz__nosqli-operator-injection",
+    "name": "NoSQL Operator Injection (MongoDB / DocumentDB)",
+    "class_hint": "nosqli",
+    "slice": "injection-fuzz",
+    "frameworks": [
+      "Node.js",
+      "Express",
+      "Meteor",
+      "Django",
+      "Flask"
+    ],
+    "severity": "critical",
+    "prevalence": "occasional",
+    "active_probe": true
+  },
+  {
+    "uid": "injection-fuzz__ssti-template-injection",
+    "name": "Server-Side Template Injection (SSTI)",
+    "class_hint": "ssti",
+    "slice": "injection-fuzz",
+    "frameworks": [
+      "Jinja2",
+      "Twig",
+      "FreeMarker",
+      "Pebble",
+      "Velocity",
+      "Handlebars",
+      "Mako"
+    ],
+    "severity": "critical",
+    "prevalence": "occasional",
+    "active_probe": true
+  },
+  {
+    "uid": "injection-fuzz__os-command-injection",
+    "name": "OS Command Injection",
+    "class_hint": "cmd-injection",
+    "slice": "injection-fuzz",
+    "frameworks": [
+      "agnostic"
+    ],
+    "severity": "critical",
+    "prevalence": "occasional",
+    "active_probe": true
+  },
+  {
+    "uid": "injection-fuzz__xxe-injection",
+    "name": "XML External Entity (XXE) Injection",
+    "class_hint": "ssrf",
+    "slice": "injection-fuzz",
+    "frameworks": [
+      "Java",
+      "PHP",
+      ".NET",
+      "Python (lxml)",
+      "Ruby (Nokogiri)"
+    ],
+    "severity": "critical",
+    "prevalence": "occasional",
+    "active_probe": true
+  },
+  {
+    "uid": "injection-fuzz__ssrf-basic",
+    "name": "Server-Side Request Forgery (SSRF)",
+    "class_hint": "ssrf",
+    "slice": "injection-fuzz",
+    "frameworks": [
+      "agnostic"
+    ],
+    "severity": "critical",
+    "prevalence": "common",
+    "active_probe": true
+  },
+  {
+    "uid": "injection-fuzz__open-redirect",
+    "name": "Open Redirect",
+    "class_hint": "open-redirect",
+    "slice": "injection-fuzz",
+    "frameworks": [
+      "agnostic"
+    ],
+    "severity": "medium",
+    "prevalence": "common",
+    "active_probe": true
+  },
+  {
+    "uid": "injection-fuzz__path-traversal",
+    "name": "Path Traversal (Directory Traversal)",
+    "class_hint": "path-traversal",
+    "slice": "injection-fuzz",
+    "frameworks": [
+      "agnostic"
+    ],
+    "severity": "high",
+    "prevalence": "common",
+    "active_probe": true
+  },
+  {
+    "uid": "injection-fuzz__mass-assignment",
+    "name": "Mass Assignment / Parameter Binding",
+    "class_hint": "mass-assignment",
+    "slice": "injection-fuzz",
+    "frameworks": [
+      "Ruby on Rails",
+      "Laravel",
+      "Spring",
+      "ASP.NET MVC",
+      "Django REST Framework",
+      "Express"
+    ],
+    "severity": "high",
+    "prevalence": "common",
+    "active_probe": true
+  },
+  {
+    "uid": "injection-fuzz__host-header-injection",
+    "name": "Host Header Injection",
+    "class_hint": "host-header-injection",
+    "slice": "injection-fuzz",
+    "frameworks": [
+      "agnostic"
+    ],
+    "severity": "high",
+    "prevalence": "common",
+    "active_probe": true
+  },
+  {
+    "uid": "injection-fuzz__ssrf-cloud-metadata",
+    "name": "SSRF via Cloud Instance Metadata Endpoint",
+    "class_hint": "ssrf",
+    "slice": "injection-fuzz",
+    "frameworks": [
+      "AWS",
+      "GCP",
+      "Azure",
+      "DigitalOcean",
+      "agnostic"
+    ],
+    "severity": "critical",
+    "prevalence": "occasional",
+    "active_probe": true
+  },
+  {
+    "uid": "injection-fuzz__ssti-blind-oob",
+    "name": "Blind SSTI via Out-of-Band DNS/HTTP Callback",
+    "class_hint": "ssti",
+    "slice": "injection-fuzz",
+    "frameworks": [
+      "Jinja2",
+      "FreeMarker",
+      "Pebble",
+      "Velocity",
+      "Groovy"
+    ],
+    "severity": "critical",
+    "prevalence": "occasional",
+    "active_probe": true
+  },
+  {
+    "uid": "client-browser__reflected-xss",
+    "name": "Reflected XSS",
+    "class_hint": "xss",
+    "slice": "client-browser",
+    "frameworks": [
+      "agnostic"
+    ],
+    "severity": "high",
+    "prevalence": "common",
+    "active_probe": true
+  },
+  {
+    "uid": "client-browser__stored-xss",
+    "name": "Stored XSS",
+    "class_hint": "xss",
+    "slice": "client-browser",
+    "frameworks": [
+      "agnostic"
+    ],
+    "severity": "high",
+    "prevalence": "common",
+    "active_probe": true
+  },
+  {
+    "uid": "client-browser__dom-xss",
+    "name": "DOM-Based XSS",
+    "class_hint": "xss",
+    "slice": "client-browser",
+    "frameworks": [
+      "agnostic"
+    ],
+    "severity": "high",
+    "prevalence": "common",
+    "active_probe": true
+  },
+  {
+    "uid": "client-browser__cors-misconfiguration",
+    "name": "CORS Misconfiguration (Credentialed Cross-Origin Read)",
+    "class_hint": "cors",
+    "slice": "client-browser",
+    "frameworks": [
+      "agnostic"
+    ],
+    "severity": "high",
+    "prevalence": "common",
+    "active_probe": true
+  },
+  {
+    "uid": "client-browser__missing-csp",
+    "name": "Missing or Weak Content Security Policy",
+    "class_hint": "xss",
+    "slice": "client-browser",
+    "frameworks": [
+      "agnostic"
+    ],
+    "severity": "medium",
+    "prevalence": "ubiquitous",
+    "active_probe": false
+  },
+  {
+    "uid": "client-browser__prototype-pollution",
+    "name": "Client-Side Prototype Pollution",
+    "class_hint": "xss",
+    "slice": "client-browser",
+    "frameworks": [
+      "agnostic"
+    ],
+    "severity": "high",
+    "prevalence": "occasional",
+    "active_probe": true
+  },
+  {
+    "uid": "client-browser__postmessage-abuse",
+    "name": "postMessage Origin Validation Bypass",
+    "class_hint": "xss",
+    "slice": "client-browser",
+    "frameworks": [
+      "agnostic"
+    ],
+    "severity": "high",
+    "prevalence": "occasional",
+    "active_probe": true
+  },
+  {
+    "uid": "client-browser__exposed-source-maps",
+    "name": "Exposed JavaScript Source Maps with Embedded Secrets",
+    "class_hint": "exposed-source-maps",
+    "slice": "client-browser",
+    "frameworks": [
+      "agnostic"
+    ],
+    "severity": "high",
+    "prevalence": "common",
+    "active_probe": true
+  },
+  {
+    "uid": "client-browser__clickjacking",
+    "name": "Clickjacking (Missing Frame Ancestor Protection)",
+    "class_hint": "cors",
+    "slice": "client-browser",
+    "frameworks": [
+      "agnostic"
+    ],
+    "severity": "medium",
+    "prevalence": "common",
+    "active_probe": true
+  },
+  {
+    "uid": "client-browser__sensitive-data-in-localstorage",
+    "name": "Sensitive Credentials / Tokens in localStorage or sessionStorage",
+    "class_hint": "xss",
+    "slice": "client-browser",
+    "frameworks": [
+      "agnostic"
+    ],
+    "severity": "medium",
+    "prevalence": "common",
+    "active_probe": false
+  },
+  {
+    "uid": "client-browser__sensitive-data-in-dom",
+    "name": "Sensitive Data Rendered into DOM / Hidden Fields",
+    "class_hint": "csrf",
+    "slice": "client-browser",
+    "frameworks": [
+      "agnostic"
+    ],
+    "severity": "high",
+    "prevalence": "common",
+    "active_probe": false
+  },
+  {
+    "uid": "client-browser__open-redirect-client-side",
+    "name": "Open Redirect via Client-Side URL Parameter",
+    "class_hint": "open-redirect",
+    "slice": "client-browser",
+    "frameworks": [
+      "agnostic"
+    ],
+    "severity": "medium",
+    "prevalence": "common",
+    "active_probe": true
+  },
+  {
+    "uid": "client-browser__js-framework-debug-mode",
+    "name": "JavaScript Framework Debug / Development Mode Enabled in Production",
+    "class_hint": "debug-endpoint",
+    "slice": "client-browser",
+    "frameworks": [
+      "React",
+      "Vue",
+      "Angular",
+      "Ember",
+      "Next.js"
+    ],
+    "severity": "medium",
+    "prevalence": "occasional",
+    "active_probe": false
+  },
+  {
+    "uid": "client-browser__cors-wildcard-sensitive-api",
+    "name": "CORS Wildcard on Sensitive / Authenticated API Endpoint",
+    "class_hint": "cors",
+    "slice": "client-browser",
+    "frameworks": [
+      "agnostic"
+    ],
+    "severity": "medium",
+    "prevalence": "common",
+    "active_probe": true
+  },
+  {
+    "uid": "client-browser__subresource-integrity-missing",
+    "name": "Missing Subresource Integrity (SRI) on Third-Party Scripts",
+    "class_hint": "missing-sri",
+    "slice": "client-browser",
+    "frameworks": [
+      "agnostic"
+    ],
+    "severity": "medium",
+    "prevalence": "ubiquitous",
+    "active_probe": false
+  },
+  {
+    "uid": "api-rest__api-excessive-data-exposure",
+    "name": "Excessive Data Exposure in API Responses",
+    "class_hint": "excessive-data",
+    "slice": "api-rest",
+    "frameworks": [
+      "agnostic"
+    ],
+    "severity": "high",
+    "prevalence": "ubiquitous",
+    "active_probe": false
+  },
+  {
+    "uid": "api-rest__broken-object-property-level-authz",
+    "name": "Broken Object Property Level Authorization (Mass Assignment / BOPLA)",
+    "class_hint": "idor-bola",
+    "slice": "api-rest",
+    "frameworks": [
+      "agnostic"
+    ],
+    "severity": "critical",
+    "prevalence": "common",
+    "active_probe": true
+  },
+  {
+    "uid": "api-rest__broken-object-level-authz-idor",
+    "name": "Broken Object Level Authorization (IDOR) via API Resource Enumeration",
+    "class_hint": "idor-bola",
+    "slice": "api-rest",
+    "frameworks": [
+      "agnostic"
+    ],
+    "severity": "critical",
+    "prevalence": "ubiquitous",
+    "active_probe": true
+  },
+  {
+    "uid": "api-rest__missing-rate-limiting-auth",
+    "name": "Missing Rate Limiting on Authentication / Credential Endpoints",
+    "class_hint": "rate-limit",
+    "slice": "api-rest",
+    "frameworks": [
+      "agnostic"
+    ],
+    "severity": "high",
+    "prevalence": "common",
+    "active_probe": true
+  },
+  {
+    "uid": "api-rest__missing-rate-limiting-business",
+    "name": "Missing Rate Limiting on Business-Logic API Endpoints",
+    "class_hint": "rate-limit",
+    "slice": "api-rest",
+    "frameworks": [
+      "agnostic"
+    ],
+    "severity": "medium",
+    "prevalence": "common",
+    "active_probe": true
+  },
+  {
+    "uid": "api-rest__user-enumeration-api",
+    "name": "User Enumeration via API Response Differences",
+    "class_hint": "rate-limit-enum",
+    "slice": "api-rest",
+    "frameworks": [
+      "agnostic"
+    ],
+    "severity": "medium",
+    "prevalence": "ubiquitous",
+    "active_probe": true
+  },
+  {
+    "uid": "api-rest__resource-id-enumeration",
+    "name": "Resource/Object Enumeration via Predictable API Identifiers",
+    "class_hint": "resource-enumeration",
+    "slice": "api-rest",
+    "frameworks": [
+      "agnostic"
+    ],
+    "severity": "medium",
+    "prevalence": "ubiquitous",
+    "active_probe": true
+  },
+  {
+    "uid": "api-rest__improper-api-inventory-old-versions",
+    "name": "Improper API Inventory \u2014 Unretired Legacy API Versions",
+    "class_hint": "api-inventory",
+    "slice": "api-rest",
+    "frameworks": [
+      "agnostic"
+    ],
+    "severity": "high",
+    "prevalence": "common",
+    "active_probe": true
+  },
+  {
+    "uid": "api-rest__verbose-api-errors",
+    "name": "Verbose API Error Responses Leaking Stack Traces / Internal Details",
+    "class_hint": "debug-endpoint",
+    "slice": "api-rest",
+    "frameworks": [
+      "Express",
+      "Django",
+      "Rails",
+      "Spring",
+      "Laravel",
+      "agnostic"
+    ],
+    "severity": "medium",
+    "prevalence": "common",
+    "active_probe": true
+  },
+  {
+    "uid": "api-rest__graphql-introspection-enabled",
+    "name": "GraphQL Introspection Enabled in Production",
+    "class_hint": "graphql-introspection",
+    "slice": "api-rest",
+    "frameworks": [
+      "GraphQL"
+    ],
+    "severity": "medium",
+    "prevalence": "common",
+    "active_probe": true
+  },
+  {
+    "uid": "api-rest__graphql-field-suggestion-enumeration",
+    "name": "GraphQL Field Suggestion / Did-You-Mean Enumeration",
+    "class_hint": "rate-limit-enum",
+    "slice": "api-rest",
+    "frameworks": [
+      "GraphQL"
+    ],
+    "severity": "low",
+    "prevalence": "common",
+    "active_probe": true
+  },
+  {
+    "uid": "api-rest__api-function-level-authz-bypass",
+    "name": "Broken Function Level Authorization \u2014 Admin API Endpoint Accessible to Regular Users",
+    "class_hint": "bfla",
+    "slice": "api-rest",
+    "frameworks": [
+      "agnostic"
+    ],
+    "severity": "critical",
+    "prevalence": "common",
+    "active_probe": true
+  },
+  {
+    "uid": "api-rest__api-unauthenticated-endpoint-shadow",
+    "name": "Shadow / Undocumented API Endpoints Accessible Without Authentication",
+    "class_hint": "debug-endpoint",
+    "slice": "api-rest",
+    "frameworks": [
+      "agnostic"
+    ],
+    "severity": "high",
+    "prevalence": "occasional",
+    "active_probe": true
+  },
+  {
+    "uid": "api-rest__api-missing-auth-on-write",
+    "name": "Missing Authentication on State-Mutating API Endpoints",
+    "class_hint": "broken-access-control",
+    "slice": "api-rest",
+    "frameworks": [
+      "agnostic"
+    ],
+    "severity": "critical",
+    "prevalence": "occasional",
+    "active_probe": true
+  },
+  {
+    "uid": "api-rest__graphql-batching-dos",
+    "name": "GraphQL Query Batching / Alias Amplification Without Rate Limiting",
+    "class_hint": "dos",
+    "slice": "api-rest",
+    "frameworks": [
+      "GraphQL"
+    ],
+    "severity": "high",
+    "prevalence": "common",
+    "active_probe": true
+  },
+  {
+    "uid": "ethical-recon__exposed-git-repository",
+    "name": "Exposed .git Directory",
+    "class_hint": "exposed-vcs",
+    "slice": "ethical-recon",
+    "frameworks": [
+      "agnostic"
+    ],
+    "severity": "critical",
+    "prevalence": "common",
+    "active_probe": true
+  },
+  {
+    "uid": "ethical-recon__exposed-env-file",
+    "name": "Exposed .env / Environment File",
+    "class_hint": "secrets-exposure",
+    "slice": "ethical-recon",
+    "frameworks": [
+      "Laravel",
+      "Django",
+      "Node.js/Express",
+      "Next.js",
+      "Rails",
+      "agnostic"
+    ],
+    "severity": "critical",
+    "prevalence": "common",
+    "active_probe": true
+  },
+  {
+    "uid": "ethical-recon__directory-listing-enabled",
+    "name": "Directory Listing Enabled",
+    "class_hint": "directory-listing",
+    "slice": "ethical-recon",
+    "frameworks": [
+      "Apache",
+      "Nginx",
+      "IIS",
+      "agnostic"
+    ],
+    "severity": "medium",
+    "prevalence": "common",
+    "active_probe": true
+  },
+  {
+    "uid": "ethical-recon__stack-trace-disclosure",
+    "name": "Verbose Error / Stack Trace Disclosure",
+    "class_hint": "debug-endpoint",
+    "slice": "ethical-recon",
+    "frameworks": [
+      "Django",
+      "Rails",
+      "Laravel",
+      "Spring Boot",
+      "Express",
+      "ASP.NET",
+      "agnostic"
+    ],
+    "severity": "medium",
+    "prevalence": "common",
+    "active_probe": true
+  },
+  {
+    "uid": "ethical-recon__missing-security-headers",
+    "name": "Missing / Weak Security Response Headers",
+    "class_hint": "security-headers",
+    "slice": "ethical-recon",
+    "frameworks": [
+      "agnostic"
+    ],
+    "severity": "medium",
+    "prevalence": "ubiquitous",
+    "active_probe": false
+  },
+  {
+    "uid": "ethical-recon__insecure-cookie-flags",
+    "name": "Session Cookie Missing Secure / HttpOnly / SameSite Flags",
+    "class_hint": "xss",
+    "slice": "ethical-recon",
+    "frameworks": [
+      "agnostic"
+    ],
+    "severity": "high",
+    "prevalence": "common",
+    "active_probe": false
+  },
+  {
+    "uid": "ethical-recon__server-technology-disclosure",
+    "name": "Server / Framework Version Disclosure via Response Headers",
+    "class_hint": "other",
+    "slice": "ethical-recon",
+    "frameworks": [
+      "agnostic"
+    ],
+    "severity": "low",
+    "prevalence": "ubiquitous",
+    "active_probe": false
+  },
+  {
+    "uid": "ethical-recon__debug-admin-endpoint-exposure",
+    "name": "Debug / Admin Endpoint Publicly Accessible",
+    "class_hint": "bfla",
+    "slice": "ethical-recon",
+    "frameworks": [
+      "Django",
+      "Spring Boot",
+      "Laravel",
+      "Express",
+      "Rails",
+      "WordPress",
+      "agnostic"
+    ],
+    "severity": "high",
+    "prevalence": "common",
+    "active_probe": true
+  },
+  {
+    "uid": "ethical-recon__default-credentials",
+    "name": "Default / Weak Credentials on Admin Interfaces",
+    "class_hint": "secrets-exposure",
+    "slice": "ethical-recon",
+    "frameworks": [
+      "WordPress",
+      "Jenkins",
+      "Grafana",
+      "Adminer",
+      "phpMyAdmin",
+      "agnostic"
+    ],
+    "severity": "critical",
+    "prevalence": "common",
+    "active_probe": true
+  },
+  {
+    "uid": "ethical-recon__js-secret-mining",
+    "name": "Hardcoded Secrets / API Keys in Served JavaScript",
+    "class_hint": "secrets-exposure",
+    "slice": "ethical-recon",
+    "frameworks": [
+      "React",
+      "Vue",
+      "Angular",
+      "Next.js",
+      "agnostic"
+    ],
+    "severity": "critical",
+    "prevalence": "common",
+    "active_probe": false
+  },
+  {
+    "uid": "ethical-recon__js-hidden-endpoint-discovery",
+    "name": "Hidden API Endpoints Leaked in JavaScript Bundles",
+    "class_hint": "other",
+    "slice": "ethical-recon",
+    "frameworks": [
+      "React",
+      "Vue",
+      "Angular",
+      "Next.js",
+      "agnostic"
+    ],
+    "severity": "high",
+    "prevalence": "common",
+    "active_probe": true
+  },
+  {
+    "uid": "ethical-recon__cors-misconfiguration",
+    "name": "Overly Permissive CORS Policy",
+    "class_hint": "cors",
+    "slice": "ethical-recon",
+    "frameworks": [
+      "Express",
+      "Django",
+      "Spring",
+      "Rails",
+      "FastAPI",
+      "agnostic"
+    ],
+    "severity": "high",
+    "prevalence": "common",
+    "active_probe": true
+  },
+  {
+    "uid": "ethical-recon__sourcemap-exposure",
+    "name": "JavaScript Source Map Files Publicly Accessible",
+    "class_hint": "exposed-source-maps",
+    "slice": "ethical-recon",
+    "frameworks": [
+      "React",
+      "Vue",
+      "Angular",
+      "Webpack",
+      "Vite",
+      "agnostic"
+    ],
+    "severity": "medium",
+    "prevalence": "common",
+    "active_probe": true
+  },
+  {
+    "uid": "ethical-recon__robots-sitemap-path-disclosure",
+    "name": "Path / Endpoint Disclosure via robots.txt and sitemap.xml",
+    "class_hint": "rate-limit-enum",
+    "slice": "ethical-recon",
+    "frameworks": [
+      "agnostic"
+    ],
+    "severity": "low",
+    "prevalence": "ubiquitous",
+    "active_probe": true
+  },
+  {
+    "uid": "ethical-recon__subdomain-takeover",
+    "name": "Dangling DNS / Subdomain Takeover",
+    "class_hint": "subdomain-takeover",
+    "slice": "ethical-recon",
+    "frameworks": [
+      "agnostic"
+    ],
+    "severity": "high",
+    "prevalence": "occasional",
+    "active_probe": true
+  }
+]

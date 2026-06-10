@@ -1,0 +1,265 @@
+[
+  {
+    "id": "supabase-rls-disabled-anon-read",
+    "name": "Supabase Table Readable by Anon Key (RLS Disabled or No SELECT Policy)",
+    "owasp_category": "A01:2021 Broken Access Control",
+    "frameworks": [
+      "Supabase"
+    ],
+    "description": "A Supabase table has Row-Level Security disabled or no SELECT policy for the `anon` role, allowing anyone possessing the public anon key (which is always embedded in client bundles) to read every row via the PostgREST REST endpoint. This is the single most common Supabase misconfiguration found in bug bounty.",
+    "runtime_discovery": "Extract the Supabase URL and anon key from the app's JavaScript bundle or network traffic. Issue GET /rest/v1/<table>?select=*&limit=10 with headers `apikey: <anon_key>` and `Authorization: Bearer <anon_key>`. A 200 response containing rows confirms the table is unprotected. Enumerate table names from JS bundle, network requests, or the PostgREST schema endpoint (GET /rest/v1/ returns the OpenAPI spec listing all tables).",
+    "detection_signal": "HTTP 200 with a JSON array body from GET /rest/v1/<table>?select=*; row count > 0; column names visible in response body. The OpenAPI spec at /rest/v1/ enumerates all exposed table names.",
+    "active_probe": true,
+    "severity": "critical",
+    "prevalence": "ubiquitous",
+    "slice": "baas-graphql",
+    "uid": "baas-graphql__supabase-rls-disabled-anon-read",
+    "class_hint": "baas-rls"
+  },
+  {
+    "id": "supabase-rls-disabled-anon-write",
+    "name": "Supabase Table Writable by Anon Key (No INSERT/UPDATE/DELETE Policy)",
+    "owasp_category": "A01:2021 Broken Access Control",
+    "frameworks": [
+      "Supabase"
+    ],
+    "description": "Even when SELECT is blocked, Supabase tables may lack INSERT, UPDATE, or DELETE policies for the `anon` role, allowing unauthenticated users to inject or mutate arbitrary rows. The `Prefer: tx=rollback` header causes PostgREST to roll back the transaction after confirming the write would succeed, making detection safe.",
+    "runtime_discovery": "For each table discovered as accessible (or listed via the OpenAPI spec), send POST /rest/v1/<table> with a synthetic body and headers `Prefer: tx=rollback, return=minimal` and `Content-Type: application/json`. A 400 response (schema mismatch) instead of 403 proves INSERT access is enabled. For UPDATE, try PATCH /rest/v1/<table>?id=eq.999999 with a dummy column; 404 vs 403 distinguishes allowed-but-not-found from blocked.",
+    "detection_signal": "POST to /rest/v1/<table> returns HTTP 400 (column constraint / schema error) rather than HTTP 403 (RLS blocked). HTTP 201 or 409 also confirms write access. The distinguishing signal is any non-403 status when an unauthorized write is attempted.",
+    "active_probe": true,
+    "severity": "critical",
+    "prevalence": "common",
+    "slice": "baas-graphql",
+    "uid": "baas-graphql__supabase-rls-disabled-anon-write",
+    "class_hint": "baas-rls"
+  },
+  {
+    "id": "supabase-service-role-key-exposed",
+    "name": "Supabase service_role Key Exposed in Client Bundle",
+    "owasp_category": "A02:2021 Cryptographic Failures",
+    "frameworks": [
+      "Supabase"
+    ],
+    "description": "The Supabase `service_role` JWT has the `role` claim set to `service_role`, which bypasses all Row-Level Security policies entirely and grants full database admin access. If this key is embedded in client JavaScript instead of kept server-side, any visitor extracts a god-mode database credential.",
+    "runtime_discovery": "Intercept network traffic or inspect JavaScript bundles for long JWT strings (eyJ...). Base64-decode the JWT payload (second `.`-separated segment) and read the `role` claim. A value of `service_role` confirms the critical exposure. Also check `Authorization` headers in requests captured by a proxy.",
+    "detection_signal": "JWT payload decoded from a string found in JS bundle or network request contains `\"role\": \"service_role\"`. The token is distinguishable from the anon key because the anon key contains `\"role\": \"anon\"`.",
+    "active_probe": false,
+    "severity": "critical",
+    "prevalence": "occasional",
+    "slice": "baas-graphql",
+    "uid": "baas-graphql__supabase-service-role-key-exposed",
+    "class_hint": "jwt"
+  },
+  {
+    "id": "supabase-rls-bola-user-data",
+    "name": "Supabase BOLA via Insufficient RLS Policy (Auth Filter Missing auth.uid())",
+    "owasp_category": "A01:2021 Broken Access Control",
+    "frameworks": [
+      "Supabase"
+    ],
+    "description": "An RLS policy exists but its USING clause does not correctly scope rows to the authenticated user (e.g., `USING (true)` or checking a non-user-specific column). Authenticated user A can read or modify user B's rows by simply querying the table, because the policy grants access to all authenticated users rather than only the row owner.",
+    "runtime_discovery": "Authenticate as two different test users (user A and user B). Both users create a resource (e.g., a profile or order). User A queries GET /rest/v1/<table>?select=* with their JWT. If the response includes rows owned by user B (identified by a `user_id` or `owner_id` column differing from user A's `auth.uid()`), the RLS policy has an IDOR/BOLA flaw. Automate by comparing the `user_id` column in results against the authenticated JWT's `sub` claim.",
+    "detection_signal": "Response to GET /rest/v1/<table>?select=* with user A's auth token includes rows where `user_id` != user A's JWT `sub` claim. Differential: user B's known resource ID appears in user A's result set.",
+    "active_probe": true,
+    "severity": "high",
+    "prevalence": "common",
+    "slice": "baas-graphql",
+    "uid": "baas-graphql__supabase-rls-bola-user-data",
+    "class_hint": "idor-bola"
+  },
+  {
+    "id": "supabase-rls-bypass-rpc",
+    "name": "Supabase RPC Function Callable by anon Without auth.uid() Check",
+    "owasp_category": "A01:2021 Broken Access Control",
+    "frameworks": [
+      "Supabase"
+    ],
+    "description": "Supabase RPC functions (PostgreSQL functions exposed via `/rest/v1/rpc/<fn>`) execute with the permissions of the defining role. If EXECUTE is granted to `anon` and the function body does not verify `auth.uid()`, unauthenticated callers can trigger mutations, admin operations, or cross-user data access that RLS would otherwise block.",
+    "runtime_discovery": "Enumerate RPC function names from JS bundle network calls or the PostgREST OpenAPI spec at /rest/v1/. Surface each function as a lead without POSTing to /rest/v1/rpc/<function_name>, because POSTing would execute the function. Cross-reference with the function's JS invocation context to assess impact.",
+    "detection_signal": "Client bundle or OpenAPI schema exposes an RPC function name reachable from browser code. Function names containing 'admin', 'delete', 'update', 'transfer', or 'bulk' are highest priority. No confirmation request is sent by default; treat as a lead until explicit authorized testing confirms EXECUTE exposure.",
+    "active_probe": false,
+    "severity": "high",
+    "prevalence": "common",
+    "slice": "baas-graphql",
+    "uid": "baas-graphql__supabase-rls-bypass-rpc",
+    "class_hint": "baas-rls"
+  },
+  {
+    "id": "supabase-storage-bucket-public",
+    "name": "Supabase Storage Bucket Publicly Readable (No Storage Policy)",
+    "owasp_category": "A01:2021 Broken Access Control",
+    "frameworks": [
+      "Supabase"
+    ],
+    "description": "Supabase Storage buckets created with `public: true` or without `SELECT` storage policies allow any person to list and download all objects via the `/storage/v1/object/list/<bucket>` and `/storage/v1/object/public/<bucket>/<path>` endpoints without authentication. Common with user-uploaded files like profile photos, contracts, and receipts.",
+    "runtime_discovery": "Issue GET /storage/v1/bucket with the anon key. The response lists all buckets and their `public` flag. For each bucket, issue GET /storage/v1/object/list/<bucket_name>?limit=10 with the anon key. A 200 response with an `items` array confirms object listing. For public buckets, directly fetch object URLs without any auth header.",
+    "detection_signal": "GET /storage/v1/bucket returns a JSON array where any entry has `\"public\": true`. GET /storage/v1/object/list/<bucket> with anon key returns HTTP 200 with an `items` array. Public object URLs are directly accessible without Authorization header.",
+    "active_probe": true,
+    "severity": "high",
+    "prevalence": "common",
+    "slice": "baas-graphql",
+    "uid": "baas-graphql__supabase-storage-bucket-public",
+    "class_hint": "baas-rls"
+  },
+  {
+    "id": "supabase-realtime-channel-bola",
+    "name": "Supabase Realtime Channel Subscription Without Authorization (BOLA)",
+    "owasp_category": "A01:2021 Broken Access Control",
+    "frameworks": [
+      "Supabase"
+    ],
+    "description": "Supabase Realtime channels based on predictable patterns (e.g., `user-<uuid>`, `notifications-<userid>`) can be subscribed to by any authenticated \u2014 or even anonymous \u2014 client if channel-level authorization policies are not configured. An attacker can subscribe to another user's notification stream and receive real-time data meant only for that user.",
+    "runtime_discovery": "Intercept WebSocket traffic during app use. Observe the `realtime:channel` subscription message format. Extract the channel naming pattern from JavaScript source. Using a second authenticated session (user B), subscribe to user A's channel name (e.g., `user-<user_A_uuid>`). If messages intended for user A arrive in user B's subscription, the channel is unprotected. The channel name may also appear in the PostgREST schema or JS bundle.",
+    "detection_signal": "WebSocket subscription to a channel named with another user's identifier (extracted from profile API) succeeds (server sends `phx_reply` with `status: ok`) and delivers messages. JS bundle contains hardcoded channel patterns like `user-${userId}` or `private-${uid}`.",
+    "active_probe": true,
+    "severity": "high",
+    "prevalence": "occasional",
+    "slice": "baas-graphql",
+    "uid": "baas-graphql__supabase-realtime-channel-bola",
+    "class_hint": "idor-bola"
+  },
+  {
+    "id": "firebase-rtdb-no-auth-rules",
+    "name": "Firebase Realtime Database Open to Public Read (No Security Rules)",
+    "owasp_category": "A01:2021 Broken Access Control",
+    "frameworks": [
+      "Firebase"
+    ],
+    "description": "Firebase Realtime Database projects with no rules, test mode rules (`\".read\": true`), or the default open rules allow anyone to read or write the entire database tree without any authentication. Firebase emits a security alert for this but many projects remain misconfigured.",
+    "runtime_discovery": "Extract the Firebase database URL from the app's JS bundle (matches `https://<project>.firebaseio.com`). Issue GET https://<project>.firebaseio.com/.json?shallow=true (no credentials needed). A 200 response with non-null JSON data confirms public read. To confirm write access, attempt PUT to a test path (e.g., /.json path with a canary key). Firebase returns 200 on success or 401/permission_denied when rules block.",
+    "detection_signal": "GET https://<project>.firebaseio.com/.json?shallow=true returns HTTP 200 with JSON body containing top-level keys (not `null` or `{\"error\": \"Permission denied\"}`). Response time < 2s with data confirms live open database.",
+    "active_probe": true,
+    "severity": "critical",
+    "prevalence": "common",
+    "slice": "baas-graphql",
+    "uid": "baas-graphql__firebase-rtdb-no-auth-rules",
+    "class_hint": "baas-rls"
+  },
+  {
+    "id": "firebase-storage-public-listing",
+    "name": "Firebase Storage Publicly Listable Bucket",
+    "owasp_category": "A01:2021 Broken Access Control",
+    "frameworks": [
+      "Firebase"
+    ],
+    "description": "Firebase Storage security rules that allow `allow read: if true` or missing storage rules permit any unauthenticated user to enumerate and download objects. The Firebase Storage REST API is accessible without authentication when rules permit.",
+    "runtime_discovery": "Extract the Firebase storage bucket name from JS config (e.g., `<project>.appspot.com`). Issue GET https://firebasestorage.googleapis.com/v0/b/<bucket>/o?maxResults=5 without credentials. A 200 response with an `items` array confirms public listing. Attempt to download the first object's download URL. Check for sensitive filenames (receipts, invoices, private documents).",
+    "detection_signal": "GET https://firebasestorage.googleapis.com/v0/b/<bucket>/o returns HTTP 200 with `{\"items\": [...]}` array without any Authorization header. Object download URLs in the `downloadTokens` field are accessible publicly.",
+    "active_probe": true,
+    "severity": "high",
+    "prevalence": "common",
+    "slice": "baas-graphql",
+    "uid": "baas-graphql__firebase-storage-public-listing",
+    "class_hint": "rate-limit-enum"
+  },
+  {
+    "id": "pocketbase-collection-no-api-rules",
+    "name": "PocketBase Collection Readable Without Auth (No API Rules Set)",
+    "owasp_category": "A01:2021 Broken Access Control",
+    "frameworks": [
+      "PocketBase"
+    ],
+    "description": "PocketBase collections have per-operation API rules (list, view, create, update, delete). When a rule is left empty, PocketBase defaults to allowing ALL requests for that operation \u2014 including unauthenticated ones. A common mistake is creating a collection and never setting list/view rules, exposing all records publicly.",
+    "runtime_discovery": "Probe GET /api/collections (returns collection names when admin API is accessible). For each collection name, issue GET /api/collections/<name>/records?perPage=5 without any auth token. A 200 response with a `items` array and `totalItems > 0` confirms the collection is open. Also attempt the /api/health endpoint to confirm the PocketBase instance is live.",
+    "detection_signal": "GET /api/collections/<name>/records without Authorization header returns HTTP 200 with `{\"items\": [...], \"totalItems\": N}`. The `/api/collections` list endpoint returning 200 without admin credentials also indicates misconfigured admin API exposure.",
+    "active_probe": true,
+    "severity": "high",
+    "prevalence": "common",
+    "slice": "baas-graphql",
+    "uid": "baas-graphql__pocketbase-collection-no-api-rules",
+    "class_hint": "baas-rls"
+  },
+  {
+    "id": "graphql-introspection-enabled-prod",
+    "name": "GraphQL Introspection Enabled on Production Endpoint",
+    "owasp_category": "A05:2021 Security Misconfiguration",
+    "frameworks": [
+      "GraphQL",
+      "Hasura",
+      "Apollo",
+      "agnostic"
+    ],
+    "description": "GraphQL introspection allows any client to enumerate the complete schema \u2014 all types, queries, mutations, and field names \u2014 without authentication. On production APIs, this gives attackers a roadmap to hidden admin mutations, internal data types, and undocumented fields that can accelerate BOLA/IDOR discovery and input fuzzing.",
+    "runtime_discovery": "Send POST to the GraphQL endpoint (typically /graphql, /api/graphql, /v1/graphql, /hasura/v1/graphql) with body `{\"query\": \"{__schema{queryType{name}}}\"}` and `Content-Type: application/json`. A 200 response containing `__schema` data confirms introspection is enabled. Follow up with a full introspection query to map all types and resolve mutation names.",
+    "detection_signal": "HTTP 200 response to POST /graphql with `{\"query\":\"{__schema{queryType{name}}}\"}` body contains `{\"data\":{\"__schema\":{...}}}`. Non-null `queryType` field confirms introspection is live. Hasura specifically returns a large schema JSON including `x-hasura-*` permission directives.",
+    "active_probe": true,
+    "severity": "medium",
+    "prevalence": "common",
+    "slice": "baas-graphql",
+    "uid": "baas-graphql__graphql-introspection-enabled-prod",
+    "class_hint": "idor-bola"
+  },
+  {
+    "id": "graphql-bola-object-level-auth",
+    "name": "GraphQL BOLA \u2014 Direct Object Reference via ID Parameter",
+    "owasp_category": "A01:2021 Broken Access Control",
+    "frameworks": [
+      "GraphQL",
+      "Hasura",
+      "agnostic"
+    ],
+    "description": "GraphQL resolvers that accept an `id` argument and return a resource without verifying the requester owns it are susceptible to Broken Object Level Authorization. An attacker authenticated as user A can query resources owned by user B by incrementing or guessing integer IDs or UUIDs. This is especially common in Hasura when table permissions are misconfigured.",
+    "runtime_discovery": "Authenticate as user A and note the IDs of your own resources (e.g., order ID, message ID) returned in normal queries. Then query the same type by ID substituting known or guessed IDs of other users: `query { order(id: <other_id>) { id, user_id, amount, details } }`. If the response returns another user's data, BOLA is confirmed. In Hasura, compare query results with and without the `x-hasura-user-id` session variable.",
+    "detection_signal": "GraphQL query response for resource with ID not belonging to authenticated user returns `{\"data\": {\"resource\": {...}}}` with non-null fields and a `user_id` or `owner` field differing from the authenticated user's ID. Auth-differential (user A querying user B's ID) shows data in one session but not the other when access control is correct \u2014 if both return data, BOLA is present.",
+    "active_probe": true,
+    "severity": "high",
+    "prevalence": "common",
+    "slice": "baas-graphql",
+    "uid": "baas-graphql__graphql-bola-object-level-auth",
+    "class_hint": "idor-bola"
+  },
+  {
+    "id": "graphql-query-batching-dos",
+    "name": "GraphQL Query Batching / Alias Amplification (DoS / Brute-Force)",
+    "owasp_category": "A04:2021 Insecure Design",
+    "frameworks": [
+      "GraphQL",
+      "Hasura",
+      "Apollo",
+      "agnostic"
+    ],
+    "description": "GraphQL supports sending an array of operations in a single HTTP request (batching) and allows field aliasing to repeat the same resolver many times in one query. Without rate-limiting on query depth, breadth, or alias count, attackers can send a single POST containing hundreds of login attempts or expensive queries, bypassing per-request rate limits and enabling credential stuffing or DoS.",
+    "runtime_discovery": "Send a POST to the GraphQL endpoint with a JSON array body containing 100 identical login mutations: `[{\"query\": \"mutation { login(email: \\\"x\\\", password: \\\"y\\\") { token } }\"}, ...]`. Alternatively, send one query with 100 aliased calls: `query { a1: user(id:1){id} a2: user(id:2){id} ... }`. If the server executes all operations and returns a 200 with an array of results, batching is enabled without restriction.",
+    "detection_signal": "POST to /graphql with a JSON array of N operations returns HTTP 200 with a JSON array of N result objects. Single query with N field aliases returns N resolver results in one response. Per-request rate-limit is not triggered. Response time scales linearly with N (confirms all operations executed).",
+    "active_probe": true,
+    "severity": "medium",
+    "prevalence": "common",
+    "slice": "baas-graphql",
+    "uid": "baas-graphql__graphql-query-batching-dos",
+    "class_hint": "dos"
+  },
+  {
+    "id": "hasura-admin-secret-exposed",
+    "name": "Hasura Admin Secret Exposed in Client Bundle or Headers",
+    "owasp_category": "A02:2021 Cryptographic Failures",
+    "frameworks": [
+      "Hasura"
+    ],
+    "description": "Hasura's admin secret, when present in the `x-hasura-admin-secret` header, bypasses all permission rules and grants full database access. This secret is sometimes accidentally hardcoded in JavaScript bundles, environment variable leaks, or CI/CD configuration. Even its presence as a string in JS is critical because it provides complete Hasura admin access.",
+    "runtime_discovery": "Intercept all HTTP requests from the running app and inspect headers for `x-hasura-admin-secret`. Search JavaScript bundle content for strings matching Hasura admin secret patterns. Send a test GraphQL query with the discovered secret as the `x-hasura-admin-secret` header: if the response returns data that would normally require authentication, the secret is confirmed valid.",
+    "detection_signal": "HTTP request header `x-hasura-admin-secret` present in client-originating requests captured by proxy. String in JS bundle matching Hasura admin secret format. GraphQL query with the candidate secret returns HTTP 200 with `{\"data\": {...}}` instead of 401/403.",
+    "active_probe": true,
+    "severity": "critical",
+    "prevalence": "occasional",
+    "slice": "baas-graphql",
+    "uid": "baas-graphql__hasura-admin-secret-exposed",
+    "class_hint": "secrets-exposure"
+  },
+  {
+    "id": "appwrite-collection-guest-permission",
+    "name": "Appwrite Collection With Guest Read/Write Permission",
+    "owasp_category": "A01:2021 Broken Access Control",
+    "frameworks": [
+      "Appwrite"
+    ],
+    "description": "Appwrite collections and documents support granular permissions per role, including `role:all` (public) and `role:guests` (unauthenticated). When a collection is created with these roles having read or write access, any unauthenticated HTTP request can enumerate or mutate all documents, regardless of whether the app's frontend enforces authentication.",
+    "runtime_discovery": "Extract the Appwrite endpoint and project ID from the JS bundle (typical pattern: `https://<host>/v1`, `X-Appwrite-Project: <projectId>`). Issue GET /v1/databases with the project header only (no session token). A 200 response listing databases exposes configuration. For each database/collection ID found, issue GET /v1/databases/<dbId>/collections/<colId>/documents without auth and observe the response.",
+    "detection_signal": "GET /v1/databases/<dbId>/collections/<colId>/documents without `X-Appwrite-Session` or `X-Appwrite-Key` returns HTTP 200 with `{\"total\": N, \"documents\": [...]}`. Document entries contain `$permissions` arrays showing `role:all` or `role:guests` on read operations.",
+    "active_probe": true,
+    "severity": "high",
+    "prevalence": "occasional",
+    "slice": "baas-graphql",
+    "uid": "baas-graphql__appwrite-collection-guest-permission",
+    "class_hint": "broken-access-control"
+  }
+]

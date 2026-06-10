@@ -1,0 +1,261 @@
+[
+  {
+    "id": "laravel-app-debug-enabled",
+    "name": "Laravel APP_DEBUG=true Information Disclosure",
+    "owasp_category": "A05:2021 Security Misconfiguration",
+    "frameworks": [
+      "Laravel",
+      "PHP"
+    ],
+    "description": "When APP_DEBUG is set to true in a Laravel production app, unhandled exceptions expose a full stack trace including file paths, environment variable values, SQL queries, and sometimes secret keys directly in the HTTP response body.",
+    "runtime_discovery": "Trigger an error by sending a malformed request (invalid route parameter, bad JSON body, or a non-existent resource). Observe whether the response body contains a Whoops/Ignition stack trace page instead of a generic error page.",
+    "detection_signal": "HTTP 500 response body contains 'Whoops\\Something went wrong', 'Ignition', 'APP_KEY', full absolute filesystem paths like '/var/www/html/...', or SQL query strings with table names exposed in the HTML.",
+    "active_probe": true,
+    "severity": "high",
+    "prevalence": "common",
+    "slice": "laravel-php",
+    "uid": "laravel-php__laravel-app-debug-enabled",
+    "class_hint": "debug-endpoint"
+  },
+  {
+    "id": "laravel-mass-assignment",
+    "name": "Eloquent Mass Assignment Privilege Escalation",
+    "owasp_category": "A01:2021 Broken Access Control",
+    "frameworks": [
+      "Laravel"
+    ],
+    "description": "Laravel Eloquent models that use $fillable wildcards or omit $guarded allow attackers to inject arbitrary model attributes (e.g., is_admin, role, email_verified_at) via form POST or JSON body fields that the application never intended to accept.",
+    "runtime_discovery": "Intercept a user registration or profile-update form POST. Inject extra fields such as is_admin=1, role=admin, or email_verified_at=2024-01-01 into the request body. Re-fetch the authenticated user profile and compare field values before and after.",
+    "detection_signal": "After injecting extra fields, the GET /api/user (or equivalent) response reflects the injected attribute (e.g., '\"is_admin\":true') or the app grants elevated permissions not available to a baseline account.",
+    "active_probe": true,
+    "severity": "critical",
+    "prevalence": "common",
+    "slice": "laravel-php",
+    "uid": "laravel-php__laravel-mass-assignment",
+    "class_hint": "mass-assignment"
+  },
+  {
+    "id": "laravel-debug-bar-exposed",
+    "name": "Laravel Debugbar / Telescope Endpoint Exposed in Production",
+    "owasp_category": "A05:2021 Security Misconfiguration",
+    "frameworks": [
+      "Laravel"
+    ],
+    "description": "The barryvdh/laravel-debugbar package injects a debug toolbar into HTML responses and exposes /_debugbar/open?max=20 for raw JSON logs. Laravel Telescope exposes /telescope/requests and /telescope/queries. Both endpoints can reveal SQL queries with bound parameters, session tokens, env vars, and internal request metadata.",
+    "runtime_discovery": "Crawl the app and probe /_debugbar/open, /_debugbar/assets/stylesheets, /telescope, /telescope/api/requests, and /telescope/api/queries without authentication. Also inspect HTML source for the debugbar injection div.",
+    "detection_signal": "HTTP 200 on /_debugbar/open?max=20 returns JSON with 'queries', 'session', or 'env' keys. /telescope/api/requests returns a JSON array of recent HTTP requests including headers and payloads.",
+    "active_probe": true,
+    "severity": "high",
+    "prevalence": "common",
+    "slice": "laravel-php",
+    "uid": "laravel-php__laravel-debug-bar-exposed",
+    "class_hint": "debug-endpoint"
+  },
+  {
+    "id": "php-phpinfo-exposure",
+    "name": "phpinfo() Page Exposed",
+    "owasp_category": "A05:2021 Security Misconfiguration",
+    "frameworks": [
+      "PHP"
+    ],
+    "description": "A publicly accessible phpinfo() output page reveals PHP version, server software, loaded extensions, environment variables (including those set in .env files loaded via putenv), and all php.ini directives \u2014 frequently exposing database credentials, API keys, and internal network topology.",
+    "runtime_discovery": "Probe common phpinfo paths: /phpinfo.php, /info.php, /php_info.php, /test.php, /?phpinfo=1. Also check server-info paths like /server-info and /_info.",
+    "detection_signal": "HTTP 200 response body contains the string 'PHP Version' followed by a version number and an HTML table with 'PHP Credits' or 'Environment' sections. The Environment table may contain DATABASE_URL, APP_KEY, or similar values.",
+    "active_probe": true,
+    "severity": "medium",
+    "prevalence": "common",
+    "slice": "laravel-php",
+    "uid": "laravel-php__php-phpinfo-exposure",
+    "class_hint": "secrets-exposure"
+  },
+  {
+    "id": "laravel-env-direct-access",
+    "name": "Laravel .env File Accessible via Web Root",
+    "owasp_category": "A05:2021 Security Misconfiguration",
+    "frameworks": [
+      "Laravel",
+      "PHP"
+    ],
+    "description": "When the web server document root is set to the application root rather than the /public subdirectory, the .env file is served as a static text file, exposing APP_KEY, DB_PASSWORD, and all API tokens in plaintext.",
+    "runtime_discovery": "Probe /.env, /.env.backup, /.env.local, /.env.production, /.env.bak, and /.env.old directly with a GET request.",
+    "detection_signal": "HTTP 200 response with Content-Type text/plain or no content-type, and body contains lines matching APP_KEY=base64:, DB_PASSWORD=, MAIL_PASSWORD=, or AWS_SECRET_ACCESS_KEY=.",
+    "active_probe": true,
+    "severity": "critical",
+    "prevalence": "common",
+    "slice": "laravel-php",
+    "uid": "laravel-php__laravel-env-direct-access",
+    "class_hint": "secrets-exposure"
+  },
+  {
+    "id": "laravel-storage-link-unprotected",
+    "name": "Laravel Storage Public Symlink Exposes Private Files",
+    "owasp_category": "A01:2021 Broken Access Control",
+    "frameworks": [
+      "Laravel"
+    ],
+    "description": "Laravel's php artisan storage:link creates a /public/storage symlink to storage/app/public. If sensitive files (user uploads, exports, invoices) are mistakenly stored under storage/app/public instead of the private disk, they become directly downloadable without authentication by guessing or brute-forcing filenames.",
+    "runtime_discovery": "After uploading or receiving a file as an authenticated user, note the file URL. Log out and attempt to access the URL unauthenticated. Also enumerate /storage/ for directory listing or probe predictable filenames (UUIDs, incremental IDs, YYYY/MM/DD/ paths).",
+    "detection_signal": "HTTP 200 response for /storage/<filename> when no auth cookie is present. Alternatively, HTTP 200 on /storage/ with directory index HTML listing filenames.",
+    "active_probe": true,
+    "severity": "high",
+    "prevalence": "occasional",
+    "slice": "laravel-php",
+    "uid": "laravel-php__laravel-storage-link-unprotected",
+    "class_hint": "rate-limit-enum"
+  },
+  {
+    "id": "php-sql-injection-error-based",
+    "name": "PHP SQL Injection via Error-Based Leakage",
+    "owasp_category": "A03:2021 Injection",
+    "frameworks": [
+      "PHP"
+    ],
+    "description": "PHP applications that interpolate user input directly into SQL queries without prepared statements are vulnerable to SQL injection. Error-based injection is detectable at runtime when database errors are printed or returned in responses, leaking table names, column names, and data.",
+    "runtime_discovery": "For each input field and URL parameter, inject a single quote ('). Observe whether the response changes in status code, body length, or content. Try payloads like 1' OR '1'='1 and 1 AND 1=2. For error-based leakage, try ') OR extractvalue(1,concat(0x7e,database()))-- on MySQL targets.",
+    "detection_signal": "Response body contains 'You have an error in your SQL syntax', 'mysql_fetch', 'ORA-', 'pg_query()', or 'SQLSTATE[' error strings. Response body changes in structure between id=1 and id=1' indicating query manipulation.",
+    "active_probe": true,
+    "severity": "critical",
+    "prevalence": "common",
+    "slice": "laravel-php",
+    "uid": "laravel-php__php-sql-injection-error-based",
+    "class_hint": "sqli"
+  },
+  {
+    "id": "laravel-missing-route-auth-middleware",
+    "name": "Laravel Route Missing auth Middleware (IDOR / Unauthenticated Access)",
+    "owasp_category": "A01:2021 Broken Access Control",
+    "frameworks": [
+      "Laravel"
+    ],
+    "description": "Laravel API routes in routes/api.php that lack the auth:sanctum or auth middleware group are publicly accessible. Combined with predictable resource IDs, this allows unauthenticated enumeration and retrieval of other users' data.",
+    "runtime_discovery": "Crawl the app while authenticated to collect all API endpoint URLs. Then replay each request without the Authorization or session cookie. Compare response status codes and body sizes between authenticated and unauthenticated requests.",
+    "detection_signal": "Unauthenticated request to an API endpoint (e.g., GET /api/users/42, GET /api/orders/7) returns HTTP 200 with a full JSON body rather than HTTP 401 or 403.",
+    "active_probe": true,
+    "severity": "high",
+    "prevalence": "common",
+    "slice": "laravel-php",
+    "uid": "laravel-php__laravel-missing-route-auth-middleware",
+    "class_hint": "idor-bola"
+  },
+  {
+    "id": "php-deserialization-phar",
+    "name": "PHP Object Deserialization via unserialize()",
+    "owasp_category": "A08:2021 Software and Data Integrity Failures",
+    "frameworks": [
+      "PHP"
+    ],
+    "description": "PHP applications that pass user-controlled data to unserialize() are vulnerable to PHP object injection. Attackers supply crafted serialized payloads that trigger magic methods (__wakeup, __destruct) on loaded classes, often achieving remote code execution via POP chains.",
+    "runtime_discovery": "Inspect cookies, hidden form fields, URL parameters, and API request bodies for base64-encoded or raw PHP serialized strings (starting with 'O:' or 'a:'). Replay the request after injecting a modified serialized object that references a known gadget class and observe for OOB interaction, timing difference, or error disclosure.",
+    "detection_signal": "Cookie or parameter value matches regex ^[OaCSb]:[0-9]+: (PHP serialize format). Injecting a malformed serialized string returns a distinct error ('unserialize(): Error at offset', 'Class not found') confirming unserialize() code path is reached.",
+    "active_probe": true,
+    "severity": "critical",
+    "prevalence": "occasional",
+    "slice": "laravel-php",
+    "uid": "laravel-php__php-deserialization-phar",
+    "class_hint": "deserialization"
+  },
+  {
+    "id": "laravel-sanctum-token-response-leak",
+    "name": "Laravel Sanctum / Passport Token Returned in API Response Body",
+    "owasp_category": "A02:2021 Cryptographic Failures",
+    "frameworks": [
+      "Laravel"
+    ],
+    "description": "Some Laravel API implementations return the plaintext Sanctum personal access token or Passport access token in the login response body and also persist it in localStorage via JavaScript, rather than using HttpOnly cookies. This exposes the token to XSS-based theft.",
+    "runtime_discovery": "Perform a login POST and inspect the JSON response body for fields named token, access_token, or api_token. Then inspect the browser's localStorage (via JavaScript console or browser tools) for stored token values.",
+    "detection_signal": "POST /api/login response JSON contains a key access_token, token, or api_token with a value matching Laravel Sanctum token format (a long alphanumeric string or a pipe-delimited id|hash). localStorage contains a key with the same value.",
+    "active_probe": true,
+    "severity": "medium",
+    "prevalence": "common",
+    "slice": "laravel-php",
+    "uid": "laravel-php__laravel-sanctum-token-response-leak",
+    "class_hint": "xss"
+  },
+  {
+    "id": "laravel-cors-misconfiguration",
+    "name": "Laravel Overly Permissive CORS Configuration",
+    "owasp_category": "A05:2021 Security Misconfiguration",
+    "frameworks": [
+      "Laravel"
+    ],
+    "description": "Laravel's fruitcake/laravel-cors (now built-in) middleware can be misconfigured with 'allowed_origins' => ['*'] and 'supports_credentials' => true, or with a regex origin reflection. This allows any origin to make credentialed cross-origin requests and read API responses.",
+    "runtime_discovery": "Send requests to authenticated API endpoints with crafted Origin headers (Origin: https://evil.example.com) and observe the Access-Control-Allow-Origin and Access-Control-Allow-Credentials response headers.",
+    "detection_signal": "Response includes both 'Access-Control-Allow-Origin: https://evil.example.com' (reflected) and 'Access-Control-Allow-Credentials: true', or 'Access-Control-Allow-Origin: *' combined with session-cookie-authenticated endpoints returning data.",
+    "active_probe": true,
+    "severity": "high",
+    "prevalence": "common",
+    "slice": "laravel-php",
+    "uid": "laravel-php__laravel-cors-misconfiguration",
+    "class_hint": "cors"
+  },
+  {
+    "id": "laravel-forced-browsing-backup-files",
+    "name": "PHP/Laravel Backup and Config Files Accessible",
+    "owasp_category": "A05:2021 Security Misconfiguration",
+    "frameworks": [
+      "Laravel",
+      "PHP"
+    ],
+    "description": "Developers often leave editor backup files (.php~, .php.bak, .php.swp), config backups (config.php.bak), or zipped source archives (backup.zip, site.tar.gz) in the web root, exposing PHP source code or configuration with credentials.",
+    "runtime_discovery": "For every .php file discovered during crawling, probe common backup suffixes: .php~, .php.bak, .php.old, .php.swp, .php.orig. Also probe top-level paths: /backup.zip, /backup.tar.gz, /db.sql, /.git/config, /composer.json, /composer.lock.",
+    "detection_signal": "HTTP 200 response for a backup filename variant (e.g., /index.php.bak) with Content-Type text/plain or application/octet-stream and body containing PHP source tokens ('<?php', 'DB_PASSWORD', '$password'). HTTP 200 for /.git/config with [core] and [remote] git configuration.",
+    "active_probe": true,
+    "severity": "high",
+    "prevalence": "common",
+    "slice": "laravel-php",
+    "uid": "laravel-php__laravel-forced-browsing-backup-files",
+    "class_hint": "secrets-exposure"
+  },
+  {
+    "id": "laravel-idor-eloquent-id",
+    "name": "Insecure Direct Object Reference on Eloquent Auto-Increment IDs",
+    "owasp_category": "A01:2021 Broken Access Control",
+    "frameworks": [
+      "Laravel"
+    ],
+    "description": "Laravel RESTful routes that use sequential integer primary keys (the Eloquent default) without ownership checks allow authenticated users to enumerate and access other users' resources by incrementing the ID parameter.",
+    "runtime_discovery": "Authenticate as user A and note the IDs in their resource URLs (e.g., /api/invoices/42). Switch to user B's session and request /api/invoices/41, /api/invoices/43, etc. Compare response content to confirm whether user B can read user A's data.",
+    "detection_signal": "Authenticated as user B, GET /api/invoices/42 (owned by user A) returns HTTP 200 with a full resource body rather than HTTP 403 or HTTP 404. Auth-differential comparison confirms different user context returns same data.",
+    "active_probe": true,
+    "severity": "high",
+    "prevalence": "ubiquitous",
+    "slice": "laravel-php",
+    "uid": "laravel-php__laravel-idor-eloquent-id",
+    "class_hint": "idor-bola"
+  },
+  {
+    "id": "php-file-upload-unrestricted",
+    "name": "Unrestricted PHP File Upload Leading to Webshell",
+    "owasp_category": "A03:2021 Injection",
+    "frameworks": [
+      "PHP",
+      "Laravel"
+    ],
+    "description": "File upload endpoints that validate only the client-supplied MIME type or file extension (without server-side magic-byte checks or storage outside the web root) can be abused to upload a .php webshell that is then executed by the web server.",
+    "runtime_discovery": "Submit a file upload form with a file named shell.php (or shell.php.jpg, shell.pHp) containing '<?php system($_GET[\"cmd\"]); ?>'. After upload, navigate to the returned file URL and append ?cmd=id to test for command execution. Also try MIME-type bypass: send Content-Type: image/jpeg with a .php file.",
+    "detection_signal": "The upload endpoint returns a URL path ending in .php (or .pHp, .php5, .phtml). A GET request to that URL with ?cmd=whoami returns a response body containing a Unix username string (e.g., 'www-data') rather than a download prompt or image.",
+    "active_probe": true,
+    "severity": "critical",
+    "prevalence": "occasional",
+    "slice": "laravel-php",
+    "uid": "laravel-php__php-file-upload-unrestricted",
+    "class_hint": "file-upload"
+  },
+  {
+    "id": "laravel-session-fixation-cookie",
+    "name": "Laravel Session Cookie Missing Secure/HttpOnly/SameSite Flags",
+    "owasp_category": "A02:2021 Cryptographic Failures",
+    "frameworks": [
+      "Laravel"
+    ],
+    "description": "Laravel session cookies (laravel_session) or CSRF tokens misconfigured without the Secure, HttpOnly, or SameSite=Strict attributes are vulnerable to theft via XSS, network sniffing on HTTP, and CSRF attacks respectively.",
+    "runtime_discovery": "Perform a standard login and inspect the Set-Cookie response header on the session establishment response. Check each flag: Secure (only sent over HTTPS), HttpOnly (not accessible via JS), and SameSite value (Strict/Lax vs None).",
+    "detection_signal": "Set-Cookie header for laravel_session (or XSRF-TOKEN) is missing the HttpOnly attribute, missing the Secure attribute when the site is HTTPS, or sets SameSite=None without also setting Secure. Observable via response header inspection without any active payload.",
+    "active_probe": false,
+    "severity": "medium",
+    "prevalence": "common",
+    "slice": "laravel-php",
+    "uid": "laravel-php__laravel-session-fixation-cookie",
+    "class_hint": "xss"
+  }
+]

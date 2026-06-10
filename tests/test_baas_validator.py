@@ -6,18 +6,24 @@ No network requests are made.
 
 from __future__ import annotations
 
+import os
 import unittest
 from typing import Any, Dict, List
+from unittest import mock
 
 from keyleak.baas_validator import (
     BaaSConfig,
     BaaSProbeResult,
     BaaSValidation,
     TABLE_PROBE_CAP,
+    _probe_target_block_reason,
+    _tables_from_openapi,
     extract_baas_config,
+    make_default_prober,
     validate_baas_config,
 )
 from keyleak.browser_scanner import evaluate_findings_payload
+from keyleak.net_guard import ALLOW_PRIVATE_ENV
 
 
 def _mock_prober(responses: Dict[str, Dict[str, Any]]):
@@ -446,10 +452,26 @@ class WriteAccessTests(unittest.TestCase):
                 return {"status_code": 401, "body": None, "headers": {}}
             return {"status_code": 404, "body": None, "headers": {}}
 
-        result = validate_baas_config(self._config(), prober=smart_prober)
+        result = validate_baas_config(self._config(), prober=smart_prober, allow_write_probe=True)
         assert result.key_valid is True
         assert len(result.writable_tables) == 1
         assert any(f.type == "baas_writable_table" for f in result.findings)
+
+    def test_write_probe_skipped_by_default_sends_no_post(self):
+        """Safety: the default scan is read-only — no POST insert is ever issued."""
+        methods = []
+
+        def spy_prober(method, url, headers, body=None):
+            methods.append(method)
+            if method == "GET" and url.endswith("/rest/v1/"):
+                return {"status_code": 200, "body": None, "headers": {}}
+            if method == "GET" and "/rest/v1/users" in url:
+                return {"status_code": 200, "body": [{"id": 1}], "headers": {}}
+            return {"status_code": 404, "body": None, "headers": {}}
+
+        result = validate_baas_config(self._config(), prober=spy_prober)  # default: no opt-in
+        assert "POST" not in methods, "read-only scan must not POST to the target"
+        assert result.writable_tables == []
 
     def test_write_blocked_by_rls(self):
         def rls_prober(method, url, headers, body=None):
@@ -465,7 +487,7 @@ class WriteAccessTests(unittest.TestCase):
                 return {"status_code": 401, "body": None, "headers": {}}
             return {"status_code": 404, "body": None, "headers": {}}
 
-        result = validate_baas_config(self._config(), prober=rls_prober)
+        result = validate_baas_config(self._config(), prober=rls_prober, allow_write_probe=True)
         assert len(result.writable_tables) == 0
         assert not any(f.type == "baas_writable_table" for f in result.findings)
 
@@ -527,6 +549,234 @@ class RealtimeAnalysisTests(unittest.TestCase):
         channel_findings = [f for f in result.findings if f.type == "baas_predictable_channel"]
         assert len(channel_findings) == 1
         assert "notifications" in channel_findings[0].evidence.snippet
+
+
+class OpenApiTableEnumerationTests(unittest.TestCase):
+    """M5: tables exposed by the PostgREST root but NOT named in the bundle (CBSE case)."""
+
+    def test_parse_tables_from_openapi_definitions_and_paths(self):
+        body = {
+            "definitions": {"users": {}, "payouts": {}},
+            "paths": {"/": {}, "/users": {}, "/secret_notes": {}, "/rpc/do_thing": {}, "/{id}": {}},
+        }
+        names = _tables_from_openapi(body)
+        self.assertIn("users", names)
+        self.assertIn("payouts", names)
+        self.assertIn("secret_notes", names)
+        self.assertNotIn("rpc/do_thing", names)   # RPCs excluded
+        self.assertNotIn("", names)                # root excluded
+        self.assertNotIn("{id}", names)            # parameterized excluded
+
+    def test_parse_handles_non_dict_body(self):
+        self.assertEqual(_tables_from_openapi(None), [])
+        self.assertEqual(_tables_from_openapi("not json"), [])
+
+    def test_enumerated_only_open_table_is_probed_and_flagged(self):
+        # The page never references 'private_messages'; the OpenAPI root exposes it.
+        config = BaaSConfig(
+            provider="supabase",
+            project_url="https://abcdefghijklmnopqrst.supabase.co",
+            api_key="anon-key",
+            tables=["public_posts"],  # the only table the JS bundle named
+        )
+
+        def prober(method, url, headers, body=None):
+            if method == "GET" and url.endswith("/rest/v1/"):
+                return {"status_code": 200, "headers": {}, "body": {
+                    "definitions": {"public_posts": {}, "private_messages": {}},
+                }}
+            if "/rest/v1/private_messages" in url:
+                return {"status_code": 200, "headers": {}, "body": [{"id": 1, "body": "secret"}]}
+            if "/rest/v1/public_posts" in url:
+                return {"status_code": 200, "headers": {}, "body": [{"id": 1, "title": "hi"}]}
+            return {"status_code": 404, "headers": {}, "body": None}
+
+        result = validate_baas_config(config, prober=prober)
+        open_names = {r.target for r in result.open_tables}
+        # the enumerated-only table was discovered and probed even though the JS never named it
+        self.assertIn("private_messages", open_names)
+        self.assertIn("public_posts", open_names)
+        # the enumerated-only finding is a LEAD with softened, accurate wording
+        enum_finding = next(f for f in result.findings
+                            if f.type == "baas_open_table" and "private_messages" in f.evidence.redacted_value)
+        self.assertEqual(enum_finding.validation_status, "lead")
+        self.assertIn("not among the table names extracted", enum_finding.risk_reason)
+        self.assertNotIn("no effective RLS", enum_finding.risk_reason)  # not asserted as fact
+        # a JS-referenced readable table is a CONFIRMED no-RLS finding
+        js_finding = next(f for f in result.findings
+                          if f.type == "baas_open_table" and "public_posts" in f.evidence.redacted_value)
+        self.assertEqual(js_finding.validation_status, "confirmed")
+        self.assertIn("no effective RLS", js_finding.risk_reason)
+
+    def test_empty_array_is_not_an_open_table(self):
+        """200 [] = anon role saw no rows = correctly RLS-protected. NOT a finding."""
+        config = BaaSConfig(
+            provider="supabase",
+            project_url="https://abcdefghijklmnopqrst.supabase.co",
+            api_key="anon-key",
+            tables=["secured"],
+        )
+
+        def prober(method, url, headers, body=None):
+            if method == "GET" and url.endswith("/rest/v1/"):
+                return {"status_code": 200, "headers": {}, "body": {"definitions": {"secured": {}}}}
+            if "/rest/v1/secured" in url:
+                return {"status_code": 200, "headers": {}, "body": []}  # empty -> protected
+            return {"status_code": 404, "headers": {}, "body": None}
+
+        result = validate_baas_config(config, prober=prober)
+        self.assertEqual(
+            [f for f in result.findings if f.type == "baas_open_table"], [],
+            "a 200 empty-array response must not produce an open-table finding",
+        )
+        self.assertTrue(any(p.target == "secured" and p.status == "empty"
+                            for p in result.protected_tables))
+
+    def test_view_gets_view_remediation_not_alter_table(self):
+        """A read-only relation (no POST in OpenAPI) is a view; ALTER TABLE is invalid."""
+        config = BaaSConfig(
+            provider="supabase",
+            project_url="https://abcdefghijklmnopqrst.supabase.co",
+            api_key="anon-key",
+            tables=[],
+        )
+
+        def prober(method, url, headers, body=None):
+            if method == "GET" and url.endswith("/rest/v1/"):
+                # leaderboard exposed as a path with GET only (a view) — no post op
+                return {"status_code": 200, "headers": {}, "body": {
+                    "paths": {"/leaderboard": {"get": {}}},
+                }}
+            if "/rest/v1/leaderboard" in url:
+                return {"status_code": 200, "headers": {}, "body": [{"rank": 1, "user": "a"}]}
+            return {"status_code": 404, "headers": {}, "body": None}
+
+        result = validate_baas_config(config, prober=prober)
+        finding = next(f for f in result.findings if f.type == "baas_open_table")
+        self.assertIn("view", finding.risk_reason.lower())
+        self.assertNotIn("ALTER TABLE", finding.remediation)
+        self.assertIn("security_invoker", finding.remediation)
+
+    def test_rpc_prefixed_table_name_survives_parsing(self):
+        names = _tables_from_openapi({"definitions": {"rpc_audit_log": {}}, "paths": {"/rpc/do": {"post": {}}}})
+        self.assertIn("rpc_audit_log", names)   # a real table, not an RPC
+        self.assertNotIn("do", names)           # the actual RPC is excluded (path has /rpc/)
+
+    def test_table_severity_uses_token_boundaries(self):
+        from keyleak.baas_validator import _table_severity
+        self.assertEqual(_table_severity("authors"), "high")        # not 'auth'
+        self.assertEqual(_table_severity("reporting"), "high")      # not 'report'
+        self.assertEqual(_table_severity("payout_ledger"), "critical")
+        self.assertEqual(_table_severity("admin"), "critical")
+        for table in (
+            "payments",
+            "payouts",
+            "invoices",
+            "subscriptions",
+            "admins",
+            "tokens",
+            "credentials",
+            "secrets",
+            "reports",
+            "user_blocks",
+            "support_tickets",
+        ):
+            self.assertEqual(_table_severity(table), "critical", table)
+
+    def test_definitions_only_table_is_not_misclassified_as_view(self):
+        """Regression: a base table from a paths-less OpenAPI body must get table
+        (ALTER TABLE) remediation, not view (security_invoker) remediation."""
+        config = BaaSConfig(
+            provider="supabase",
+            project_url="https://abcdefghijklmnopqrst.supabase.co",
+            api_key="anon-key",
+            tables=["orders"],
+        )
+
+        def prober(method, url, headers, body=None):
+            if method == "GET" and url.endswith("/rest/v1/"):
+                # definitions-only: insertability unknown -> must default to table
+                return {"status_code": 200, "headers": {}, "body": {"definitions": {"orders": {}}}}
+            if "/rest/v1/orders" in url:
+                return {"status_code": 200, "headers": {}, "body": [{"id": 1, "total": 9}]}
+            return {"status_code": 404, "headers": {}, "body": None}
+
+        result = validate_baas_config(config, prober=prober)
+        finding = next(f for f in result.findings if f.type == "baas_open_table")
+        self.assertIn("ALTER TABLE", finding.remediation)
+        self.assertNotIn("security_invoker", finding.remediation)
+        self.assertNotIn("view", finding.risk_reason.lower())
+
+
+class SSRFGuardTests(unittest.TestCase):
+    """Audit W1/S0: the BaaS probe target comes from the scanned page's own JS,
+    so it is attacker-influenced. The real-network prober must refuse internal /
+    loopback / link-local (cloud-metadata) targets before any request egresses.
+    All assertions use IP literals, so no DNS or network is exercised.
+    """
+
+    def setUp(self):
+        # Make the default-blocking expectations independent of a preset env var.
+        self._env = mock.patch.dict(os.environ, {}, clear=False)
+        self._env.start()
+        os.environ.pop(ALLOW_PRIVATE_ENV, None)
+
+    def tearDown(self):
+        self._env.stop()
+
+    INTERNAL = [
+        "http://169.254.169.254/rest/v1/users",   # cloud metadata (link-local)
+        "http://127.0.0.1:8000/rest/v1/users",     # loopback
+        "http://10.1.2.3/rest/v1/users",           # RFC1918 private
+        "http://192.168.0.5/rest/v1/users",        # RFC1918 private
+        "http://[::1]/rest/v1/users",              # IPv6 loopback
+    ]
+
+    def test_default_prober_blocks_internal_targets_without_egress(self):
+        prober = make_default_prober()
+        for url in self.INTERNAL:
+            resp = prober("GET", url, {})
+            self.assertEqual(resp["status_code"], 0, url)
+            self.assertIn("blocked", resp, url)
+            self.assertTrue(resp["blocked"], url)
+
+    def test_proxied_prober_is_also_guarded(self):
+        # The proxy path is a separate prober construction; it must guard too.
+        prober = make_default_prober(proxy=None)
+        resp = prober("GET", "http://169.254.169.254/storage/v1/bucket", {})
+        self.assertEqual(resp["status_code"], 0)
+        self.assertIn("metadata", resp["blocked"].lower())  # link-local/cloud-metadata reason
+
+    def test_public_ip_literal_not_blocked_by_guard(self):
+        # 8.8.8.8 is a routable public address — the guard must not block it
+        # (the request itself is not made here; we only assert the guard verdict).
+        self.assertIsNone(_probe_target_block_reason("https://8.8.8.8/rest/v1/x"))
+
+    def test_link_local_blocked_even_with_allow_private(self):
+        # Cloud metadata must stay blocked even when the operator opts into
+        # private targets — link-local is never a legitimate scan target.
+        with mock.patch.dict(os.environ, {ALLOW_PRIVATE_ENV: "1"}):
+            self.assertIsNotNone(_probe_target_block_reason("http://169.254.169.254/x"))
+
+    def test_loopback_allowed_only_with_opt_in(self):
+        with mock.patch.dict(os.environ, {ALLOW_PRIVATE_ENV: ""}, clear=False):
+            os.environ.pop(ALLOW_PRIVATE_ENV, None)
+            self.assertIsNotNone(_probe_target_block_reason("http://127.0.0.1/x"))
+        with mock.patch.dict(os.environ, {ALLOW_PRIVATE_ENV: "1"}):
+            self.assertIsNone(_probe_target_block_reason("http://127.0.0.1/x"))
+
+    def test_validate_baas_config_skips_probing_blocked_supabase_target(self):
+        # End-to-end: a Supabase config whose project_url resolves to an internal
+        # IP yields zero probe findings via the real prober (no egress, no crash).
+        config = BaaSConfig(
+            provider="supabase",
+            project_url="http://169.254.169.254",
+            api_key="eyJhbGciOiJ.fake.fake",
+            tables=["users", "orders"],
+        )
+        result = validate_baas_config(config)  # uses the guarded default prober
+        self.assertEqual(result.findings, [])
+        self.assertEqual(result.open_tables, [])
 
 
 if __name__ == "__main__":

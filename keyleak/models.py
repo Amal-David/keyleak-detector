@@ -212,11 +212,32 @@ class ScanReport:
     @property
     def verdict(self) -> Dict[str, str]:
         counts = self.summary
-        if counts["critical_severity"] or counts["high_severity"]:
+        blocking = counts["critical_severity"] + counts["high_severity"]
+        if blocking:
+            # Honest reason (audit W10): the gate is severity-based — a leaked
+            # secret is high-severity and must block even though it was found by a
+            # static match, so we do NOT require active confirmation to block.
+            # "Confirmed" means a LIVE probe verified exploitability (an open RLS
+            # table, a working IDOR) — i.e. ``validation_status == "confirmed"``.
+            # The static detector default ``"validated"`` is NOT active
+            # confirmation (it's an exact-match-quality flag), so it must NOT be
+            # reported as confirmed (gate B3-MF1).
+            confirmed = sum(
+                1 for f in self.findings
+                if f.severity in ("critical", "high") and f.validation_status == "confirmed"
+            )
+            static = blocking - confirmed
+            parts = [f"{blocking} high/critical exposure(s)"]
+            if confirmed and static:
+                parts.append(f"{confirmed} confirmed by active probe, {static} static detection(s) to verify")
+            elif confirmed:
+                parts.append(f"all {confirmed} confirmed by active probe")
+            else:
+                parts.append("static detections — verify before relying on them")
             return {
                 "status": VERDICT_BLOCK,
                 "label": "BLOCK SHIP",
-                "reason": "Critical or high-confidence exposures need fixing before release.",
+                "reason": f"{'; '.join(parts)}. Fix before release.",
             }
         if counts["medium_severity"]:
             return {

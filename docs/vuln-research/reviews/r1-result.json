@@ -1,0 +1,239 @@
+{
+  "round": 1,
+  "scores": [
+    {
+      "lens": "security-correctness",
+      "score": 72
+    },
+    {
+      "lens": "architecture-grounding",
+      "score": 72
+    },
+    {
+      "lens": "code-quality",
+      "score": 62
+    },
+    {
+      "lens": "product-usefulness",
+      "score": 74
+    }
+  ],
+  "reviews": [
+    {
+      "lens": "security-correctness",
+      "overall_score": 72,
+      "verdict": "The design set is well-grounded and unusually honest about most existing scaffolding — the Supabase RLS read path (`_probe_tables`), the two-user IDOR comparator, the provenance map, and the bundle model all exist as described and the bundle code/tests are clean and pass (12/12). The correlation rule book is mostly sound in spirit and would catch the headline CBSE case. BUT there are two blocking safety/correctness defects and several ungrounded claims that, if implemented as written, would either ship an UNSAFE 'read-only' probe or build a correlation engine on a field that does not exist. Most damaging: the program repeatedly asserts a 'read-only by invariant' guarantee while the already-shipped `_probe_write_access` performs a real POST insert that only rolls back IF the server honors a Supabase-specific `Prefer: tx=rollback` header — and nothing wires the bundles' `read_only` policy into that prober to suppress it. The deep-dive doc even specifies the SAFE behavior (infer write policy, do not mutate) that the actual code contradicts. Not yet acceptable; fix the write-probe safety story and the correlation-engine grounding before building on this base.",
+      "must_fix": [
+        {
+          "artifact": "keyleak/baas_validator.py:566 _probe_write_access + bundles.py read_only invariant",
+          "issue": "The 'read-only by invariant' guarantee asserted in bundles.py (ProbePolicy.read_only=True), test_bundles.py, scan-bundles.md ('Active probing stays read-only ... never destructive'), and integration-plan.md ('read-only-by-intent') is FALSE for the one prober that mutates. `_probe_write_access` sends a real `POST /rest/v1/{table}` insert. It relies on `Prefer: tx=rollback` to roll back — but that header is only honored when the Supabase server has `db-tx-end` enabled; the docstring itself admits the fallback path and that a 201 (row actually created) 'should not happen ... but flag it'. If tx=rollback is silently ignored (the common default), the insert COMMITS a row (`{\"__keyleak_write_probe__\": true}`) into the target's table. This is a write to a third party's database from a tool that loudly claims it never sends destructive payloads.",
+          "why": "A security tool that writes to a scan target while advertising read-only safety is both a legal/scope violation and a credibility-killer. The read_only=True flag in ProbePolicy is never plumbed into validate_baas_config/_probe_write_access, so the invariant is cosmetic — asserted in tests that mock the network and never exercise the un-rolled-back commit path.",
+          "suggested_fix": "Either (a) remove the active insert and adopt the deep-dive's own stated-safe approach: infer write capability from the PostgREST OpenAPI root / `Allow` header / 405-vs-401 on a no-body request, never POSTing a row; or (b) gate `_probe_write_access` behind an explicit, non-default `--allow-write-probe` ack AND thread `ProbePolicy.read_only` through `validate_baas_config` so read-only bundles provably skip it. Add a test that fails if a POST insert is issued under read_only=True. Until then, stop claiming 'read-only by invariant' / 'never destructive' in bundles.py, scan-bundles.md, integration-plan.md, and supabase-rls-deepdive.md."
+        },
+        {
+          "artifact": "docs/vuln-research/design/correlation-engine.md (ChainLeg.classes / canonical_class)",
+          "issue": "The correlation engine's core matching mechanism is built on a `canonical_class` field that does not exist anywhere in the codebase. The doc says legs 'reference catalog canonical_class keys', indexes findings 'by type/detector_id/canonical_class', and justifies it as 'robust to detector renames'. Grepping the repo: `canonical_class` appears ONLY in correlation-engine.md (4 hits), never in keyleak/. `Detector` has `canonical_id` (= `pack.id`) and `finding_type`; `Finding` has `type`/`detector_id`/`category`. There is no class taxonomy layer.",
+          "why": "If implemented as written, either the engine silently falls back to brittle glob-on-detector_id matching (defeating the stated rename-robustness and risking both misses and false fires when detector ids drift), or the author has to invent and backfill a `canonical_class` on ~43 detectors first — an undocumented prerequisite that the staged roadmap (M6) does not account for. The single-leg `service-role-leak` rule is fine, but most multi-leg rules depend on this missing layer.",
+          "suggested_fix": "Add an explicit prerequisite milestone: introduce a `canonical_class` (or reuse `finding_type` + a small class map) field on Detector and on baas/access-control findings, with tests, BEFORE M6. OR rewrite the rule book to match on the fields that actually exist today (`finding.type` like `baas_open_table`, `idor`; `detector_id` like `baas.open_table`, `access-control.two_user_comparison`) and drop the canonical_class abstraction. Make the chosen mechanism concrete with the real strings the current code emits (e.g. type=='baas_open_table' AND a supabase anon-key finding), not aspirational class names."
+        },
+        {
+          "artifact": "docs/vuln-research/design/correlation-engine.md (same_host co-location) + architecture-map.md provenance claim",
+          "issue": "Chains require co-location via `report.extra['provenance']` (finding.id -> [urls]) and `where='same_host'`. But provenance is ONLY populated by `site_scanner._merge_findings` for multi-page site scans; `reporting.build_report` (the doc's stated hook point) does NOT set extra['provenance'] — it only sets profile/packs/pack_summary. architecture-map.md line 16-19 claims build_report is where provenance lives; it is not. Worse, BaaS findings are produced inside `browser_scanner._run_baas_validation` for a single URL and may never flow through `_merge_findings`, so they can have NO provenance entry. A `requires_same_host=True` rule (all but one) would then never fire because the host index is empty for exactly the findings the flagship `rls-anon-fulldb` chain needs.",
+          "why": "The flagship chain (leaked anon key + open table on same host) is precisely the case most likely to come from a single-URL browser scan, where provenance is absent. Building correlate() to require same_host against an unpopulated index means the headline capability silently no-ops — a false sense of coverage, not a false positive, but equally damaging.",
+          "suggested_fix": "Specify how provenance is populated for single-URL and BaaS-validation findings before correlate() runs (e.g. seed provenance from finding.source/evidence.request_url host when the site-scan map is absent). Correct architecture-map.md to state provenance is set by site_scanner, not build_report, and define a fallback host key. Add a positive test for rls-anon-fulldb on a single-URL scan with no site provenance map."
+        }
+      ],
+      "unsupported_claims": [
+        {
+          "artifact": "supabase-rls-deepdive.md item 3 (Open table write)",
+          "claim": "Write detection is done 'read-only *probe* via Prefer: return=minimal + immediate constraint failure, or a dry-run that we never commit; if a true no-op insert can't be guaranteed safe, downgrade to write policy present inference ... rather than mutating'.",
+          "why_doubtful": "The actual shipped `_probe_write_access` does the opposite of the safe path the doc describes: it sends a live POST insert relying on `Prefer: tx=rollback` (not return=minimal as a safety mechanism), and never downgrades to inference. The doc describes a safe design that the code does not implement, so the deep-dive misrepresents current behavior as safer than it is.",
+          "verified_against_source": true
+        },
+        {
+          "artifact": "supabase-rls-deepdive.md item 5 + architecture-map.md (_probe_storage)",
+          "claim": "'Open storage bucket — anon can list/download objects. Signal: GET /storage/v1/object/list/{bucket} or /storage/v1/b/{b}/o -> 200', and that `_probe_storage` reveals public buckets.",
+          "why_doubtful": "The primary code path probes `GET /storage/v1/bucket` (list ALL buckets), which in Supabase requires the service_role key — with an anon key it returns 401/403 (the tests confirm this by mocking 403). So for the normal anon-key CBSE case the bucket-listing finding will rarely fire; only the secondary per-named-bucket `object/list` path works anonymously, and only if bucket names were extracted from JS. The deep-dive overstates anon storage-enumeration capability and doesn't flag that the bucket-list endpoint needs service_role.",
+          "verified_against_source": true
+        },
+        {
+          "artifact": "correlation-engine.md seed rule book (most multi-leg chains beyond rls-*/service-role/idor)",
+          "claim": "~24 chains spanning ssrf, jwt alg-none, host-header injection, request smuggling, mass-assignment, GraphQL introspection, default-creds, open-redirect, subdomain-takeover, etc. — implying the underlying single-finding detectors exist to feed the legs.",
+          "why_doubtful": "Only a handful of the referenced leg sources exist today: baas_open_table/open_storage/open_rpc/service_role (baas_validator), idor (access_control + appsec), source-map and secrets (detectors). The packs that would emit ssrf, ssti, jwt-alg-none, mass-assignment, host-header, smuggling, graphql-introspection, default-creds, cors-credentials, csp-missing are all in PLANNED_PACKS (injection/authn/client/api/recon/headers) with ZERO detectors implemented. ~17 of the 24 chains can never fire until those detectors ship (M2-M5). The doc presents the rule book as v1 without marking which chains are inert pending detector work.",
+          "verified_against_source": true
+        },
+        {
+          "artifact": "correlation-engine.md confidence model",
+          "claim": "confidence='confirmed' only if at least one leg came from an active probe; chains are reproducible and 'cite exactly which findings triggered it'.",
+          "why_doubtful": "There is no field on Finding distinguishing active-probe origin from passive pattern origin that the doc identifies (validation_status exists with values like 'confirmed'/'lead'/'validated', but the doc never maps its 'active probe leg' test onto validation_status). The 'confirmed only if active-probe leg' rule has no concrete grounding in an existing finding attribute, so reproducibility of the confidence label is unproven as specified.",
+          "verified_against_source": true
+        }
+      ],
+      "evidence_gaps": [
+        "No test exercises the un-rolled-back write path: test_baas_validator mocks the POST to return 400/403, so the dangerous case (server ignores Prefer: tx=rollback and commits the probe row) is never covered. The safety of `_probe_write_access` against a real PostgREST without db-tx-end is unverified and, by the header semantics, unsafe.",
+        "No correlation-engine code exists yet (keyleak/attack_chains.py absent), so all rule-firing / false-positive-rate claims are design-only. I could not verify that correlate() avoids drowning users in false positives; the same_host + provenance gating that would limit FPs is exactly the part shown above to be unpopulated for single-URL/BaaS findings.",
+        "The deep-dive's two highest-value proposed enhancements (PostgREST OpenAPI-root table enumeration via GET /rest/v1/, and RLS-disabled-vs-permissive distinction) are honestly labeled as gaps, but there is no proof PostgREST's OpenAPI root actually lists RLS-protected-but-exposed tables for an anon key in the CBSE case; this is the crux of the 'finds tables the JS never named' claim and is asserted without a probe/fixture demonstrating it.",
+        "ACTIVE_CHECKS registry, ActiveCheck protocol, GraphQL probe, BFLA/BOPLA generalization, and per-table RLS matrix model are all proposed but unimplemented; bundle phases (probe/forms/fuzz/mitm) resolve to packs with no checks behind them. A `--bundle injection` run today would declare active fuzz phases but execute nothing, and integration-plan.md's 'skip loudly' guarantee is unverified (no code).",
+        "I could not verify that `offline_guard.install_socket_block` actually protects the active BaaS/IDOR probes in practice — it patches socket.connect at the socket layer, but requests/urllib3 connection pooling and the injectable prober path were not traced end-to-end for a guaranteed block; the architecture-map asserts 'all active HTTP routes through proxy.py and honors offline_guard' but the baas prober builds its own requests call and offline enforcement is process-global monkeypatching, not a per-prober guard."
+      ],
+      "strengths": [
+        "bundles.py and test_bundles.py are genuinely solid: clean dataclasses, import-time validate_bundles() that rejects active-phase/inactive-policy and read_only=False mismatches, case-insensitive resolve, and tests that pin intent (passive vs active split, deep excludes repo-only packs, write-policy rejection). All 12 tests pass. This artifact is shippable as-is.",
+        "Grounding is mostly accurate and honest: the build_report signature, _attack_vector_findings folding into category=access-control, _merge_findings provenance (finding.id -> sorted urls), the injectable prober/fetch pattern in baas_validator and access_control, and the probe caps (TABLE 50/BUCKET 10/RPC 20/WRITE 20) all match the real source exactly.",
+        "The RPC handling is a model of restraint and is correctly described: `_probe_rpcs` lists functions as leads WITHOUT POSTing (avoiding side-effects), and a test asserts no POST to /rpc/ — this is the right read-only instinct that the write-probe should have followed.",
+        "The flagship CBSE chain (leaked anon key + RLS-off table) is real and well-supported by existing code: _probe_tables genuinely does GET /rest/v1/{t}?select=*&limit=1 and emits a confirmed baas_open_table finding with sensitive-table severity escalation. The single-leg service-role-leak escalation is also already implemented (baas_service_role_exposed, confidence 1.0) and correctly singled out as not requiring same_host.",
+        "The two-user IDOR comparator is technically sound and conservative: read-only GETs, allow_redirects=False, requires BOTH users 2xx, body similarity > 0.85, and SequenceMatcher on capped 5000-char samples — low false-positive design, matching the doc's description. The deterministic-rules-first / LLM-optional-and-never-gating decision is the correct architecture for a CI security tool.",
+        "The staged roadmap (M1 pure-additive bundles first, fuzz/MITM last and opt-in) shows good risk sequencing, and open questions (MITM off by default) are explicitly flagged for the human rather than silently decided."
+      ]
+    },
+    {
+      "lens": "architecture-grounding",
+      "overall_score": 72,
+      "verdict": "Strong, mostly-accurate grounding with one excellent fully-shipped artifact (bundles.py + its tests pass and enforce real invariants), but three load-bearing integration claims do not survive contact with the source. The correlation-engine hook (\"pass correlated vectors through build_report's existing attack_vectors arg\") will silently drop data because _attack_vector_findings only accepts a {\"subdomains\":[{host,findings}]} shape and runs finding_from_legacy — not a list of AttackVector/Finding. The blast_radius signature is misquoted (real API is compute_blast_radius(finding, raw_value, *, probes) -> BlastRadius, not blast_radius(finding, prober)). And the deep bundle composes unpopulated planned packs into deep.packs, which normalize_packs — the doc's own stated reuse point — rejects with ValueError, so `--bundle deep` would crash today. The BaaS, access_control, models, reporting, offline_guard, proxy, and DETECTOR_PACKS/PROFILE_PACKS claims all check out (with one minor RPC-probing inaccuracy). Fix the correlation hook contract, the blast_radius signature, and the deep-bundle/normalize_packs collision before this is buildable. Not yet at 85.",
+      "must_fix": [
+        {
+          "artifact": "docs/vuln-research/design/correlation-engine.md (lines 20-30, 119-122) and architecture-map.md (lines 64-71)",
+          "issue": "Claims correlate() output is passed 'through the existing attack_vectors channel' of build_report. The real build_report calls _attack_vector_findings(attack_vectors), which (reporting.py:363-374) iterates attack_vectors['subdomains'] -> host_result['findings'] (legacy DICTS) and runs finding_from_legacy(...). It cannot consume a list[AttackVector] or list[Finding]. Feeding correlate() output through this arg silently yields zero findings (the dict has no 'subdomains' key).",
+          "why": "The single named integration seam for the whole correlation engine does not exist in the shape claimed. As written, the chained attack vectors would never appear in the report — a silent no-op, exactly the failure mode the project's own 'fail loud' rule forbids.",
+          "suggested_fix": "Drop the 'reuse attack_vectors arg' claim. Either (a) add a NEW build_report parameter (e.g. attack_chains: list[AttackVector]) plus a dedicated _attack_vector_section()/serializer, or (b) have correlate() emit legacy-shaped finding dicts wrapped as {'subdomains':[{'host':h,'findings':[...]}]} — but that loses the AttackVector model and severity-escalation semantics, so (a) is correct. Update the data-model section to note build_report must be extended, not merely 'hooked'."
+        },
+        {
+          "artifact": "docs/vuln-research/design/architecture-map.md (line 33) and integration-plan.md (line 31)",
+          "issue": "States 'blast_radius.blast_radius(finding, prober)'. The real public API (blast_radius.py:186) is compute_blast_radius(finding, raw_value, *, probes: Optional[Dict[str, Prober]]) -> BlastRadius. There is no blast_radius() function and no positional 'prober' arg; probes is a keyword dict keyed by detector_id, and a raw_value token is required or the result is status='skipped'.",
+          "why": "The doc cites this as the proven injectable-prober pattern the new ActiveCheck registry should mirror. A reviewer copying the cited signature builds the wrong abstraction (single prober vs per-detector probe dict; missing the raw_value requirement).",
+          "suggested_fix": "Correct to compute_blast_radius(finding, raw_value=None, *, probes={detector_id: Prober}) -> BlastRadius. When citing it as the model for ActiveCheck's injectable http, note the real pattern is a detector_id->probe dict plus a required raw token, not a single callable."
+        },
+        {
+          "artifact": "keyleak/bundles.py (deep bundle, lines 119-126; web_packs lines 75-77) vs scan-bundles.md line 87 / integration-plan.md line 56",
+          "issue": "deep.packs = web_packs() = all_known_packs() - repo_only, which INCLUDES the six PLANNED_PACKS (api/authn/client/headers/injection/recon) that are not in DETECTOR_PACKS. The docs say bundle resolution 'Reuses normalize_packs'. Verified at runtime: normalize_packs(deep.packs) raises ValueError: Unknown detector pack(s): api, authn, client, headers, injection, recon. So `keyleak scan <url> --bundle deep` (and recon/authz/injection bundles referencing planned packs) crashes at pack resolution.",
+          "why": "The headline 'deep scan runs everything' path is dead-on-arrival the moment it touches the existing pack pipeline. The bundles unit tests pass only because they never call normalize_packs — they assert against all_known_packs(), masking the collision. This is a test that verifies behavior but not the integration intent.",
+          "suggested_fix": "Either (a) make the CLI/site_scanner resolve bundle packs through a filter that intersects with populated DETECTOR_PACKS and warns loudly about skipped planned packs (matches the 'skip loudly' principle the docs already state for phases), or (b) keep deep.packs pointing only at populated packs until M2 lands the new packs. Add a test that runs normalize_packs over every bundle's packs so this fails loudly in CI."
+        }
+      ],
+      "unsupported_claims": [
+        {
+          "artifact": "architecture-map.md line 26 / supabase-rls-deepdive.md line 21",
+          "claim": "_probe_rpcs does 'POST /rest/v1/rpc/{fn}' / Supabase RPC probe 'POST /rest/v1/rpc/{fn}'",
+          "why_doubtful": "baas_validator.py:525-559: _probe_rpcs deliberately does NOT POST — its docstring says 'POSTing to an RPC endpoint executes the function, which may have side effects. Instead we emit each client-referenced RPC as a lead'. No prober call is made. The docs describe a request that the code intentionally avoids. supabase-rls-deepdive.md line 50 elsewhere correctly says 'active read-only call' but the prose at line 21 and architecture-map line 26 imply a live POST that does not happen.",
+          "verified_against_source": true
+        },
+        {
+          "artifact": "architecture-map.md line 53 / correlation-engine.md line 26",
+          "claim": "'ScanReport.extra carries ... provenance' and context carries report.extra['provenance'] (finding.id -> [urls]) so chains can require co-location",
+          "why_doubtful": "Partially true but with a load-bearing gap: provenance is populated ONLY by site_scanner.scan_site (site_scanner.py:686-691). build_report itself never sets extra['provenance'] (reporting.py:27-37 sets only profile/packs/pack_summary). Single-URL browser_scan and local scans produce NO provenance. So the correlation engine's 'same_host' constraint silently degrades to 'any' for every non-site scan — the doc presents provenance as always available.",
+          "verified_against_source": true
+        },
+        {
+          "artifact": "architecture-map.md line 49",
+          "claim": "Built-in DETECTORS list (~43)",
+          "why_doubtful": "Plausible and consistent with models.py comment 'all 43 detectors', but I did not count the live DETECTORS list entries directly, so the exact ~43 figure is asserted, not verified in this pass. Low-risk; flagged for completeness.",
+          "verified_against_source": false
+        }
+      ],
+      "evidence_gaps": [
+        "The catalog->detector mapping (integration-plan.md section 7) is explicitly deferred 'after P3' — so the central claim that 'the ~Top-51 vulns become real coverage' has no concrete per-item grounding yet; the four-shape taxonomy is asserted but unmapped.",
+        "No artifact addresses how active_phases (probe/forms/fuzz/mitm) actually get sequenced in site_scanner — scan_site's real signature (site_scanner.py:536-553) has no bundle/active_phases/probe_policy params; integration-plan.md section 4 describes scan_site(..., bundle='deep') as if it exists, but that wiring is entirely unbuilt and the gap between the current signature and the proposed one is not called out.",
+        "The 'ActiveCheck' Protocol (integration-plan.md section 3) cites Target/Prober/Budget types that do not exist in the codebase; no grounding that these can be introduced without conflicting with the existing BaaSProber/Prober (blast_radius) callable conventions, which differ from the proposed Protocol shape.",
+        "ProbePolicy.max_requests/rate_per_sec (bundles.py:45-53) are declared but nothing in the real scan path reads or enforces them — the read-only/cap guarantees the docs lean on are currently data-only, not wired to any rate limiter or request counter.",
+        "Verdict-escalation claim ('any critical attack-vector -> BLOCK SHIP') has no hook: ScanReport.verdict (models.py:212-231) derives purely from finding severity counts; there is no attack-vector input to verdict, so escalation requires changing verdict logic, which no artifact mentions."
+      ],
+      "strengths": [
+        "keyleak/bundles.py is genuinely solid and self-consistent: frozen dataclasses, an import-time validate_bundles() that enforces the read-only invariant and the active-phase/active-policy coupling, and resolve_bundle is case-insensitive with a helpful error. It composes (not forks) the existing DETECTOR_PACKS via all_known_packs().",
+        "tests/test_bundles.py verifies INTENT, not just behavior: it pins the passive/active split, the read-only invariant, that deep excludes repo-only packs, and includes a corruption-injection test (test_validate_rejects_write_policy) that confirms the validator would actually catch a write policy. All 12 tests pass under unittest.",
+        "The build_report signature, _attack_vector_findings folding as category='access-control', the Detector frozen-dataclass field list + canonical_id = f'{pack}.{id}', the BaaS prober caps (TABLE 50/BUCKET 10/RPC 20/WRITE 20) and method names, compare_access_control_urls' 0.85 similarity + type='idor', offline_guard.install_socket_block()/KEYLEAK_OFFLINE_ALLOW_HOSTS, proxy.resolve_proxy/requests_proxies/playwright_proxy with warp/tor aliases, and the DETECTOR_PACKS/PROFILE_PACKS contents are all quoted accurately against source.",
+        "supabase-rls-deepdive.md correctly identifies the real coverage gap (table enumeration from PostgREST OpenAPI root vs JS-named tables) and the service_role-vs-anon distinction — and that distinction IS already partly present in baas_validator._probe_auth_config (baas.service_role_exposed), so the proposed enhancements build on real scaffolding rather than fiction.",
+        "The decision to default the correlation engine to a deterministic rule engine (offline/reproducible) over an LLM is well-aligned with the codebase's offline_guard/privacy posture and is defensible for CI gating."
+      ]
+    },
+    {
+      "lens": "code-quality",
+      "overall_score": 62,
+      "verdict": "The Bundle data model is clean, the read-only invariant test is a genuine guard, and the design docs are well-grounded. But the module has a load-bearing integration defect: 5 of 7 bundles reference PLANNED_PACKS that do not exist in DETECTOR_PACKS, and the only documented consumer path (normalize_packs) raises ValueError on every one of them. validate_bundles is deliberately tuned to stay green against this exact gap by whitelisting planned packs, so the test suite passes while the real resolution path would explode. Several headline tests are tautological or only partial guards, and the passive/active contract is muddy (crawl/subdomain send real HTTP but count as \"passive\"). Not yet acceptable — the validator gives false confidence about a wiring that does not work.",
+      "must_fix": [
+        {
+          "artifact": "keyleak/bundles.py + tests/test_bundles.py",
+          "issue": "5 of 7 bundles (quick, authz, injection, recon, deep) reference packs that do NOT exist in DETECTOR_PACKS (headers, client, authn, api, injection, recon). The design docs (integration-plan.md, scan-bundles.md) say bundles resolve through normalize_packs, which raises ValueError for any pack not in DETECTOR_PACKS. Verified: normalize_packs(bundle_packs('deep'), surface='web') raises 'Unknown detector pack(s): api, authn, client, headers, injection, recon'. Only 'secrets' and 'baas' actually resolve. validate_bundles() passes only because all_known_packs() unions in PLANNED_PACKS, masking the real failure. No test exercises the bundle -> normalize_packs boundary, so the suite is green over a wiring that is 100% broken for 5/7 bundles.",
+          "why": "This is a false-confidence trap: the tests and the import-time validator both pass, signaling 'bundles work', but the moment anyone wires --bundle into the CLI/site_scanner (the stated M1 goal) it throws on the headline 'deep' scan. The validator was shaped to tolerate exactly the inconsistency that breaks production.",
+          "suggested_fix": "Add a test that asserts every bundle's packs resolve through normalize_packs for the surfaces the design targets (web/extension), xfail-marked for PLANNED_PACKS so the gap is explicit and tracked. Make PLANNED_PACKS membership a typed, visible 'not yet runnable' state rather than silently equal to real packs: either (a) have resolve_bundle/bundle_packs split returned packs into (active_packs, planned_packs) and skip-loudly on planned ones per the design's 'no silent reduction' rule, or (b) gate each bundle behind the packs it can actually run today. At minimum, validate_bundles should warn (not silently accept) when a bundle is composed entirely of planned packs, because such a bundle resolves to zero runnable detectors."
+        },
+        {
+          "artifact": "keyleak/bundles.py (ACTIVE_PHASES / _ACTIVE_REQUEST_PHASES / ProbePolicy)",
+          "issue": "The passive/active split is inconsistent. crawl and subdomain are in ACTIVE_PHASES but NOT in _ACTIVE_REQUEST_PHASES, so a bundle declaring ('passive','crawl') has is_active==False and is assigned _PASSIVE (max_requests=0). But crawl (BFS via Playwright) and subdomain (crt.sh/subfinder/DNS) demonstrably send real outbound HTTP/DNS. 'quick' (passive,crawl) and the crawl/subdomain legs of 'recon' are therefore labeled as sending 'no crafted requests' while they hit the network. The module docstring claims 'Passive-only bundles send no crafted requests' and the test test_passive_bundles_send_no_crafted_requests asserts max_requests==0 for 'quick' — encoding a contract that contradicts what crawl actually does.",
+          "why": "A security tool's whole value is an accurate, defensible statement of what traffic it emits (scope/legal safety, the offline_guard story). Calling a crawl 'passive, 0 requests' is wrong and will mislead users about their network footprint and rate budget. crawl with max_requests=0 also gives the orchestrator no budget to honor.",
+          "suggested_fix": "Define the taxonomy explicitly: 'passive' = analyze already-fetched content (zero new requests); 'crawl'/'subdomain' = read-only navigation/enumeration (real requests, but only same-origin GETs / public CT logs); '_ACTIVE_REQUEST_PHASES' = crafted/probing requests. Either add a third category (e.g. is_network_active vs is_probing) or fold crawl/subdomain into a non-zero request budget. Update the docstring and the 'quick' test to assert the true footprint (e.g. crawl bundles still carry a crawl budget > 0)."
+        },
+        {
+          "artifact": "keyleak/bundles.py (validate_bundles)",
+          "issue": "validate_bundles does not enforce that an active bundle has a usable budget. Verified: a Bundle with is_active==True and ProbePolicy(active=True, max_requests=0) passes validate_bundles cleanly. It also never checks scope is in an allowed set, never checks rate_per_sec>0, and the active-policy check (is_active and not probe_policy.active) only covers _ACTIVE_REQUEST_PHASES, so a crawl/subdomain bundle that genuinely needs a budget is never validated for one.",
+          "why": "The validator is presented (module docstring + test_validate_bundles_passes) as the guarantor of the bundle invariants, but it leaves the most operationally dangerous case — an active bundle that claims to probe but has a 0 request budget, or an unbounded/garbage scope — completely unchecked. test_active_bundles_declare_active_policy asserts max_requests>0 only for the 5 hardcoded ids, not as an invariant.",
+          "suggested_fix": "In validate_bundles, add: if bundle.probe_policy.active and bundle.probe_policy.max_requests <= 0 -> raise; if bundle.probe_policy.active and bundle.probe_policy.rate_per_sec <= 0 -> raise; validate probe_policy.scope against an allowed frozenset (e.g. {'same-registrable-domain','same-origin'}). Then make test_active_bundles_declare_active_policy iterate all is_active bundles rather than a hardcoded id list, so a new active bundle with a bad policy fails automatically."
+        },
+        {
+          "artifact": "tests/test_bundles.py (test_deep_includes_every_runtime_pack)",
+          "issue": "The assertion self.assertEqual(set(deep.packs), set(web_packs())) is tautological with respect to a silently-dropped pack: deep.packs is literally built from web_packs() at import, so if web_packs()/all_known_packs() ever dropped a pack, BOTH sides drop it together and equality still holds. Verified by monkeypatching web_packs to drop 'appsec' after import — the equality only fails because deep was frozen earlier, not because of any structural guard. The real protection is the explicit loop over ('leak','baas','access-control','appsec'), which catches drops of those 4 specific packs but NOT a 5th future real pack.",
+          "why": "The task specifically asks whether the test would fail if deep silently dropped a pack. The headline equality assertion would NOT catch a drop in the web_packs/all_known_packs derivation — it is reassurance theater. Only the hardcoded 4-pack loop is a real guard, and it cannot grow automatically as real packs are added.",
+          "suggested_fix": "Replace/augment with a guard that is independent of web_packs(): assert set(deep.packs) == (set(DETECTOR_PACKS) - set(REPO_ONLY_PACKS)) | set(planned-packs-deep-intends-to-cover), i.e. derive the expected set from the source-of-truth registry, not from the same function under test. Keep an explicit assertion that every real (non-planned, non-repo-only) DETECTOR_PACKS entry is in deep.packs, so adding a real pack that deep forgets to include fails the test."
+        },
+        {
+          "artifact": "tests/test_bundles.py (test_validate_rejects_write_policy)",
+          "issue": "The test mutates the module-global BUNDLES dict in place (BUNDLES[bad.id]=bad ... BUNDLES.clear(); BUNDLES.update(original)). If validate_bundles is later changed to memoize, or another test runs concurrently / asserts on BUNDLES contents, this is order- and isolation-fragile. It also relies on dict(BUNDLES) snapshot + clear/update rather than just popping the one key it added.",
+          "why": "Mutating shared module state to 'simulate registry corruption' is a smell that can leak across tests and produce heisenbugs; the finally only restores by full clear/replace, which would also wipe any legitimately-added entries. The intent (validator rejects read_only=False) is good and the test IS a real guard, but the mechanism is risky.",
+          "suggested_fix": "Don't mutate the global registry. Refactor validate_bundles to accept an optional bundles mapping (validate_bundles(bundles=BUNDLES) by default), then in the test call validate_bundles({**BUNDLES, bad.id: bad}) and assert it raises. This removes global mutation entirely and makes the validator more reusable. If you must keep the global, pop only the key you added (BUNDLES.pop(bad.id, None)) in finally rather than clear+update."
+        }
+      ],
+      "unsupported_claims": [
+        {
+          "artifact": "keyleak/bundles.py (module docstring, lines 1-16)",
+          "claim": "Bundles 'compose the existing pack/profile model ... so users can invoke a meaningful group of checks' and the invariants are 'enforced by validate_bundles (run at import)'.",
+          "why_doubtful": "Verified false in practice: 5 of 7 bundles compose to packs that the existing pack model (normalize_packs) rejects, so they do not currently invoke a meaningful group of checks — they raise. And validate_bundles does NOT enforce the most important operational invariants (active bundle must have a request budget; crawl/subdomain network phases are unbounded; scope is unvalidated). The docstring oversells what the validator guarantees.",
+          "verified_against_source": true
+        },
+        {
+          "artifact": "keyleak/bundles.py (PLANNED_PACKS comment, lines 25-28)",
+          "claim": "'Declared here so bundles can reference and validate them now; remove each entry as it lands in DETECTOR_PACKS.'",
+          "why_doubtful": "There is no mechanism or test that forces removal as packs land, and no warning that a bundle composed entirely of planned packs resolves to zero runnable detectors today. PLANNED_PACKS is treated as fully equal to real packs in all_known_packs(), so 'validate them now' actually means 'mask the fact that they can't run yet'. The lifecycle promise is uncovered by any test (grep confirms no test references PLANNED_PACKS/planned).",
+          "verified_against_source": true
+        },
+        {
+          "artifact": "tests/test_bundles.py (module docstring, lines 1-5)",
+          "claim": "'These pin the contract of bundles: what each runs ... so a change in intent fails loudly.'",
+          "why_doubtful": "The tests pin the static shape (ids, packs tuples, phase membership) but never pin 'what each runs' in the executable sense — there is no test that a bundle's packs actually resolve to a non-empty detector set, and no test of the bundle -> normalize_packs/detectors_for_packs boundary. A change in intent that leaves a bundle resolving to zero detectors (e.g. an all-planned-pack bundle) would NOT fail loudly; the suite stays green.",
+          "verified_against_source": true
+        }
+      ],
+      "evidence_gaps": [
+        "No test asserts that bundle_packs(id) resolves to a non-empty, runnable detector set via detectors_for_packs/normalize_packs. The entire passive/active and pack-composition contract is tested only at the static-data level, never against the detector registry it claims to compose.",
+        "No test for resolve_bundle input hygiene beyond the happy path and one unknown id: empty string, None, leading/trailing whitespace + case ('  Deep  '), and the exact 'Available: ...' error message ordering are unverified (resolve_bundle does .strip().lower() but nothing pins that behavior).",
+        "No test covers the bundle -> probe_policy -> offline_guard/proxy integration the design docs require ('every active phase honors offline_guard, --proxy, scope'). ProbePolicy.scope and rate_per_sec are dataclass fields that nothing reads or validates, so they are untested data with no enforced meaning yet.",
+        "is_active is only tested for the 7 shipped bundles; there is no property/parametrized test that is_active is True iff active_phases intersects _ACTIVE_REQUEST_PHASES, so a future phase added to ACTIVE_PHASES but forgotten in _ACTIVE_REQUEST_PHASES (exactly the crawl/subdomain situation) would silently mis-classify with no test failing.",
+        "No negative test that validate_bundles rejects an unknown PHASE or an unknown PACK — validate_bundles has those branches (lines 146-151) but only the read_only=False branch is exercised, so the pack/phase validation code is uncovered and could regress silently."
+      ]
+    },
+    {
+      "lens": "product-usefulness",
+      "overall_score": 74,
+      "verdict": "Grounded plan, thin slice",
+      "must_fix": [
+        {
+          "artifact": "bundles.py",
+          "issue": "Unwired: no --bundle flag/subcommand; scan_site has no bundle arg.",
+          "why": "Invokable-bundles headline has zero call sites.",
+          "suggested_fix": "Add --bundle + a bundles subcommand."
+        }
+      ],
+      "unsupported_claims": [
+        {
+          "artifact": "scan-bundles.md",
+          "claim": "deep scan runs MITM",
+          "why_doubtful": "No MITM; --proxy is egress.",
+          "verified_against_source": true
+        }
+      ],
+      "evidence_gaps": [
+        "CBSE uncovered: only JS-named tables probed; OpenAPI root discarded."
+      ],
+      "strengths": [
+        "Standout Supabase/RLS deep-dive; clean tested bundles.py."
+      ]
+    }
+  ]
+}

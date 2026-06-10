@@ -16,11 +16,16 @@ import re
 import time
 from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, List, Optional, Tuple
+from urllib.parse import urlparse
 
 from .models import Evidence, Finding
 from .redaction import redact_url, redact_value
 
 BaaSProber = Callable[..., Dict[str, Any]]
+
+# A guard maps a hostname to a block reason (str) or None if the host is safe to
+# probe. Defaults to ``net_guard.scan_target_block_reason``.
+ProbeTargetGuard = Callable[[str], Optional[str]]
 
 TABLE_PROBE_CAP = 50
 BUCKET_PROBE_CAP = 10
@@ -42,7 +47,7 @@ class BaaSConfig:
 class BaaSProbeResult:
     probe_type: str
     target: str
-    status: str  # "confirmed", "denied", "error"
+    status: str  # "confirmed", "denied", "error", "empty", "lead"
     http_status: Optional[int] = None
     row_count: Optional[int] = None
     columns: Optional[List[str]] = None
@@ -99,22 +104,73 @@ class BaaSValidation:
 # Default HTTP prober — overridden by tests.
 # ---------------------------------------------------------------------------
 
-def make_default_prober(proxy: Optional[str] = None):
-    """Build an HTTP prober, optionally routing probes through ``proxy``."""
+def _probe_target_block_reason(
+    url: str,
+    *,
+    target_guard: Optional[ProbeTargetGuard] = None,
+    allow_private: Optional[bool] = None,
+) -> Optional[str]:
+    """Return a reason if ``url``'s host must not be probed (SSRF guard), else None.
+
+    The probe target comes from the scanned page's own JavaScript, so it is
+    attacker-influenced (audit W1/S0). We refuse to send a request to
+    non-routable / internal / cloud-metadata hosts. Defaults to
+    ``net_guard.scan_target_block_reason`` so egress is SSRF-safe even if a
+    caller forgets to supply a guard.
+    """
+    try:
+        host = urlparse(url).hostname
+    except Exception:
+        return "unparseable probe URL"
+    if not host:
+        return "probe URL has no host"
+    if target_guard is not None:
+        return target_guard(host)
+    from .net_guard import scan_target_block_reason
+
+    return scan_target_block_reason(host, allow_private=allow_private)
+
+
+# Response returned in place of a real request when the SSRF guard blocks a
+# target. status_code 0 makes every downstream probe treat it as "no result"
+# (no finding) rather than crashing the scan.
+def _blocked_response(reason: str) -> Dict[str, Any]:
+    return {"status_code": 0, "body": None, "headers": {}, "blocked": reason}
+
+
+def make_default_prober(proxy: Optional[str] = None, *, allow_private: Optional[bool] = None):
+    """Build an HTTP prober, optionally routing probes through ``proxy``.
+
+    Every request URL is SSRF-checked against ``net_guard`` before it leaves the
+    process: this is the single real-network egress point for BaaS probing, so
+    guarding here protects both the default and proxied paths (audit W1/S0).
+    Injected probers (tests, custom callers) bypass this by construction — they
+    never reach the real network.
+    """
 
     from .proxy import requests_proxies
 
     proxies = requests_proxies(proxy)
 
-    def _prober(method: str, url: str, headers: Dict[str, str], body: Optional[str] = None) -> Dict[str, Any]:  # pragma: no cover
-        import requests as _requests
+    def _prober(method: str, url: str, headers: Dict[str, str], body: Optional[str] = None) -> Dict[str, Any]:
+        # Fast path: refuse obviously-blocked targets without importing requests.
+        reason = _probe_target_block_reason(url, allow_private=allow_private)
+        if reason:
+            return _blocked_response(reason)
+
+        from .net_guard import guarded_request, SSRFBlocked
 
         kwargs: Dict[str, Any] = {"headers": headers, "timeout": 10}
         if proxies:
             kwargs["proxies"] = proxies
         if body is not None and method.upper() in ("POST", "PUT", "PATCH"):
             kwargs["data"] = body
-        resp = _requests.request(method, url, **kwargs)
+        try:
+            # guarded_request disables auto-redirects and re-validates every
+            # redirect hop, so a public host cannot 302 us into an internal one.
+            resp = guarded_request(method, url, allow_private=allow_private, **kwargs)
+        except SSRFBlocked as exc:
+            return _blocked_response(str(exc))
         response_body: Any = None
         try:
             response_body = resp.json()
@@ -282,14 +338,47 @@ def validate_baas_config(
     *,
     prober: Optional[BaaSProber] = None,
     js_extraction: Optional[Dict[str, Any]] = None,
+    allow_write_probe: bool = False,
+    allow_private: Optional[bool] = None,
 ) -> BaaSValidation:
     """Run read-only probes against a BaaS configuration.
 
     Returns a ``BaaSValidation`` with enriched findings. All HTTP calls go
     through ``prober`` (defaults to ``requests`` in production).
+
+    SSRF safety (audit W1/S0): ``config.project_url`` is extracted from the
+    scanned page's own JavaScript and is therefore attacker-influenced. When the
+    real network prober is used (``prober is None``), the target host is
+    validated up front via ``net_guard`` and probing is skipped entirely for
+    non-routable / internal / cloud-metadata hosts, rather than emitting
+    misleading "key invalid" results. Injected probers (tests, custom callers)
+    are trusted and bypass this check; the real egress prober built by
+    ``make_default_prober`` is additionally guarded per-request as defense in
+    depth.
+
+    By default the scan is strictly read-only. The one mutating probe — a test
+    ``POST`` insert used to detect missing write-side RLS — is **skipped unless
+    ``allow_write_probe=True``** is passed explicitly, because the ``Prefer:
+    tx=rollback`` rollback it relies on is not honored by every PostgREST
+    deployment and an un-rolled-back insert would write a row into the target's
+    database. No built-in scan bundle enables it.
     """
+    if prober is None:
+        block_reason = _probe_target_block_reason(config.project_url, allow_private=allow_private)
+        if block_reason:
+            # Refuse to probe an internal/non-routable target. Return an empty
+            # validation (no findings) instead of a stream of HTTP-0 "key
+            # invalid" results that would misrepresent a blocked scan.
+            return BaaSValidation(
+                provider=config.provider,
+                project_url_redacted=redact_url(config.project_url),
+            )
+
     if config.provider == "supabase":
-        return _validate_supabase(config, prober or _default_prober, js_extraction=js_extraction)
+        return _validate_supabase(
+            config, prober or _default_prober,
+            js_extraction=js_extraction, allow_write_probe=allow_write_probe,
+        )
     if config.provider == "firebase":
         return _validate_firebase(config, prober or _default_prober)
     if config.provider == "appwrite":
@@ -302,7 +391,7 @@ def validate_baas_config(
     )
 
 
-def _validate_supabase(config: BaaSConfig, prober: BaaSProber, *, js_extraction: Optional[Dict[str, Any]] = None) -> BaaSValidation:
+def _validate_supabase(config: BaaSConfig, prober: BaaSProber, *, js_extraction: Optional[Dict[str, Any]] = None, allow_write_probe: bool = False) -> BaaSValidation:
     url = config.project_url
     headers = {
         "apikey": config.api_key,
@@ -345,14 +434,100 @@ def _validate_supabase(config: BaaSConfig, prober: BaaSProber, *, js_extraction:
             validation_status="confirmed",
         ))
 
-    _probe_tables(config, headers, prober, validation)
+    # Enumerate relations exposed via the PostgREST OpenAPI root (GET /rest/v1/),
+    # not just the ones named in the page bundle — catches anon-reachable tables
+    # never referenced in client JS (the CBSE-class case). Read-only; the global
+    # TABLE_PROBE_CAP still bounds total probes; does NOT mutate the caller config.
+    root_body = resp.get("body")
+    enumerated = _tables_from_openapi(root_body)
+    js_named = list(config.tables)
+    js_set = set(js_named)
+    enumerated_only = frozenset(name for name in enumerated if name not in js_set)
+    # Views = relations CONFIRMED read-only by the OpenAPI doc (in paths, no POST).
+    # Relations with unknown insertability (definitions-only) default to table.
+    view_tables = frozenset(_view_relations(root_body))
+    # Probe JS-named + enumerated-only, ordered so sensitive relations come first
+    # (stable sort) and the cap cannot starve the dangerous tables.
+    union = list(dict.fromkeys(js_named + sorted(enumerated_only)))
+    tables_to_probe = sorted(union, key=lambda name: 0 if _table_severity(name) == "critical" else 1)
+
+    _probe_tables(config, headers, prober, validation,
+                  tables=tables_to_probe, lead_tables=enumerated_only, view_tables=view_tables)
     _probe_storage(config, headers, prober, validation)
     _probe_rpcs(config, headers, prober, validation)
-    _probe_write_access(config, headers, prober, validation)
+    # Mutating probe (POST insert) — read-only by default; explicit opt-in only.
+    if allow_write_probe:
+        _probe_write_access(config, headers, prober, validation)
     _probe_auth_config(config, headers, prober, validation)
     _analyze_realtime(config, validation, js_extraction)
 
     return validation
+
+
+def _tables_from_openapi(body: Any) -> List[str]:
+    """Extract exposed table names from a PostgREST ``GET /rest/v1/`` OpenAPI doc.
+
+    PostgREST publishes every table it exposes under ``definitions`` (Swagger 2.0)
+    and as top-level ``paths`` (``/{table}``). Reading these lets KeyLeak probe
+    tables that are reachable by the anon key but never referenced in the page's
+    JS — the exact shape of the CBSE-class breach.
+    """
+    if not isinstance(body, dict):
+        return []
+    names: set = set()
+    definitions = body.get("definitions")
+    if isinstance(definitions, dict):
+        names.update(key for key in definitions if isinstance(key, str) and key)
+    paths = body.get("paths")
+    if isinstance(paths, dict):
+        for path in paths:
+            if not isinstance(path, str):
+                continue
+            segment = path.strip("/")
+            # Exclude root, parameterized paths, and RPC endpoints (/rpc/<fn>, which
+            # contain a slash). Do NOT filter on an 'rpc' name prefix — a real table
+            # named e.g. rpc_audit_log is legitimate.
+            if not segment or "/" in segment or "{" in segment:
+                continue
+            names.add(segment)
+    return sorted(names)
+
+
+def _view_relations(body: Any) -> set:
+    """Relations CONFIRMED read-only by the OpenAPI doc — present in ``paths`` with
+    operations but no ``post`` (typically VIEWS, where ``ALTER TABLE ... ENABLE ROW
+    LEVEL SECURITY`` is invalid).
+
+    Only positive evidence counts: a relation that is absent from ``paths`` (e.g. a
+    definitions-only body) has UNKNOWN insertability and is NOT treated as a view,
+    so a base table is never mislabeled and handed bogus view remediation.
+    """
+    views: set = set()
+    if not isinstance(body, dict):
+        return views
+    paths = body.get("paths")
+    if isinstance(paths, dict):
+        for path, ops in paths.items():
+            if not isinstance(path, str) or not isinstance(ops, dict):
+                continue
+            segment = path.strip("/")
+            if not segment or "/" in segment or "{" in segment:
+                continue
+            op_names = {str(op).lower() for op in ops}
+            if op_names and "post" not in op_names:
+                views.add(segment)
+    return views
+
+
+_SEVERITY_ORDER = ("info", "low", "medium", "high", "critical")
+
+
+def _downgrade_severity(severity: str) -> str:
+    try:
+        index = _SEVERITY_ORDER.index(severity)
+    except ValueError:
+        return severity
+    return _SEVERITY_ORDER[max(0, index - 1)]
 
 
 def _probe_tables(
@@ -360,8 +535,13 @@ def _probe_tables(
     headers: Dict[str, str],
     prober: BaaSProber,
     validation: BaaSValidation,
+    *,
+    tables: Optional[List[str]] = None,
+    lead_tables: frozenset = frozenset(),
+    view_tables: frozenset = frozenset(),
 ) -> None:
-    for table in config.tables[:TABLE_PROBE_CAP]:
+    probe_list = tables if tables is not None else config.tables
+    for table in probe_list[:TABLE_PROBE_CAP]:
         try:
             resp = prober("GET", f"{config.project_url}/rest/v1/{table}?select=*&limit=1", headers)
         except Exception:
@@ -374,38 +554,67 @@ def _probe_tables(
         body = resp.get("body")
 
         if status == 200 and isinstance(body, list):
-            columns = list(body[0].keys()) if body and isinstance(body[0], dict) else []
-            result = BaaSProbeResult(
-                probe_type="table_read",
-                target=table,
-                status="confirmed",
-                http_status=status,
-                row_count=len(body),
-                columns=columns,
-            )
-            validation.open_tables.append(result)
+            if not body:
+                # 200 with an empty array: the anon role returned no rows. For a
+                # CORRECTLY RLS-protected table this is the expected response (the
+                # policy filters every row — you do NOT get a 401/403). So an empty
+                # result is evidence of protection (or an empty table), NOT an open
+                # table. Reporting it as "no effective RLS" is a false positive.
+                validation.protected_tables.append(BaaSProbeResult(
+                    probe_type="table_read", target=table, status="empty", http_status=status,
+                    note="200 with no rows — anon role read nothing (RLS-protected or empty)",
+                ))
+                continue
+
+            columns = list(body[0].keys()) if isinstance(body[0], dict) else []
+            is_lead = table in lead_tables       # enumerated-only: not in extracted JS names
+            is_view = table in view_tables       # not insertable in OpenAPI -> likely a view
+            base_severity = _table_severity(table)
+            severity = _downgrade_severity(base_severity) if is_lead else base_severity
+            relation = "view" if is_view else "table"
+
+            validation.open_tables.append(BaaSProbeResult(
+                probe_type="table_read", target=table, status="confirmed",
+                http_status=status, row_count=len(body), columns=columns,
+            ))
 
             col_summary = ", ".join(columns[:10])
             if len(columns) > 10:
                 col_summary += f" (+{len(columns) - 10} more)"
+
+            reason = f"Supabase {relation} '{table}' returned {len(body)} row(s) to the anon key. "
+            if is_lead:
+                reason += ("It is exposed by the REST API but is not among the table names "
+                           "extracted from the page's JS, so it may be reachable without being "
+                           "referenced in client code — verify it isn't loaded dynamically or "
+                           "intentionally public.")
+            else:
+                reason += "It has no effective RLS policy: anyone with the anon key can read these rows."
+            if is_view:
+                reason += " This is a view; RLS cannot be enabled on a view directly."
+                remediation = (f"'{table}' is a view — RLS cannot be enabled on it. Secure the "
+                               "underlying table(s) with RLS, or recreate the view with "
+                               "security_invoker = on so it respects the caller's RLS.")
+            else:
+                remediation = (f"Enable RLS: ALTER TABLE {table} ENABLE ROW LEVEL SECURITY; "
+                               "then create SELECT/INSERT/UPDATE/DELETE policies.")
+
             validation.findings.append(Finding(
                 type="baas_open_table",
-                severity=_table_severity(table),
-                confidence=0.95,
+                severity=severity,
+                confidence=0.6 if is_lead else 0.95,
                 detector_id="baas.open_table",
                 source=config.project_url,
                 evidence=Evidence(
                     source=config.project_url,
-                    snippet=f"Table '{table}' readable without auth. Columns: {col_summary}",
+                    snippet=f"{relation.title()} '{table}' readable with anon key. Columns: {col_summary}",
                     redacted_value=f"table:{table}",
                     response_status=status,
                     request_url=f"{redact_url(config.project_url)}/rest/v1/{table}",
                 ),
-                risk_reason=f"Supabase table '{table}' has no effective RLS policy. "
-                            f"Anyone with the anon key can read all {len(body)} row(s) returned.",
-                remediation=f"Enable RLS: ALTER TABLE {table} ENABLE ROW LEVEL SECURITY; "
-                            f"then create SELECT/INSERT/UPDATE/DELETE policies.",
-                validation_status="confirmed",
+                risk_reason=reason,
+                remediation=remediation,
+                validation_status="lead" if is_lead else "confirmed",
                 category="baas",
                 references=["https://supabase.com/docs/guides/auth/row-level-security"],
             ))
@@ -424,9 +633,11 @@ _SENSITIVE_TABLE_PREFIXES = (
 
 
 def _table_severity(table: str) -> str:
+    # Match sensitive keywords on token boundaries, including common plural
+    # table names, without escalating near-misses like 'authors' or 'reporting'.
     lower = table.lower()
-    for prefix in _SENSITIVE_TABLE_PREFIXES:
-        if prefix in lower:
+    for keyword in _SENSITIVE_TABLE_PREFIXES:
+        if re.search(r"(?:^|[^a-z0-9])" + re.escape(keyword) + r"(?:s|es)?(?:[^a-z0-9]|$)", lower):
             return "critical"
     return "high"
 

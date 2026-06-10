@@ -9,6 +9,7 @@ unittest to match the repo's existing test style.
 
 from __future__ import annotations
 
+import socket
 import unittest
 from unittest import mock
 
@@ -89,10 +90,21 @@ class PreflightTests(unittest.TestCase):
     def test_none_is_noop(self):
         self.assertIsNone(preflight(None))
 
+    def test_unreachable_loopback_proxy_raises(self):
+        # Hold the bound (not listening) socket open while preflight runs, so the
+        # OS can't reassign the port mid-test (race) — connect is still refused.
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+            sock.bind(("127.0.0.1", 0))
+            _, port = sock.getsockname()
+            with self.assertRaises(ProxyError) as ctx:
+                preflight(f"socks5://127.0.0.1:{port}", timeout=0.2)
+            self.assertIn("not reachable", str(ctx.exception))
+
     def test_unreachable_warp_gives_hint(self):
-        # 127.0.0.1:40000 is virtually never listening in CI.
-        with self.assertRaises(ProxyError) as ctx:
-            preflight(WARP_PROXY, timeout=0.2)
+        with mock.patch.object(proxy.socket, "create_connection",
+                               side_effect=OSError("closed")):
+            with self.assertRaises(ProxyError) as ctx:
+                preflight(WARP_PROXY, timeout=0.2)
         self.assertIn("warp-cli", str(ctx.exception))
 
 

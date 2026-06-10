@@ -59,6 +59,35 @@ export function redactSnippet(snippet, rawValue = '') {
   return text;
 }
 
+// PII scrubber — mirrors keyleak/privacy_filter.py so the extension's live
+// browser scan masks adjacent third-party PII (emails/phones/SSN/cards) in
+// evidence snippets, matching the CLI (audit gate FIX1-MF1: previously only the
+// Python report path scrubbed; the extension serialized findings client-side
+// with no PII masking).
+const PII_PATTERNS = [
+  [/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g, '[email]'],
+  [/(?<![\w])(?:\+\d{1,3}[\s.-]?)?(?:\(?\d{3}\)?[\s.-]?)\d{3}[\s.-]?\d{4}\b/g, '[phone]'],
+  [/\b\d{3}-\d{2}-\d{4}\b/g, '[ssn]'],
+  [/\b(?:\d[ -]?){13,19}\d\b/g, '[card-or-num]'],
+];
+
+export function scrubText(text) {
+  let out = String(text || '');
+  if (!out) return out;
+  for (const [pattern, replacement] of PII_PATTERNS) out = out.replace(pattern, replacement);
+  return out;
+}
+
+export function scrubSnippet(snippet, preserve = '') {
+  const text = String(snippet || '');
+  if (!text) return text;
+  if (!preserve) return scrubText(text);
+  // Protect the already-redacted secret token from being re-masked.
+  const sentinel = 'KEYLEAK_FINDING';
+  const placeheld = text.split(preserve).join(sentinel);
+  return scrubText(placeheld).split(sentinel).join(preserve);
+}
+
 export function redactUrl(url) {
   const text = String(url || '');
   if (!text) return '';
@@ -84,7 +113,10 @@ export function normalizeFinding(raw) {
   const rawValue = raw.raw_value ?? raw.value ?? raw.match ?? '';
   const redactedValue = raw.redacted_value || raw.evidence?.redacted_value || redactValue(rawValue);
   const requestUrl = redactUrl(raw.url || raw.request_url || raw.evidence?.request_url || '');
-  const snippet = redactSnippet(raw.context || raw.snippet || raw.evidence?.snippet || '', rawValue);
+  const snippet = scrubSnippet(
+    redactSnippet(raw.context || raw.snippet || raw.evidence?.snippet || '', rawValue),
+    redactedValue,
+  );
   const detectorId = raw.detector_id || `runtime:${raw.type || 'unknown'}`;
   const category = raw.category || raw.pack || (String(detectorId).includes('.') ? String(detectorId).split('.')[0] : 'leak');
 

@@ -1,0 +1,280 @@
+[
+  {
+    "id": "fastapi-docs-exposure",
+    "name": "FastAPI Auto-Generated Docs Exposed in Production",
+    "owasp_category": "A05:2021 Security Misconfiguration",
+    "frameworks": [
+      "FastAPI",
+      "Starlette"
+    ],
+    "description": "FastAPI enables /docs (Swagger UI) and /redoc (ReDoc) and the raw OpenAPI schema at /openapi.json by default. In production these endpoints reveal every route, parameter name, request/response schema, and any security scheme definition, giving an attacker a complete attack surface map without any prior crawling.",
+    "runtime_discovery": "Crawl the target; probe /docs, /redoc, /openapi.json, /api/docs, /api/openapi.json. Fetch /openapi.json and parse the JSON for paths, security schemes, and server variables. No auth required to read the schema on a misconfigured app.",
+    "detection_signal": "HTTP 200 on /openapi.json returns a JSON body with top-level keys 'openapi', 'info', and 'paths'. /docs returns an HTML page whose title contains 'Swagger UI'. /redoc returns a page containing 'ReDoc'. All are unauthenticated.",
+    "active_probe": true,
+    "severity": "medium",
+    "prevalence": "ubiquitous",
+    "slice": "fastapi",
+    "uid": "fastapi__fastapi-docs-exposure",
+    "class_hint": "other"
+  },
+  {
+    "id": "fastapi-missing-auth-dependency",
+    "name": "FastAPI Route Missing Depends(get_current_user) Auth Guard",
+    "owasp_category": "A01:2021 Broken Access Control",
+    "frameworks": [
+      "FastAPI"
+    ],
+    "description": "FastAPI authentication is opt-in per route via Depends(). A developer who forgets the dependency on a sensitive endpoint leaves it fully open. This is easy to miss during refactoring and does not produce any startup error.",
+    "runtime_discovery": "Crawl authenticated session to discover routes from /openapi.json. Then replay each request without the Authorization / Cookie header and compare HTTP status codes. Any route that returns 200 without credentials is a candidate finding.",
+    "detection_signal": "Authenticated request returns 200; unauthenticated replay of the identical request also returns 200 with the same or richer response body. Differential: auth-diff response bodies match or the unauthenticated body contains more data (not a 401/403).",
+    "active_probe": true,
+    "severity": "high",
+    "prevalence": "common",
+    "slice": "fastapi",
+    "uid": "fastapi__fastapi-missing-auth-dependency",
+    "class_hint": "other"
+  },
+  {
+    "id": "fastapi-idor-path-param",
+    "name": "IDOR via FastAPI Path Parameter (Object-Level Authorization Missing)",
+    "owasp_category": "A01:2021 Broken Access Control",
+    "frameworks": [
+      "FastAPI",
+      "agnostic"
+    ],
+    "description": "Routes like GET /users/{user_id}/profile or GET /orders/{order_id} authenticate the caller but do not verify that the resource belongs to the caller. An attacker increments or guesses the path parameter to access other users' data.",
+    "runtime_discovery": "Authenticate as user A, record a resource ID from a normal response. Authenticate as user B (auth-diff), attempt to access user A's resource ID using user B's session. Compare response: if user B receives user A's data, IDOR is confirmed.",
+    "detection_signal": "User B's request to /users/<user_A_id>/profile returns HTTP 200 with user A's PII fields (name, email, etc.) rather than 403/404. Response body under user B's session contains fields identical to the response seen under user A's session.",
+    "active_probe": true,
+    "severity": "high",
+    "prevalence": "ubiquitous",
+    "slice": "fastapi",
+    "uid": "fastapi__fastapi-idor-path-param",
+    "class_hint": "idor-bola"
+  },
+  {
+    "id": "fastapi-pydantic-mass-assignment",
+    "name": "Pydantic Model Mass Assignment / Over-Posting",
+    "owasp_category": "A03:2021 Injection",
+    "frameworks": [
+      "FastAPI",
+      "Pydantic"
+    ],
+    "description": "If an endpoint uses a Pydantic model as the request body and that model includes privileged fields (is_admin, role, balance), a client can POST those fields and they will be deserialized and persisted if the developer passes model.dict() directly to the ORM without an allowlist.",
+    "runtime_discovery": "Submit a POST/PUT request body that includes extra fields beyond the documented schema \u2014 specifically guessing privileged field names like 'is_admin', 'role', 'credits', 'verified'. Observe whether the response echoes the injected field or whether a subsequent GET reflects the modified value.",
+    "detection_signal": "POST body includes 'is_admin': true. Subsequent GET /users/me returns 'is_admin': true in the response JSON, or a privilege-gated endpoint that previously returned 403 now returns 200 with the modified session.",
+    "active_probe": true,
+    "severity": "high",
+    "prevalence": "common",
+    "slice": "fastapi",
+    "uid": "fastapi__fastapi-pydantic-mass-assignment",
+    "class_hint": "mass-assignment"
+  },
+  {
+    "id": "fastapi-cors-wildcard",
+    "name": "Overly Permissive CORS (allow_origins=['*'] with allow_credentials)",
+    "owasp_category": "A05:2021 Security Misconfiguration",
+    "frameworks": [
+      "FastAPI",
+      "Starlette"
+    ],
+    "description": "FastAPI's CORSMiddleware with allow_origins=['*'] and allow_credentials=True is an invalid/broken configuration (browsers block it), but allow_origins=['*'] without credentials still lets any origin read API responses, enabling cross-origin data theft from authenticated sessions in some contexts. Additionally, apps that echo the Origin header back in Access-Control-Allow-Origin are vulnerable to full CORS bypass.",
+    "runtime_discovery": "Send a preflight OPTIONS request with an arbitrary Origin header (Origin: https://evil.example.com). Inspect the Access-Control-Allow-Origin response header. Also send a cross-origin request with Origin set and observe whether the response reflects it.",
+    "detection_signal": "OPTIONS response contains 'Access-Control-Allow-Origin: https://evil.example.com' (reflected origin) alongside 'Access-Control-Allow-Credentials: true'. Or GET response returns 'Access-Control-Allow-Origin: *' on an endpoint that returns user-specific data.",
+    "active_probe": true,
+    "severity": "high",
+    "prevalence": "common",
+    "slice": "fastapi",
+    "uid": "fastapi__fastapi-cors-wildcard",
+    "class_hint": "cors"
+  },
+  {
+    "id": "fastapi-jwt-algorithm-confusion",
+    "name": "JWT Algorithm Confusion / None Algorithm Acceptance",
+    "owasp_category": "A07:2021 Identification and Authentication Failures",
+    "frameworks": [
+      "FastAPI",
+      "python-jose",
+      "PyJWT"
+    ],
+    "description": "FastAPI apps using python-jose or PyJWT may accept JWTs with 'alg: none' or allow an RS256-signed token to be verified as HS256 using the public key as the HMAC secret if algorithms= is not explicitly restricted. This allows forging arbitrary JWTs without knowing the private key.",
+    "runtime_discovery": "Obtain a valid JWT from a login response. Craft a modified token with 'alg': 'none' and no signature (trailing dot) with elevated claims (is_admin: true, role: 'admin'). Submit to protected endpoints. Also try re-signing with HS256 using the app's public key obtained from /openapi.json or /.well-known/jwks.json.",
+    "detection_signal": "A request bearing a forged 'alg: none' JWT receives HTTP 200 instead of 401/403. Or: a JWT re-signed with HS256 using the public key bytes is accepted. Response body matches a privileged user's data structure.",
+    "active_probe": true,
+    "severity": "critical",
+    "prevalence": "occasional",
+    "slice": "fastapi",
+    "uid": "fastapi__fastapi-jwt-algorithm-confusion",
+    "class_hint": "jwt"
+  },
+  {
+    "id": "fastapi-debug-mode-500-traceback",
+    "name": "Python Traceback / Debug Info Leaked in 500 Response",
+    "owasp_category": "A05:2021 Security Misconfiguration",
+    "frameworks": [
+      "FastAPI",
+      "Starlette",
+      "Uvicorn"
+    ],
+    "description": "When a FastAPI app is run with debug=True or without a global exception handler, unhandled exceptions return a full Python stack trace in the HTTP response body, leaking file paths, library versions, environment variable names, and sometimes credentials passed to failing constructors.",
+    "runtime_discovery": "Submit malformed inputs to every endpoint \u2014 type mismatches, boundary values, null bytes, oversized payloads, missing required fields. Look for 500 responses. Inspect the response body for Python exception text, file path patterns, and class/module names.",
+    "detection_signal": "HTTP 500 response body contains 'Traceback (most recent call last):', absolute filesystem paths matching '/app/' or '/home/', or Python exception class names like 'sqlalchemy.exc.OperationalError'. Content-Type is text/html or text/plain rather than application/json.",
+    "active_probe": true,
+    "severity": "medium",
+    "prevalence": "common",
+    "slice": "fastapi",
+    "uid": "fastapi__fastapi-debug-mode-500-traceback",
+    "class_hint": "debug-endpoint"
+  },
+  {
+    "id": "fastapi-sql-injection-orm-bypass",
+    "name": "SQL Injection via Raw Query Fallback in FastAPI/SQLAlchemy Routes",
+    "owasp_category": "A03:2021 Injection",
+    "frameworks": [
+      "FastAPI",
+      "SQLAlchemy",
+      "Tortoise ORM",
+      "databases"
+    ],
+    "description": "FastAPI routes that accept query parameters and pass them to text() or execute() raw SQL calls are vulnerable to SQL injection. The ORM is often used for CRUD but developers fall back to raw SQL for search, filter, and reporting endpoints.",
+    "runtime_discovery": "Fuzz query string and body parameters with SQL metacharacters: single quote, UNION SELECT, comment sequences (-- , /**/), and boolean payloads (1=1, 1=2). Look for response content differences, error messages, or timing differences between true and false payloads.",
+    "detection_signal": "Boolean-based: payload '1 AND 1=1' returns full result set; '1 AND 1=2' returns empty set or different row count. Error-based: response body contains 'sqlite3.OperationalError', 'psycopg2.errors', 'ProgrammingError', or partial SQL statement. Time-based: SLEEP(5)/pg_sleep(5) causes >= 5 second response delay.",
+    "active_probe": true,
+    "severity": "critical",
+    "prevalence": "occasional",
+    "slice": "fastapi",
+    "uid": "fastapi__fastapi-sql-injection-orm-bypass",
+    "class_hint": "sqli"
+  },
+  {
+    "id": "fastapi-pydantic-validation-bypass-coercion",
+    "name": "Pydantic Type Coercion Bypasses Semantic Validation",
+    "owasp_category": "A03:2021 Injection",
+    "frameworks": [
+      "FastAPI",
+      "Pydantic"
+    ],
+    "description": "Pydantic v1 silently coerces strings to integers, booleans, and other types. A field annotated as int will accept '0; DROP TABLE users--' \u2014 Pydantic raises a validation error, but a field annotated as str with no further validator accepts any string. Business-logic validators using @validator that check a str field may be bypassed by supplying a numeric type that coerces to the validated string form.",
+    "runtime_discovery": "Submit requests with type-confused payloads: send a number where a string is expected, send a string for a boolean field ('true', '1', 'yes'), send an array where a scalar is expected. Observe whether the app accepts the coerced value and reflects it in business logic (e.g. a boolean field sent as 'admin' string).",
+    "detection_signal": "POST with 'active': 'yes' returns 200 and subsequent GET shows 'active': true. POST with 'amount': '100.00; echo pwned' triggers a 500 with database/processing error rather than a 422 validation error. Response diverges from the OpenAPI schema's documented type.",
+    "active_probe": true,
+    "severity": "medium",
+    "prevalence": "common",
+    "slice": "fastapi",
+    "uid": "fastapi__fastapi-pydantic-validation-bypass-coercion",
+    "class_hint": "input-validation-bypass"
+  },
+  {
+    "id": "fastapi-ssrf-httpx-requests",
+    "name": "SSRF via User-Controlled URL Parameter in FastAPI Endpoint",
+    "owasp_category": "A10:2021 Server-Side Request Forgery",
+    "frameworks": [
+      "FastAPI",
+      "httpx",
+      "aiohttp",
+      "requests"
+    ],
+    "description": "FastAPI endpoints that accept a URL parameter and use httpx.AsyncClient or requests.get to fetch it are vulnerable to SSRF. Attackers can probe internal services, cloud metadata endpoints (169.254.169.254), or force connections to internal-only hosts.",
+    "runtime_discovery": "Identify parameters named url, callback, webhook, redirect, endpoint, src, or target. Submit payloads targeting cloud metadata: http://169.254.169.254/latest/meta-data/, http://[::ffff:169.254.169.254]/, and Burp Collaborator/interactsh callback URLs. Observe response time, error messages, and whether response body contains cloud metadata content.",
+    "detection_signal": "Request with url=http://169.254.169.254/latest/meta-data/ returns HTTP 200 with body containing 'ami-id' or 'instance-type' strings. Or: response contains an internal hostname resolved successfully (DNS lookup observed on out-of-band callback). Or: a 500 with 'Connection refused' to an internal IP vs timeout to an external IP \u2014 timing/error differential reveals internal network topology.",
+    "active_probe": true,
+    "severity": "critical",
+    "prevalence": "occasional",
+    "slice": "fastapi",
+    "uid": "fastapi__fastapi-ssrf-httpx-requests",
+    "class_hint": "ssrf"
+  },
+  {
+    "id": "fastapi-security-headers-missing",
+    "name": "Missing Security Headers on FastAPI Responses",
+    "owasp_category": "A05:2021 Security Misconfiguration",
+    "frameworks": [
+      "FastAPI",
+      "Starlette",
+      "agnostic"
+    ],
+    "description": "FastAPI does not add security headers by default. Missing headers like X-Content-Type-Options, X-Frame-Options, Content-Security-Policy, Strict-Transport-Security, and Referrer-Policy leave the app open to clickjacking, MIME sniffing, and downgrade attacks.",
+    "runtime_discovery": "Fetch any endpoint and inspect the response headers. Check for presence/absence of security headers. No active probing beyond a single GET request to the root and a few data endpoints.",
+    "detection_signal": "Response headers lack one or more of: 'X-Content-Type-Options: nosniff', 'X-Frame-Options: DENY' (or SAMEORIGIN), 'Content-Security-Policy', 'Strict-Transport-Security', 'Referrer-Policy'. Absence is the signal \u2014 purely header inspection on a normal response.",
+    "active_probe": false,
+    "severity": "medium",
+    "prevalence": "ubiquitous",
+    "slice": "fastapi",
+    "uid": "fastapi__fastapi-security-headers-missing",
+    "class_hint": "security-headers"
+  },
+  {
+    "id": "fastapi-rate-limit-absent",
+    "name": "No Rate Limiting on Authentication / Sensitive Endpoints",
+    "owasp_category": "A07:2021 Identification and Authentication Failures",
+    "frameworks": [
+      "FastAPI",
+      "agnostic"
+    ],
+    "description": "FastAPI has no built-in rate limiting. Without slowapi, a Redis-backed limiter, or an upstream gateway, login, password-reset, OTP verification, and registration endpoints accept unlimited requests, enabling brute-force and credential-stuffing attacks.",
+    "runtime_discovery": "Send 50-100 rapid successive POST requests to /login or /auth/token with varying passwords. Observe whether the app returns 429 Too Many Requests at any point, introduces increasing latency, or locks the account. Absence of 429 across the burst is the finding.",
+    "detection_signal": "100 consecutive POST /login requests all return either 200 or 401 \u2014 never 429. Response latency remains flat across the burst (no exponential backoff). No 'Retry-After' or 'X-RateLimit-*' headers appear in any response.",
+    "active_probe": true,
+    "severity": "high",
+    "prevalence": "common",
+    "slice": "fastapi",
+    "uid": "fastapi__fastapi-rate-limit-absent",
+    "class_hint": "rate-limit"
+  },
+  {
+    "id": "fastapi-token-in-query-string",
+    "name": "API Token / JWT Passed in Query String (Server Log Exposure)",
+    "owasp_category": "A02:2021 Cryptographic Failures",
+    "frameworks": [
+      "FastAPI",
+      "agnostic"
+    ],
+    "description": "FastAPI's OAuth2PasswordBearer and APIKeyQuery schemes accept tokens via query parameter (?token=... or ?api_key=...). Tokens in query strings are logged in server access logs, browser history, Referer headers, and proxies \u2014 leading to credential theft from log access.",
+    "runtime_discovery": "Crawl all endpoints and observe the URL patterns used for authentication. Check whether any authenticated endpoint is reachable with the token in the query string rather than (or in addition to) the Authorization header.",
+    "detection_signal": "Requests to /api/data?token=<jwt> or /export?api_key=<key> return HTTP 200 authenticated responses. The OpenAPI schema for the endpoint shows an APIKeyQuery security scheme. The full token value is visible in the request URL captured by the proxy.",
+    "active_probe": false,
+    "severity": "medium",
+    "prevalence": "common",
+    "slice": "fastapi",
+    "uid": "fastapi__fastapi-token-in-query-string",
+    "class_hint": "jwt"
+  },
+  {
+    "id": "fastapi-background-task-info-leak",
+    "name": "FastAPI BackgroundTask / Celery Task ID Enumeration",
+    "owasp_category": "A01:2021 Broken Access Control",
+    "frameworks": [
+      "FastAPI",
+      "Celery",
+      "ARQ"
+    ],
+    "description": "FastAPI endpoints that offload work to BackgroundTasks or Celery and return a task_id in the response may expose a /tasks/{task_id}/status endpoint with no ownership check. Any authenticated user can poll another user's task to observe its status, result payload, or input parameters.",
+    "runtime_discovery": "Authenticate as user A, trigger a long-running action (export, import, report generation) and capture the returned task_id. Authenticate as user B (auth-diff) and request /tasks/<user_A_task_id>/status or /jobs/<id>. Compare: if user B receives user A's task status or output data, IDOR is confirmed.",
+    "detection_signal": "User B's GET /tasks/<user_A_task_id> returns HTTP 200 with a result payload matching the input parameters submitted by user A (e.g. user A's email address, file name, or query parameters visible in the result). No 403/404 returned.",
+    "active_probe": true,
+    "severity": "medium",
+    "prevalence": "occasional",
+    "slice": "fastapi",
+    "uid": "fastapi__fastapi-background-task-info-leak",
+    "class_hint": "rate-limit-enum"
+  },
+  {
+    "id": "fastapi-dependency-override-env-leak",
+    "name": "Environment / Config Variables Echoed in FastAPI Health or Debug Endpoints",
+    "owasp_category": "A02:2021 Cryptographic Failures",
+    "frameworks": [
+      "FastAPI",
+      "Pydantic Settings",
+      "agnostic"
+    ],
+    "description": "FastAPI apps using pydantic-settings often expose a /health, /status, /debug, or /config endpoint that serializes the settings object for observability purposes. If the settings model includes secret fields (DATABASE_URL, SECRET_KEY, AWS_SECRET_ACCESS_KEY) and they are not explicitly excluded, the full secrets are returned in the response.",
+    "runtime_discovery": "Probe common diagnostic endpoints: /health, /healthz, /status, /debug, /info, /config, /env, /settings, /metrics, /_debug. Inspect response bodies for key-value patterns matching secret field names or high-entropy strings.",
+    "detection_signal": "GET /health returns a JSON body containing fields named 'database_url', 'secret_key', 'api_key', or 'password' with non-placeholder string values. Or response contains a high-entropy string (Shannon entropy > 4.0 bits/char) adjacent to a key name matching known credential patterns (key, token, secret, password, dsn).",
+    "active_probe": true,
+    "severity": "critical",
+    "prevalence": "occasional",
+    "slice": "fastapi",
+    "uid": "fastapi__fastapi-dependency-override-env-leak",
+    "class_hint": "debug-endpoint"
+  }
+]

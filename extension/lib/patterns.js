@@ -943,7 +943,7 @@ const PATTERN_DEFINITIONS = [
     "id": "secret_in_logs_lead",
     "min_match_length": 12,
     "pack": "leak",
-    "pattern": "(?:console\\.log|logger\\.(?:debug|info|warn|error)|print\\s*\\()[\\s\\S]{0,120}(?:api[_-]?key|secret|token|password|authorization|cookie)",
+    "pattern": "(?:console\\.log|logger\\.(?:debug|info|warn|error)|print\\s*\\()[\\s\\S]{0,120}?(?<![a-z0-9_])(?:api[_-]?key|secret|token|password|authorization|cookie)(?![a-z0-9_])",
     "references": [],
     "remediation": "Remove secrets from logs, redact sensitive fields at the logger boundary, and rotate any value that may already have been written.",
     "severity": "medium",

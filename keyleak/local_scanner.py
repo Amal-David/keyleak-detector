@@ -47,6 +47,7 @@ SKIP_DIRS = {
     "venv",
 }
 SKIP_GENERATED_FILE_SUFFIXES = {
+    "extension/lib/detector-info.js",
     "extension/lib/patterns.js",
 }
 
@@ -85,6 +86,16 @@ def scan_path(
         fragments_by_file = collect_fragments(code_files)
         for match in find_split_tokens(fragments_by_file):
             findings.append(_split_token_finding(match))
+
+    # Dependency lifecycle-hook audit (supply-chain). The regex pack skips
+    # node_modules, so a malicious dependency's preinstall/postinstall is
+    # otherwise invisible. Runs when the leak pack is active and a manifest is
+    # present. Read-only.
+    if "leak" in active_packs and target.is_dir():
+        # audit_node_dependencies walks for node_modules anywhere under target
+        # (incl. nested monorepo packages/*/node_modules) and no-ops if none.
+        from .lifecycle_audit import audit_node_dependencies
+        findings.extend(audit_node_dependencies(str(target)))
 
     return build_report(str(target), findings, scan_mode="local", profile=profile, packs=active_packs)
 
