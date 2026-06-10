@@ -8,7 +8,24 @@ import shlex
 from typing import Any, Dict, Iterable, List, Optional
 
 from .models import Finding, ScanReport, SEVERITY_ORDER, finding_from_legacy
+from .privacy_filter import scrub_snippet
 from .redaction import redact_url
+
+
+def _scrub_finding_pii(finding: Finding) -> Finding:
+    """Mask adjacent PII in a finding's evidence snippet, preserving the matched
+    (already-redacted) secret token.
+
+    This is the single chokepoint that enforces KeyLeak's privacy promise for
+    *every* scan mode: previously only ``local_scanner`` scrubbed, so live
+    browser/BaaS/site findings could carry third-party emails/phones/cards into
+    a report (audit W7). Idempotent — re-scrubbing already-scrubbed text is a
+    no-op — so local_scanner's earlier pass is unaffected.
+    """
+    ev = finding.evidence
+    if ev is not None and ev.snippet:
+        ev.snippet = scrub_snippet(ev.snippet, ev.redacted_value or None)
+    return finding
 
 
 def build_report(
@@ -47,6 +64,10 @@ def normalize_findings(findings: Iterable[Any]) -> List[Finding]:
                 normalized.append(Finding.from_dict(raw))
             else:
                 normalized.append(finding_from_legacy(raw))
+    # Single PII-scrub chokepoint: applies to every scan mode before any
+    # serializer sees the findings (audit W7).
+    for finding in normalized:
+        _scrub_finding_pii(finding)
     return normalized
 
 

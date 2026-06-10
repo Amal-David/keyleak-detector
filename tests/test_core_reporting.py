@@ -569,5 +569,52 @@ def _detector(detector_id):
     raise AssertionError(f"missing detector {detector_id}")
 
 
+class PrivacyChokepointTests(unittest.TestCase):
+    """Audit W7: PII scrubbing must apply to every scan mode, not just local
+    files. A browser/BaaS-style Finding built directly (never through
+    local_scanner) must still be scrubbed when it flows through build_report.
+    """
+
+    def _browser_finding(self, snippet, redacted_value="AKIA...[redacted]...wxyz"):
+        return Finding(
+            type="aws_access_key",
+            severity="high",
+            confidence=0.9,
+            detector_id="leak.aws_access_key",
+            source="https://app.example.com/main.js",
+            evidence=Evidence(
+                source="https://app.example.com/main.js",
+                snippet=snippet,
+                redacted_value=redacted_value,
+            ),
+            risk_reason="x",
+            remediation="y",
+        )
+
+    def test_build_report_scrubs_pii_from_live_findings(self):
+        snippet = "owner=jane.doe@example.com phone=+1 555-123-4567 key=AKIA...[redacted]...wxyz"
+        report = build_report("https://app.example.com", [self._browser_finding(snippet)], scan_mode="browser")
+        out = report.findings[0].evidence.snippet
+        self.assertNotIn("jane.doe@example.com", out)
+        self.assertNotIn("555-123-4567", out)
+        self.assertIn("[email]", out)
+        self.assertIn("[phone]", out)
+        # The matched (already-redacted) secret token must survive scrubbing.
+        self.assertIn("AKIA...[redacted]...wxyz", out)
+
+    def test_build_report_scrub_is_idempotent(self):
+        # A snippet already scrubbed (e.g. by local_scanner) is unchanged.
+        snippet = "owner=[email] key=AKIA...[redacted]...wxyz"
+        report = build_report("p", [self._browser_finding(snippet)], scan_mode="local")
+        self.assertEqual(report.findings[0].evidence.snippet, snippet)
+
+    def test_serializers_carry_no_raw_pii(self):
+        snippet = "card 4111 1111 1111 1111 contact bob@corp.io key=AKIA...[redacted]...wxyz"
+        report = build_report("t", [self._browser_finding(snippet)], scan_mode="browser")
+        blob = format_sarif(report) + format_html(report) + json.dumps(report.to_dict())
+        self.assertNotIn("bob@corp.io", blob)
+        self.assertNotIn("4111 1111 1111 1111", blob)
+
+
 if __name__ == "__main__":
     unittest.main()
