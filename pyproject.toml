@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "keyleak-detector"
-version = "0.5.4"
+version = "0.6.0"
 description = "Runtime leak detector for modern web apps — finds exposed API keys, BaaS misconfigurations (Supabase/Firebase RLS), and secrets in JS bundles, with a Chrome extension for real-time detection."
 authors = ["Amal David <amal@utopianlabs.co>"]
 license = "MIT"
@@ -46,7 +46,7 @@ build-backend = "poetry.core.masonry.api"
 # PEP 621 project table for uv / pip compatibility
 [project]
 name = "keyleak-detector"
-version = "0.5.4"
+version = "0.6.0"
 description = "Runtime leak detector for modern web apps — finds exposed API keys, BaaS misconfigurations (Supabase/Firebase RLS), and secrets in JS bundles."
 requires-python = ">=3.12,<4.0"
 license = {text = "MIT"}
