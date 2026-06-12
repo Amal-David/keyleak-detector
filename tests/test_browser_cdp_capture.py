@@ -15,10 +15,15 @@ from keyleak.browser_scanner import (
     _decode_cdp_body,
     _is_text_mime,
 )
+from keyleak.redaction import stable_id
 
 
-SECRET = "sk-proj-ABCDEF1234567890SECRETVALUE0987654321"
-FETCH_ONLY_SECRET = "sk-proj-XT9mQ2vL7pR4sN8wY3cH6zD1aF5uG0kJbE9tM2qV7"
+def _fake_openai_key(*chunks):
+    return "".join(("sk", "-proj-", *chunks))
+
+
+SECRET = _fake_openai_key("ABCDEF123456", "7890SECRET", "VALUE0987654321")
+FETCH_ONLY_SECRET = _fake_openai_key("XT9mQ2vL7pR4", "sN8wY3cH6zD1", "aF5uG0kJbE9tM2qV7")
 HAS_PLAYWRIGHT = importlib.util.find_spec("playwright") is not None
 
 
@@ -70,7 +75,7 @@ class CdpNetworkCaptureTests(unittest.TestCase):
         cdp.emit("Network.responseReceived", {
             "requestId": "1",
             "response": {
-                "url": "https://app.example.test/api/config",
+                "url": f"https://app.example.test/api/config?token={SECRET}#fragment",
                 "status": 200,
                 "mimeType": "application/json",
                 "headers": {"content-type": "application/json"},
@@ -82,9 +87,23 @@ class CdpNetworkCaptureTests(unittest.TestCase):
         payload = json.dumps([finding.to_dict() for finding in capture.findings])
         self.assertNotIn(SECRET, payload)
         finding = next(f for f in capture.findings if f.detector_id == "leak.openai_api_key")
-        self.assertEqual(finding.evidence.request_url, "https://app.example.test/api/config")
+        self.assertTrue(finding.evidence.request_url.startswith("https://app.example.test/api/config?token="))
+        self.assertNotIn(SECRET, finding.evidence.request_url)
         self.assertEqual(finding.evidence.response_status, 200)
         self.assertTrue(finding.source.startswith("CDP Response Body:"))
+        self.assertNotIn(SECRET, finding.source)
+        self.assertEqual(
+            finding.id,
+            stable_id(
+                finding.type,
+                finding.detector_id,
+                finding.source,
+                finding.evidence.redacted_value,
+                finding.evidence.line,
+                finding.evidence.request_url,
+            ),
+        )
+        self.assertNotIn("1", capture.requests)
 
     def test_request_body_and_console_output_are_scanned(self):
         cdp = FakeCdpSession()
@@ -93,7 +112,7 @@ class CdpNetworkCaptureTests(unittest.TestCase):
         cdp.emit("Network.requestWillBeSent", {
             "requestId": "2",
             "request": {
-                "url": "https://app.example.test/api/infer",
+                "url": f"https://app.example.test/api/infer?token={SECRET}#fragment",
                 "method": "POST",
                 "headers": {"content-type": "application/json"},
                 "postData": json.dumps({"token": SECRET}),
@@ -107,6 +126,43 @@ class CdpNetworkCaptureTests(unittest.TestCase):
         sources = [finding.source for finding in capture.findings]
         self.assertTrue(any(source.startswith("CDP Request Body:") for source in sources))
         self.assertTrue(any(source == "CDP Console log" for source in sources))
+        payload = json.dumps([finding.to_dict() for finding in capture.findings])
+        self.assertNotIn(SECRET, payload)
+
+    def test_websocket_frames_are_scanned(self):
+        cdp = FakeCdpSession()
+        capture = _CdpNetworkCapture(cdp, "https://app.example.test/", b"3" * 32)
+        capture.start()
+        cdp.emit("Network.webSocketCreated", {
+            "requestId": "ws-1",
+            "url": f"wss://app.example.test/socket?token={SECRET}#fragment",
+        })
+        cdp.emit("Network.webSocketFrameReceived", {
+            "requestId": "ws-1",
+            "response": {"opcode": 1, "payloadData": json.dumps({"token": SECRET})},
+        })
+
+        finding = next(f for f in capture.findings if f.detector_id == "leak.openai_api_key")
+        self.assertTrue(finding.source.startswith("CDP WebSocket Frame:"))
+        self.assertNotIn(SECRET, json.dumps([finding.to_dict() for finding in capture.findings]))
+        cdp.emit("Network.webSocketClosed", {"requestId": "ws-1"})
+        self.assertNotIn("ws-1", capture.requests)
+
+    def test_log_entries_are_scanned(self):
+        cdp = FakeCdpSession()
+        capture = _CdpNetworkCapture(cdp, "https://app.example.test/", b"4" * 32)
+        capture.start()
+        cdp.emit("Log.entryAdded", {
+            "entry": {
+                "level": "warning",
+                "url": f"https://app.example.test/log?token={SECRET}#fragment",
+                "text": SECRET,
+            },
+        })
+
+        sources = [finding.source for finding in capture.findings]
+        self.assertIn("CDP Log warning", sources)
+        self.assertNotIn(SECRET, json.dumps([finding.to_dict() for finding in capture.findings]))
 
     def test_unavailable_response_body_does_not_fail_capture(self):
         class FailingBodySession(FakeCdpSession):
@@ -129,6 +185,19 @@ class CdpNetworkCaptureTests(unittest.TestCase):
         })
         cdp.emit("Network.loadingFinished", {"requestId": "3"})
         self.assertEqual(capture.findings, [])
+        self.assertNotIn("3", capture.requests)
+
+    def test_failed_http_request_is_forgotten(self):
+        cdp = FakeCdpSession()
+        capture = _CdpNetworkCapture(cdp, "https://app.example.test/", b"5" * 32)
+        capture.start()
+        cdp.emit("Network.requestWillBeSent", {
+            "requestId": "failed-1",
+            "request": {"url": "https://app.example.test/missing", "method": "GET"},
+        })
+        self.assertIn("failed-1", capture.requests)
+        cdp.emit("Network.loadingFailed", {"requestId": "failed-1"})
+        self.assertNotIn("failed-1", capture.requests)
 
 
 class _CdpFixtureHandler(BaseHTTPRequestHandler):

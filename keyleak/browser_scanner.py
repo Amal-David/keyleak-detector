@@ -22,6 +22,7 @@ Why this shape:
 from __future__ import annotations
 
 import json
+import logging
 import os
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
@@ -32,9 +33,11 @@ from .extension_bundle import extension_pattern_payload
 from .local_scanner import scan_text
 from .models import Evidence, Finding, ScanReport
 from .proxy import playwright_proxy
-from .redaction import new_run_salt, redact_url, redact_value
+from .redaction import new_run_salt, redact_url, redact_value, stable_id
 from .reporting import build_report
 
+
+_LOG = logging.getLogger(__name__)
 
 SCAN_BUDGET_DEFAULT_SECONDS = 30
 DEFAULT_VIEWPORT = {"width": 1280, "height": 1024}
@@ -465,13 +468,15 @@ class _CdpNetworkCapture:
         for domain in ("Runtime.enable", "Log.enable"):
             try:
                 _cdp_send(self.cdp, domain)
-            except Exception:
-                pass
+            except Exception as exc:
+                _LOG.debug("CDP domain enable failed for %s: %s", domain, exc, exc_info=True)
 
         self.cdp.on("Network.requestWillBeSent", self._on_request)
         self.cdp.on("Network.responseReceived", self._on_response)
         self.cdp.on("Network.loadingFinished", self._on_loading_finished)
+        self.cdp.on("Network.loadingFailed", self._on_loading_failed)
         self.cdp.on("Network.webSocketCreated", self._on_websocket_created)
+        self.cdp.on("Network.webSocketClosed", self._on_websocket_closed)
         self.cdp.on("Network.webSocketFrameSent", self._on_websocket_frame)
         self.cdp.on("Network.webSocketFrameReceived", self._on_websocket_frame)
         self.cdp.on("Runtime.consoleAPICalled", self._on_console)
@@ -484,8 +489,8 @@ class _CdpNetworkCapture:
     def detach(self) -> None:
         try:
             self.cdp.detach()
-        except Exception:
-            pass
+        except Exception as exc:
+            _LOG.debug("CDP detach failed: %s", exc, exc_info=True)
 
     def _scan_text(
         self,
@@ -503,6 +508,14 @@ class _CdpNetworkCapture:
             finding.evidence.request_url = redact_url(request_url)
             if response_status is not None:
                 finding.evidence.response_status = response_status
+            finding.id = stable_id(
+                finding.type,
+                finding.detector_id,
+                finding.source,
+                finding.evidence.redacted_value,
+                finding.evidence.line,
+                finding.evidence.request_url,
+            )
             self._findings.append(finding)
 
     def _remember(self, request_id: str, **updates: Any) -> Dict[str, Any]:
@@ -527,12 +540,13 @@ class _CdpNetworkCapture:
             method=request.get("method"),
         )
 
-        self._scan_text(url, f"CDP Request URL: {url}", url)
+        safe_url = redact_url(url)
+        self._scan_text(url, f"CDP Request URL: {safe_url}", url)
         if headers:
             header_text = "\n".join(f"{name}: {value}" for name, value in headers.items())
-            self._scan_text(header_text, f"CDP Request Headers: {url}", url)
+            self._scan_text(header_text, f"CDP Request Headers: {safe_url}", url)
         if post_data:
-            self._scan_text(str(post_data), f"CDP Request Body: {url}", url)
+            self._scan_text(str(post_data), f"CDP Request Body: {safe_url}", url)
 
     def _on_response(self, params: Dict[str, Any]) -> None:
         request_id = str(params.get("requestId") or "")
@@ -549,11 +563,12 @@ class _CdpNetworkCapture:
             response_status=status,
             mime_type=response.get("mimeType"),
         )
+        safe_url = redact_url(url)
         if headers:
             header_text = "\n".join(f"{name}: {value}" for name, value in headers.items())
             self._scan_text(
                 header_text,
-                f"CDP Response Headers: {url}",
+                f"CDP Response Headers: {safe_url}",
                 url,
                 response_status=status if isinstance(status, int) else None,
             )
@@ -564,28 +579,45 @@ class _CdpNetworkCapture:
         url = str(record.get("url") or "")
         headers = record.get("response_headers") or {}
         status = record.get("response_status")
-        if not url or not _is_text_mime(record.get("mime_type"), headers):
-            return
-        if _content_length_too_large(headers):
-            return
-
         try:
-            payload = _cdp_send(self.cdp, "Network.getResponseBody", {"requestId": request_id})
-        except Exception:
-            return
-        body = _decode_cdp_body(payload)
-        self._scan_text(
-            body,
-            f"CDP Response Body: {url}",
-            url,
-            response_status=status if isinstance(status, int) else None,
-        )
+            if not url or not _is_text_mime(record.get("mime_type"), headers):
+                return
+            if _content_length_too_large(headers):
+                return
+
+            try:
+                payload = _cdp_send(self.cdp, "Network.getResponseBody", {"requestId": request_id})
+            except Exception as exc:
+                _LOG.debug("CDP response body unavailable for %s: %s", request_id, exc, exc_info=True)
+                return
+            body = _decode_cdp_body(payload)
+            self._scan_text(
+                body,
+                f"CDP Response Body: {redact_url(url)}",
+                url,
+                response_status=status if isinstance(status, int) else None,
+            )
+        finally:
+            if urlparse(url).scheme.lower() in {"http", "https"}:
+                self.requests.pop(request_id, None)
+
+    def _on_loading_failed(self, params: Dict[str, Any]) -> None:
+        request_id = str(params.get("requestId") or "")
+        record = self.requests.get(request_id) or {}
+        url = str(record.get("url") or "")
+        if urlparse(url).scheme.lower() in {"http", "https"}:
+            self.requests.pop(request_id, None)
 
     def _on_websocket_created(self, params: Dict[str, Any]) -> None:
         request_id = str(params.get("requestId") or "")
         url = str(params.get("url") or "")
         if request_id and _is_http_url(url):
             self._remember(request_id, url=url, mime_type="text/plain")
+
+    def _on_websocket_closed(self, params: Dict[str, Any]) -> None:
+        request_id = str(params.get("requestId") or "")
+        if request_id:
+            self.requests.pop(request_id, None)
 
     def _on_websocket_frame(self, params: Dict[str, Any]) -> None:
         request_id = str(params.get("requestId") or "")
@@ -596,7 +628,7 @@ class _CdpNetworkCapture:
         opcode = response.get("opcode")
         if opcode is not None and opcode not in (1, "1"):
             return
-        self._scan_text(str(payload or ""), f"CDP WebSocket Frame: {url}", url)
+        self._scan_text(str(payload or ""), f"CDP WebSocket Frame: {redact_url(url)}", url)
 
     def _on_console(self, params: Dict[str, Any]) -> None:
         values: List[str] = []
@@ -621,12 +653,14 @@ class _CdpNetworkCapture:
 def _start_cdp_capture(context: Any, page: Any, target_url: str, run_salt: bytes) -> Optional[_CdpNetworkCapture]:
     try:
         cdp = context.new_cdp_session(page)
-    except Exception:
+    except Exception as exc:
+        _LOG.debug("CDP session attach failed: %s", exc, exc_info=True)
         return None
     capture = _CdpNetworkCapture(cdp, target_url, run_salt)
     try:
         capture.start()
-    except Exception:
+    except Exception as exc:
+        _LOG.debug("CDP capture start failed: %s", exc, exc_info=True)
         capture.detach()
         return None
     return capture
