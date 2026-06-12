@@ -3,8 +3,11 @@
 from __future__ import annotations
 
 import base64
+import importlib.util
 import json
+import threading
 import unittest
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 from keyleak.browser_scanner import (
     CDP_MAX_BODY_BYTES,
@@ -15,6 +18,8 @@ from keyleak.browser_scanner import (
 
 
 SECRET = "sk-proj-ABCDEF1234567890SECRETVALUE0987654321"
+FETCH_ONLY_SECRET = "sk-proj-XT9mQ2vL7pR4sN8wY3cH6zD1aF5uG0kJbE9tM2qV7"
+HAS_PLAYWRIGHT = importlib.util.find_spec("playwright") is not None
 
 
 class FakeCdpSession:
@@ -124,6 +129,73 @@ class CdpNetworkCaptureTests(unittest.TestCase):
         })
         cdp.emit("Network.loadingFinished", {"requestId": "3"})
         self.assertEqual(capture.findings, [])
+
+
+class _CdpFixtureHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        if self.path == "/config":
+            body = json.dumps({"api_key": FETCH_ONLY_SECRET}).encode("utf-8")
+            self.send_response(200)
+            self.send_header("content-type", "application/json")
+            self.send_header("content-length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+            return
+
+        body = b"""
+<!doctype html>
+<html>
+<body>
+  <script>
+    fetch('/config').then(function (response) {
+      return response.json();
+    }).then(function () {
+      document.body.dataset.loaded = 'true';
+    });
+  </script>
+</body>
+</html>
+"""
+        self.send_response(200)
+        self.send_header("content-type", "text/html")
+        self.send_header("content-length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def log_message(self, format, *args):
+        return
+
+
+@unittest.skipUnless(HAS_PLAYWRIGHT, "Playwright not installed; live CDP integration skipped.")
+class BrowserCdpIntegrationTests(unittest.TestCase):
+    def test_browser_scan_captures_fetch_response_body_via_cdp(self):
+        from keyleak.browser_scanner import run_browser_scan
+
+        server = ThreadingHTTPServer(("127.0.0.1", 0), _CdpFixtureHandler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            url = f"http://127.0.0.1:{server.server_port}/"
+            try:
+                report = run_browser_scan(url, scan_budget_seconds=5)
+            except Exception as exc:
+                message = str(exc)
+                if "playwright install" in message or "Executable doesn't exist" in message:
+                    self.skipTest(f"Playwright Chromium is not installed: {message}")
+                raise
+        finally:
+            server.shutdown()
+            server.server_close()
+            thread.join(timeout=2)
+
+        matching = [
+            finding for finding in report.findings
+            if finding.detector_id == "leak.openai_api_key"
+            and finding.source.startswith("CDP Response Body:")
+        ]
+        self.assertTrue(matching, "expected CDP response body to surface the fetch-only key")
+        payload = json.dumps(report.to_dict())
+        self.assertNotIn(FETCH_ONLY_SECRET, payload)
 
 
 if __name__ == "__main__":
