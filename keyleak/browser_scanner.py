@@ -25,16 +25,31 @@ import json
 import os
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
+from urllib.parse import urlparse
 
+from .detectors import detectors_for_packs, normalize_packs
 from .extension_bundle import extension_pattern_payload
+from .local_scanner import scan_text
 from .models import Evidence, Finding, ScanReport
 from .proxy import playwright_proxy
-from .redaction import new_run_salt, redact_value
+from .redaction import new_run_salt, redact_url, redact_value
 from .reporting import build_report
 
 
 SCAN_BUDGET_DEFAULT_SECONDS = 30
 DEFAULT_VIEWPORT = {"width": 1280, "height": 1024}
+CDP_MAX_BODY_BYTES = 2 * 1024 * 1024
+CDP_MAX_TOTAL_BUFFER_BYTES = 10 * 1024 * 1024
+CDP_TEXT_HINTS = (
+    "text/",
+    "json",
+    "javascript",
+    "ecmascript",
+    "xml",
+    "x-www-form-urlencoded",
+    "graphql",
+    "source-map",
+)
 
 
 # The init script we inject into the page context. It exposes a global
@@ -357,6 +372,266 @@ def _build_init_script(payload: Optional[List[Dict[str, Any]]] = None) -> str:
     return _INIT_SCRIPT_TEMPLATE.replace("__PATTERNS__", encoded)
 
 
+def _browser_detectors():
+    packs = normalize_packs(None, profile="launch-gate", surface="extension")
+    return detectors_for_packs(packs, extension_only=True)
+
+
+def _is_http_url(url: object) -> bool:
+    try:
+        parsed = urlparse(str(url or ""))
+    except ValueError:
+        return False
+    return parsed.scheme in {"http", "https", "ws", "wss"} and bool(parsed.netloc)
+
+
+def _is_text_mime(mime_type: object, headers: Optional[Dict[str, Any]] = None) -> bool:
+    content_type = str(mime_type or "")
+    if not content_type and headers:
+        content_type = str(_header_value(headers, "content-type") or "")
+    if not content_type:
+        return True
+    lowered = content_type.lower()
+    return any(hint in lowered for hint in CDP_TEXT_HINTS)
+
+
+def _header_value(headers: Optional[Dict[str, Any]], name: str) -> str:
+    if not headers:
+        return ""
+    target = name.lower()
+    for key, value in headers.items():
+        if str(key).lower() == target:
+            return str(value)
+    return ""
+
+
+def _content_length_too_large(headers: Optional[Dict[str, Any]]) -> bool:
+    raw = _header_value(headers, "content-length")
+    if not raw:
+        return False
+    try:
+        return int(raw) > CDP_MAX_BODY_BYTES
+    except ValueError:
+        return False
+
+
+def _decode_cdp_body(payload: Dict[str, Any]) -> str:
+    body = payload.get("body")
+    if not isinstance(body, str) or not body:
+        return ""
+    if payload.get("base64Encoded"):
+        try:
+            import base64
+
+            raw = base64.b64decode(body, validate=False)
+        except Exception:
+            return ""
+        if len(raw) > CDP_MAX_BODY_BYTES:
+            return ""
+        return raw.decode("utf-8", errors="ignore")
+    if len(body.encode("utf-8", errors="ignore")) > CDP_MAX_BODY_BYTES:
+        return ""
+    return body
+
+
+def _cdp_send(cdp: Any, method: str, params: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    params = params or {}
+    try:
+        return cdp.send(method, params)
+    except TypeError:
+        return cdp.send(method, **params)
+
+
+class _CdpNetworkCapture:
+    """Best-effort CDP capture for Playwright Chromium scans."""
+
+    def __init__(self, cdp: Any, target_url: str, run_salt: bytes):
+        self.cdp = cdp
+        self.target_url = target_url
+        self.run_salt = run_salt
+        self.requests: Dict[str, Dict[str, Any]] = {}
+        self._findings: List[Finding] = []
+        self._detectors = _browser_detectors()
+
+    def start(self) -> None:
+        _cdp_send(
+            self.cdp,
+            "Network.enable",
+            {
+                "maxTotalBufferSize": CDP_MAX_TOTAL_BUFFER_BYTES,
+                "maxResourceBufferSize": CDP_MAX_BODY_BYTES,
+            },
+        )
+        for domain in ("Runtime.enable", "Log.enable"):
+            try:
+                _cdp_send(self.cdp, domain)
+            except Exception:
+                pass
+
+        self.cdp.on("Network.requestWillBeSent", self._on_request)
+        self.cdp.on("Network.responseReceived", self._on_response)
+        self.cdp.on("Network.loadingFinished", self._on_loading_finished)
+        self.cdp.on("Network.webSocketCreated", self._on_websocket_created)
+        self.cdp.on("Network.webSocketFrameSent", self._on_websocket_frame)
+        self.cdp.on("Network.webSocketFrameReceived", self._on_websocket_frame)
+        self.cdp.on("Runtime.consoleAPICalled", self._on_console)
+        self.cdp.on("Log.entryAdded", self._on_log_entry)
+
+    @property
+    def findings(self) -> List[Finding]:
+        return list(self._findings)
+
+    def detach(self) -> None:
+        try:
+            self.cdp.detach()
+        except Exception:
+            pass
+
+    def _scan_text(
+        self,
+        text: object,
+        source: str,
+        request_url: str,
+        *,
+        response_status: Optional[int] = None,
+    ) -> None:
+        if not isinstance(text, str) or not text or not _is_http_url(request_url):
+            return
+        if len(text.encode("utf-8", errors="ignore")) > CDP_MAX_BODY_BYTES:
+            return
+        for finding in scan_text(text, source, self._detectors, run_salt=self.run_salt):
+            finding.evidence.request_url = redact_url(request_url)
+            if response_status is not None:
+                finding.evidence.response_status = response_status
+            self._findings.append(finding)
+
+    def _remember(self, request_id: str, **updates: Any) -> Dict[str, Any]:
+        record = self.requests.setdefault(request_id, {})
+        for key, value in updates.items():
+            if value not in (None, ""):
+                record[key] = value
+        return record
+
+    def _on_request(self, params: Dict[str, Any]) -> None:
+        request_id = str(params.get("requestId") or "")
+        request = params.get("request") or {}
+        url = str(request.get("url") or "")
+        if not request_id or not _is_http_url(url):
+            return
+        headers = request.get("headers") or {}
+        post_data = request.get("postData") or ""
+        self._remember(
+            request_id,
+            url=url,
+            request_headers=headers,
+            method=request.get("method"),
+        )
+
+        self._scan_text(url, f"CDP Request URL: {url}", url)
+        if headers:
+            header_text = "\n".join(f"{name}: {value}" for name, value in headers.items())
+            self._scan_text(header_text, f"CDP Request Headers: {url}", url)
+        if post_data:
+            self._scan_text(str(post_data), f"CDP Request Body: {url}", url)
+
+    def _on_response(self, params: Dict[str, Any]) -> None:
+        request_id = str(params.get("requestId") or "")
+        response = params.get("response") or {}
+        url = str(response.get("url") or "")
+        if not request_id or not _is_http_url(url):
+            return
+        headers = response.get("headers") or {}
+        status = response.get("status")
+        self._remember(
+            request_id,
+            url=url,
+            response_headers=headers,
+            response_status=status,
+            mime_type=response.get("mimeType"),
+        )
+        if headers:
+            header_text = "\n".join(f"{name}: {value}" for name, value in headers.items())
+            self._scan_text(
+                header_text,
+                f"CDP Response Headers: {url}",
+                url,
+                response_status=status if isinstance(status, int) else None,
+            )
+
+    def _on_loading_finished(self, params: Dict[str, Any]) -> None:
+        request_id = str(params.get("requestId") or "")
+        record = self.requests.get(request_id) or {}
+        url = str(record.get("url") or "")
+        headers = record.get("response_headers") or {}
+        status = record.get("response_status")
+        if not url or not _is_text_mime(record.get("mime_type"), headers):
+            return
+        if _content_length_too_large(headers):
+            return
+
+        try:
+            payload = _cdp_send(self.cdp, "Network.getResponseBody", {"requestId": request_id})
+        except Exception:
+            return
+        body = _decode_cdp_body(payload)
+        self._scan_text(
+            body,
+            f"CDP Response Body: {url}",
+            url,
+            response_status=status if isinstance(status, int) else None,
+        )
+
+    def _on_websocket_created(self, params: Dict[str, Any]) -> None:
+        request_id = str(params.get("requestId") or "")
+        url = str(params.get("url") or "")
+        if request_id and _is_http_url(url):
+            self._remember(request_id, url=url, mime_type="text/plain")
+
+    def _on_websocket_frame(self, params: Dict[str, Any]) -> None:
+        request_id = str(params.get("requestId") or "")
+        record = self.requests.get(request_id) or {}
+        url = str(record.get("url") or self.target_url)
+        response = params.get("response") or {}
+        payload = response.get("payloadData")
+        opcode = response.get("opcode")
+        if opcode is not None and opcode not in (1, "1"):
+            return
+        self._scan_text(str(payload or ""), f"CDP WebSocket Frame: {url}", url)
+
+    def _on_console(self, params: Dict[str, Any]) -> None:
+        values: List[str] = []
+        for arg in params.get("args") or []:
+            if "value" in arg:
+                values.append(str(arg.get("value")))
+            elif "description" in arg:
+                values.append(str(arg.get("description")))
+        if values:
+            level = str(params.get("type") or "console")
+            self._scan_text("\n".join(values), f"CDP Console {level}", self.target_url)
+
+    def _on_log_entry(self, params: Dict[str, Any]) -> None:
+        entry = params.get("entry") or {}
+        text = entry.get("text")
+        if text:
+            level = str(entry.get("level") or "log")
+            url = str(entry.get("url") or self.target_url)
+            self._scan_text(str(text), f"CDP Log {level}", url)
+
+
+def _start_cdp_capture(context: Any, page: Any, target_url: str, run_salt: bytes) -> Optional[_CdpNetworkCapture]:
+    try:
+        cdp = context.new_cdp_session(page)
+    except Exception:
+        return None
+    capture = _CdpNetworkCapture(cdp, target_url, run_salt)
+    try:
+        capture.start()
+    except Exception:
+        capture.detach()
+        return None
+    return capture
+
+
 def run_browser_scan(
     url: str,
     *,
@@ -383,6 +658,8 @@ def run_browser_scan(
         ) from exc
 
     init_script = _build_init_script()
+    run_salt = new_run_salt()
+    cdp_capture: Optional[_CdpNetworkCapture] = None
 
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=headless, proxy=playwright_proxy(proxy))
@@ -394,6 +671,7 @@ def run_browser_scan(
 
         page = context.new_page()
         page.set_default_timeout(scan_budget_seconds * 1000)
+        cdp_capture = _start_cdp_capture(context, page, url, run_salt)
         page.goto(url, wait_until="networkidle")
         raw = page.evaluate("() => window.__keyleak_run ? window.__keyleak_run() : []")
 
@@ -416,6 +694,9 @@ def run_browser_scan(
         except Exception:
             pass
 
+        cdp_findings = cdp_capture.findings if cdp_capture else []
+        if cdp_capture:
+            cdp_capture.detach()
         browser.close()
 
     # Merge extra --baas-tables into extraction
@@ -427,8 +708,8 @@ def run_browser_scan(
     elif baas_tables and not baas_extraction:
         baas_extraction = {"tables": list(baas_tables), "rpcs": [], "buckets": []}
 
-    run_salt = new_run_salt()
     findings = [_to_finding(entry, url, run_salt) for entry in raw or []]
+    findings.extend(cdp_findings)
     baas_findings = _run_baas_validation(raw, baas_extraction, baas_validate, baas_prober, proxy)
     findings.extend(baas_findings)
 
