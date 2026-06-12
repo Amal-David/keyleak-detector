@@ -137,6 +137,7 @@ class CdpNetworkCaptureTests(unittest.TestCase):
             "requestId": "ws-1",
             "url": f"wss://app.example.test/socket?token={SECRET}#fragment",
         })
+        self.assertIn("ws-1", capture.requests)
         cdp.emit("Network.webSocketFrameReceived", {
             "requestId": "ws-1",
             "response": {"opcode": 1, "payloadData": json.dumps({"token": SECRET})},
@@ -144,6 +145,8 @@ class CdpNetworkCaptureTests(unittest.TestCase):
 
         finding = next(f for f in capture.findings if f.detector_id == "leak.openai_api_key")
         self.assertTrue(finding.source.startswith("CDP WebSocket Frame:"))
+        self.assertTrue(finding.evidence.request_url.startswith("wss://app.example.test/socket?token="))
+        self.assertNotIn(SECRET, finding.evidence.request_url)
         self.assertNotIn(SECRET, json.dumps([finding.to_dict() for finding in capture.findings]))
         cdp.emit("Network.webSocketClosed", {"requestId": "ws-1"})
         self.assertNotIn("ws-1", capture.requests)

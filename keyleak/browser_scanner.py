@@ -21,6 +21,7 @@ Why this shape:
 
 from __future__ import annotations
 
+import base64
 import json
 import logging
 import os
@@ -424,8 +425,6 @@ def _decode_cdp_body(payload: Dict[str, Any]) -> str:
         return ""
     if payload.get("base64Encoded"):
         try:
-            import base64
-
             raw = base64.b64decode(body, validate=False)
         except Exception:
             return ""
