@@ -78,7 +78,7 @@ keyleak doctor
 allowlist file, and prints a `fix:` line for each failure. A common one on a partial
 checkout:
 
-```
+```text
 [✗] keyleak-imports: Missing modules: yaml
     fix: Run `pip install -e .` (or `poetry install`) from the repo root.
 ```
@@ -172,7 +172,7 @@ print(report_to_text(report))   # terminal summary
 
 ## Step 7 — Interpret the result
 
-The report carries a top-level `verdict` (`SHIP` / `BLOCK_SHIP`), a `summary` with
+The report carries a top-level `verdict` (`SAFE_TO_SHIP`, `REVIEW`, or `BLOCK_SHIP`), a `summary` with
 per-severity counts, a `pack_summary`, the `subdomains` and `scanned_urls` covered, and
 `provenance` (which URLs each finding appeared on).
 
@@ -241,5 +241,5 @@ keyleak explain leak.gemini_api_key              # remediation card for a detect
 keyleak diff baseline.json current.json          # only findings new since baseline
 ```
 
-See `AGENTS.md` for repository/contribution conventions and `docs/DETECTOR_AUTHORING.md`
+See `CONTRIBUTING.md` for contribution conventions and `docs/DETECTOR_AUTHORING.md`
 for adding detectors.
