@@ -563,7 +563,7 @@ Useful PRs are very welcome. The best contribution lanes are:
 - add MCP/agent/LLM leak detectors
 - add detector-pack fixtures and lower-noise validators for correctness and housekeeping leads
 
-Start with [CONTRIBUTING.md](CONTRIBUTING.md) and [docs/DETECTOR_AUTHORING.md](docs/DETECTOR_AUTHORING.md).
+Start with [CONTRIBUTING.md](CONTRIBUTING.md) and [docs/DETECTOR_AUTHORING.md](docs/DETECTOR_AUTHORING.md). For an end-to-end runbook on running a scan (setup, choosing a command, and triaging output), see [docs/AGENT_SCAN_HOWTO.md](docs/AGENT_SCAN_HOWTO.md).
 
 ## Roadmap
 
