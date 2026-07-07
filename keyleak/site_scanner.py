@@ -654,7 +654,7 @@ def scan_site(
                 for f in report.findings:
                     pairs.append((f, url))
             except Exception as exc:
-                safe_error = redact_url(str(exc))
+                safe_error = f"{type(exc).__name__} during page scan"
                 print(f"[keyleak]   Error scanning {safe_url}: {safe_error}", file=sys.stderr)
                 scan_failures.append({"url": safe_url, "error": safe_error})
                 continue

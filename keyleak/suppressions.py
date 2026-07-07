@@ -489,7 +489,8 @@ def _add_items(suppressions: SuppressionSet, items: Iterable[Any], baseline_mode
         _add_optional(suppressions.types, item.get("type"))
         _add_optional(suppressions.signatures, _signature_from_dict(item))
         _add_optional(suppressions.source_contains, item.get("source_contains"))
-        _add_optional(suppressions.source_contains, item.get("source"))
+        if baseline_mode:
+            _add_optional(suppressions.source_contains, item.get("source"))
 
 
 def _signature_from_dict(item: Dict[str, Any]) -> Optional[str]:

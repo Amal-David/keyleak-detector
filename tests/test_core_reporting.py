@@ -196,6 +196,22 @@ class ReportingTests(unittest.TestCase):
         self.assertEqual(filtered.findings, [])
         self.assertEqual(filtered.verdict["status"], "SAFE_TO_SHIP")
 
+    def test_rules_source_fallback_does_not_create_repo_wide_substring_suppression(self):
+        rules = {
+            "rules": [
+                {
+                    "detector_id": "other.detector",
+                    "source": "app.py",
+                }
+            ]
+        }
+        with tempfile.NamedTemporaryFile("w", suffix=".json") as handle:
+            json.dump(rules, handle)
+            handle.flush()
+            suppressions = load_suppressions(handle.name, baseline_mode=False)
+
+        self.assertEqual(suppressions.source_contains, [])
+
     def test_diff_reports_uses_fingerprint_across_redaction_salt_rotation(self):
         raw_key = "sk-proj-AbCdEf1234567890GhIjKlMnOpQrStUvWxYz9876543210"
         content = f'OPENAI_API_KEY="{raw_key}"\n'
