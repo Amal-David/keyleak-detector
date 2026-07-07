@@ -160,6 +160,42 @@ class ReportingTests(unittest.TestCase):
         self.assertEqual(filtered.findings, [])
         self.assertEqual(filtered.verdict["status"], "SAFE_TO_SHIP")
 
+    def test_baseline_preserves_legacy_detector_and_source_suppressions(self):
+        baseline = {
+            "findings": [
+                {
+                    "id": "baseline-id",
+                    "detector_id": "leak.openai_api_key",
+                    "type": "openai_api_key",
+                    "source": "app.py",
+                    "evidence": {"source": "app.py", "line": 1, "redacted_value": "[redacted:11111111]"},
+                }
+            ]
+        }
+        current = ScanReport(
+            "app.py",
+            "local",
+            [
+                Finding(
+                    type="openai_api_key",
+                    severity="critical",
+                    confidence=0.9,
+                    detector_id="leak.openai_api_key",
+                    source="app.py",
+                    evidence=Evidence(source="app.py", line=99, redacted_value="[redacted:22222222]"),
+                    risk_reason="risk",
+                    remediation="fix",
+                )
+            ],
+        )
+        with tempfile.NamedTemporaryFile("w", suffix=".json") as handle:
+            json.dump(baseline, handle)
+            handle.flush()
+            filtered = apply_suppressions(current, baseline_path=handle.name, apply_defaults=False)
+
+        self.assertEqual(filtered.findings, [])
+        self.assertEqual(filtered.verdict["status"], "SAFE_TO_SHIP")
+
     def test_diff_reports_uses_fingerprint_across_redaction_salt_rotation(self):
         raw_key = "sk-proj-AbCdEf1234567890GhIjKlMnOpQrStUvWxYz9876543210"
         content = f'OPENAI_API_KEY="{raw_key}"\n'

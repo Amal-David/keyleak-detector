@@ -485,15 +485,11 @@ def _add_items(suppressions: SuppressionSet, items: Iterable[Any], baseline_mode
 
         _add_optional(suppressions.ids, item.get("id"))
         _add_optional(suppressions.fingerprints, item.get("fingerprint"))
-        if baseline_mode:
-            _add_optional(suppressions.signatures, _signature_from_dict(item))
-            continue
         _add_optional(suppressions.detector_ids, item.get("detector_id"))
         _add_optional(suppressions.types, item.get("type"))
         _add_optional(suppressions.signatures, _signature_from_dict(item))
         _add_optional(suppressions.source_contains, item.get("source_contains"))
-        if not baseline_mode:
-            _add_optional(suppressions.source_contains, item.get("source"))
+        _add_optional(suppressions.source_contains, item.get("source"))
 
 
 def _signature_from_dict(item: Dict[str, Any]) -> Optional[str]:
