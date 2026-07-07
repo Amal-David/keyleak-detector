@@ -28,6 +28,7 @@ import tldextract
 from .browser_scanner import run_browser_scan
 from .models import Evidence, Finding, ScanReport, confidence_for_severity
 from .proxy import playwright_proxy, requests_proxies
+from .redaction import redact_url
 from .reporting import build_report
 
 
@@ -620,6 +621,7 @@ def scan_site(
     takeover_count = 0
     total = 0
     urls: List[str] = []
+    scan_failures: List[Dict[str, str]] = []
     # Everything from the crawl through the takeover join runs inside a
     # try/finally so the background takeover pool is always shut down — even if
     # crawl_pages or the per-host scan raises.
@@ -637,7 +639,8 @@ def scan_site(
             # SSRF guard: a crawled link may resolve to an internal address.
             if target_guard is not None and target_guard(urlparse(url).hostname) is not None:
                 continue
-            _emit(on_progress, "scan", f"Scanning [{i + 1}/{total}] {url}", i + 1, total)
+            safe_url = redact_url(url)
+            _emit(on_progress, "scan", f"Scanning [{i + 1}/{total}] {safe_url}", i + 1, total)
             try:
                 report = run_browser_scan(
                     url,
@@ -651,7 +654,9 @@ def scan_site(
                 for f in report.findings:
                     pairs.append((f, url))
             except Exception as exc:
-                print(f"[keyleak]   Error scanning {url}: {exc}", file=sys.stderr)
+                safe_error = redact_url(str(exc))
+                print(f"[keyleak]   Error scanning {safe_url}: {safe_error}", file=sys.stderr)
+                scan_failures.append({"url": safe_url, "error": safe_error})
                 continue
 
         # Join the parallel subdomain-takeover check and fold its findings in.
@@ -688,6 +693,8 @@ def scan_site(
         "subdomains": subdomains,
         "hosts_scanned": len(subdomains),
         "pages_scanned": total,
+        "pages_failed": len(scan_failures),
+        "scan_failures": scan_failures,
         "scanned_urls": urls,
         "provenance": provenance,
         "subdomain_takeovers": takeover_count,

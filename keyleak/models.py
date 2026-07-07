@@ -6,6 +6,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
+from .fingerprints import finding_fingerprint
 from .redaction import redact_snippet, redact_url, redact_value, stable_id
 
 
@@ -120,6 +121,7 @@ class Finding:
     category: str = ""
     references: List[str] = field(default_factory=list)
     id: str = ""
+    fingerprint: str = ""
     # Wave 1.6 — Structured Remediation card. Optional dict (kept dict-shaped
     # for backward compat with from_dict consumers). Populated by ``scan_text``
     # from the detector. Reporters render it if present.
@@ -154,6 +156,8 @@ class Finding:
             "references": self.references,
             "validation_status": self.validation_status,
         }
+        if self.fingerprint:
+            payload["fingerprint"] = self.fingerprint
         if self.remediation_v2:
             payload["remediation_v2"] = dict(self.remediation_v2)
         return payload
@@ -181,6 +185,7 @@ class Finding:
             category=str(payload.get("category") or payload.get("pack") or ""),
             references=list(payload.get("references") or []),
             id=str(payload.get("id") or ""),
+            fingerprint=str(payload.get("fingerprint") or ""),
             remediation_v2=payload.get("remediation_v2"),
         )
 
@@ -316,6 +321,8 @@ def finding_from_legacy(raw: Dict[str, Any], detector_prefix: str = "runtime") -
     raw_value = raw.get("value") if raw.get("value") is not None else raw.get("match", "")
     redacted_value = redact_value(raw_value)
     snippet = raw.get("context_lines") or raw.get("context") or raw.get("details") or ""
+    detector_id = str(raw.get("detector_id") or f"{detector_prefix}:{finding_type}")
+    request_url = redact_url(raw.get("url", ""))
     confidence = (
         float(raw.get("confidence"))
         if raw.get("confidence") is not None
@@ -326,7 +333,7 @@ def finding_from_legacy(raw: Dict[str, Any], detector_prefix: str = "runtime") -
         source=source,
         snippet=redact_snippet(snippet, raw_value),
         line=raw.get("line"),
-        request_url=redact_url(raw.get("url", "")),
+        request_url=request_url,
         response_status=raw.get("status_code"),
         redacted_value=redacted_value,
     )
@@ -335,7 +342,7 @@ def finding_from_legacy(raw: Dict[str, Any], detector_prefix: str = "runtime") -
         type=finding_type,
         severity=severity,
         confidence=confidence,
-        detector_id=str(raw.get("detector_id") or f"{detector_prefix}:{finding_type}"),
+        detector_id=detector_id,
         source=source,
         evidence=evidence,
         risk_reason=str(raw.get("context") or raw.get("details") or f"{finding_type} detected in {source}"),
@@ -343,4 +350,11 @@ def finding_from_legacy(raw: Dict[str, Any], detector_prefix: str = "runtime") -
         validation_status=str(raw.get("validation_status") or ("lead" if category != "leak" else "validated")),
         category=category,
         references=list(raw.get("references") or []),
+        fingerprint=finding_fingerprint(
+            detector_id=detector_id,
+            source=source,
+            raw_value=raw_value,
+            request_url=request_url,
+            line=raw.get("line"),
+        ),
     )

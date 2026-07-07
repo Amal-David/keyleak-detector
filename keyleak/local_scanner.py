@@ -12,9 +12,10 @@ from .detectors import Detector, categories_for_packs, detectors_for_categories,
 from .detectors_ast import detect_worm_shape, is_worm_shape_target
 from .detectors_fuzzy import FingerprintHit, load_corpus, match_fingerprints
 from .detectors_splittoken import SplitTokenMatch, collect_fragments, find_split_tokens
+from .fingerprints import finding_fingerprint
 from .models import Evidence, Finding, confidence_for_severity
 from .privacy_filter import scrub_snippet as pii_scrub_snippet
-from .redaction import new_run_salt, redact_snippet, redact_value
+from .redaction import new_run_salt, redact_snippet, redact_url, redact_value
 from .reporting import build_report
 from .sourcemaps import SourceMapError, reconstruct_originals
 
@@ -247,9 +248,11 @@ def scan_text(
     detectors: Iterable[Detector],
     *,
     run_salt: Optional[bytes] = None,
+    request_url: str = "",
 ) -> List[Finding]:
     findings: List[Finding] = []
     seen = set()
+    safe_request_url = redact_url(request_url) if request_url else ""
     for detector in detectors:
         regex = detector.compile()
         for match in regex.finditer(content):
@@ -308,6 +311,7 @@ def scan_text(
                 source=source,
                 snippet=redacted_snippet,
                 line=line,
+                request_url=safe_request_url,
                 redacted_value=redacted_value,
             )
             findings.append(
@@ -323,6 +327,13 @@ def scan_text(
                     validation_status=detector.validation_status,
                     category=detector.pack,
                     references=list(detector.references),
+                    fingerprint=finding_fingerprint(
+                        detector_id=detector.canonical_id,
+                        source=source,
+                        raw_value=raw_value,
+                        request_url=safe_request_url,
+                        line=line,
+                    ),
                     remediation_v2=detector.get_remediation().to_dict(),
                 )
             )

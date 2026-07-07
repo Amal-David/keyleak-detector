@@ -141,6 +141,7 @@ DEFAULT_FIXTURE_SUPPRESSIONS: List[str] = [
 @dataclass
 class SuppressionSet:
     ids: Set[str] = field(default_factory=set)
+    fingerprints: Set[str] = field(default_factory=set)
     detector_ids: Set[str] = field(default_factory=set)
     types: Set[str] = field(default_factory=set)
     signatures: Set[str] = field(default_factory=set)
@@ -172,6 +173,7 @@ def apply_suppressions(
     if not any(
         [
             suppressions.ids,
+            suppressions.fingerprints,
             suppressions.detector_ids,
             suppressions.types,
             suppressions.signatures,
@@ -194,6 +196,7 @@ def apply_suppressions(
 def merge_suppressions(left: SuppressionSet, right: SuppressionSet) -> SuppressionSet:
     return SuppressionSet(
         ids=left.ids | right.ids,
+        fingerprints=left.fingerprints | right.fingerprints,
         detector_ids=left.detector_ids | right.detector_ids,
         types=left.types | right.types,
         signatures=left.signatures | right.signatures,
@@ -231,6 +234,7 @@ def _from_yaml(text: str) -> SuppressionSet:
         entries:
           - id: "..."                 # optional; derived if absent
             detector: "leak.<id>"     # Detector.canonical_id; required if no source_contains
+            fingerprint: "klfp1_..."  # optional stable finding fingerprint
             source_contains: "..."    # optional
             reason: "..."             # required
             owner: "@user"            # required
@@ -290,6 +294,8 @@ def _from_yaml(text: str) -> SuppressionSet:
 
         if raw_entry.get("id"):
             suppressions.ids.add(str(raw_entry["id"]).strip())
+        if raw_entry.get("fingerprint"):
+            suppressions.fingerprints.add(str(raw_entry["fingerprint"]).strip())
         if raw_entry.get("detector"):
             suppressions.detector_ids.add(str(raw_entry["detector"]).strip())
         if raw_entry.get("type"):
@@ -301,6 +307,7 @@ def _from_yaml(text: str) -> SuppressionSet:
 
         if not (
             raw_entry.get("id")
+            or raw_entry.get("fingerprint")
             or raw_entry.get("detector")
             or raw_entry.get("type")
             or raw_entry.get("source_contains")
@@ -382,6 +389,8 @@ def sign_entries_hmac(entries: List[Any], key: str) -> str:
 def is_suppressed(finding: Finding, suppressions: SuppressionSet) -> bool:
     if finding.id in suppressions.ids:
         return True
+    if finding.fingerprint and finding.fingerprint in suppressions.fingerprints:
+        return True
     if finding.detector_id in suppressions.detector_ids:
         return True
     # Honor detector id_aliases: a suppression that references an old detector
@@ -431,6 +440,7 @@ def _from_json(payload: Any, baseline_mode: bool = False) -> SuppressionSet:
         raise ValueError("suppression JSON must be an object or list")
 
     _add_strings(suppressions.ids, payload.get("ids") or payload.get("finding_ids"))
+    _add_strings(suppressions.fingerprints, payload.get("fingerprints"))
     _add_strings(suppressions.detector_ids, payload.get("detector_ids"))
     _add_strings(suppressions.types, payload.get("types"))
     _add_strings(suppressions.signatures, payload.get("signatures"))
@@ -474,6 +484,10 @@ def _add_items(suppressions: SuppressionSet, items: Iterable[Any], baseline_mode
             continue
 
         _add_optional(suppressions.ids, item.get("id"))
+        _add_optional(suppressions.fingerprints, item.get("fingerprint"))
+        if baseline_mode:
+            _add_optional(suppressions.signatures, _signature_from_dict(item))
+            continue
         _add_optional(suppressions.detector_ids, item.get("detector_id"))
         _add_optional(suppressions.types, item.get("type"))
         _add_optional(suppressions.signatures, _signature_from_dict(item))

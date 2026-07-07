@@ -201,15 +201,17 @@ def format_html(report: ScanReport) -> str:
         remediation_text = e(item["remediation"])
         validation = item.get("validation_status", "")
 
-        confirmed_badge = ""
-        if validation == "confirmed" or validation == "validated":
-            confirmed_badge = '<span class="badge-confirmed">confirmed</span>'
+        validation_badge = ""
+        if validation == "confirmed":
+            validation_badge = '<span class="badge-confirmed">confirmed</span>'
+        elif validation == "validated":
+            validation_badge = '<span class="badge-validated">validated</span>'
 
         card = f"""    <div class="finding {e(sev_lower)}">
       <div class="finding-head">
         <span class="sev {e(sev_lower)}">{sev.upper()}</span>
         <span class="finding-type">{finding_type}</span>
-        {confirmed_badge}
+        {validation_badge}
       </div>
       <div class="finding-detail">{risk}</div>
       <div class="finding-evidence">{evidence_text}</div>
@@ -322,6 +324,7 @@ def format_html(report: ScanReport) -> str:
   .sev.medium {{ background: var(--yellow); color: #0a0a0f; }}
   .sev.low {{ background: var(--blue); color: #0a0a0f; }}
   .badge-confirmed {{ font-size: 10px; color: var(--green); border: 1px solid rgba(81,207,102,.3); padding: 1px 6px; border-radius: 3px; }}
+  .badge-validated {{ font-size: 10px; color: var(--blue); border: 1px solid rgba(77,171,247,.35); padding: 1px 6px; border-radius: 3px; }}
   .badge-lead {{ font-size: 10px; color: var(--yellow); border: 1px solid rgba(255,212,59,.35); padding: 1px 6px; border-radius: 3px; }}
   .finding-type {{ font-size: 14px; font-weight: 600; color: var(--text); }}
   .finding-detail {{ font-size: 13px; color: var(--text2); margin-bottom: 6px; }}
@@ -402,7 +405,10 @@ def format_sarif(report: ScanReport) -> str:
                         }
                     }
                 ],
-                "partialFingerprints": {"findingId": item["id"]},
+                "partialFingerprints": {
+                    "findingId": item["id"],
+                    **({"findingFingerprint": item["fingerprint"]} if item.get("fingerprint") else {}),
+                },
                 "properties": {"category": item.get("category") or ""},
             }
         )
@@ -511,6 +517,10 @@ def _retest_command(target: str, scan_mode: str) -> str:
     safe_target = shlex.quote(redact_url(target))
     if scan_mode == "local":
         return f"keyleak local {safe_target}"
+    if scan_mode == "browser":
+        return f"keyleak browser-scan {safe_target}"
+    if scan_mode == "full-site":
+        return f"keyleak site-scan {safe_target}"
     return f"keyleak scan {safe_target}"
 
 

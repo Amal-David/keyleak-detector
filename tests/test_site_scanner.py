@@ -192,14 +192,24 @@ class ScanSiteTests(unittest.TestCase):
 
     def test_handles_page_scan_errors(self):
         def boom(url, **kwargs):
-            raise RuntimeError("playwright exploded")
+            raise RuntimeError(f"playwright exploded for {url}")
 
         with mock.patch.object(ss, "discover_subdomains", lambda d, **k: ["example.com"]), \
-             mock.patch.object(ss, "crawl_pages", lambda hosts, **k: ["https://example.com/"]), \
+             mock.patch.object(
+                 ss,
+                 "crawl_pages",
+                 lambda hosts, **k: ["https://example.com/?token=supersecretvalue-long"],
+             ), \
              mock.patch.object(ss, "run_browser_scan", boom):
             report = ss.scan_site("example.com")   # must not raise
         self.assertEqual(report.findings, [])
         self.assertEqual(report.extra["pages_scanned"], 1)
+        self.assertEqual(report.extra["pages_failed"], 1)
+        self.assertIn("playwright exploded", report.extra["scan_failures"][0]["error"])
+        self.assertIn("[redacted]", report.extra["scan_failures"][0]["error"])
+        self.assertNotIn("supersecretvalue", report.extra["scan_failures"][0]["error"])
+        self.assertIn("[redacted]", report.extra["scan_failures"][0]["url"])
+        self.assertNotIn("supersecretvalue", report.extra["scan_failures"][0]["url"])
 
     def test_proxy_threaded_to_crawl_and_browser_scan(self):
         seen = {}

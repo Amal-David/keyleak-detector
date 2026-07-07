@@ -9,8 +9,8 @@ Inputs accepted:
 - KeyLeak JSON reports (the native format).
 - SARIF 2.1.0 reports.
 
-We identify findings by their stable ``id`` field (already a SHA256 over
-detector + source + line + value, set in :meth:`Finding.__post_init__`).
+    We identify findings by their stable ``fingerprint`` field when available,
+falling back to the older ``id`` field for legacy reports.
 """
 
 from __future__ import annotations
@@ -54,6 +54,7 @@ def _sarif_to_report(sarif: Dict[str, Any], target: str = "") -> ScanReport:
             region = phys.get("region") or {}
             findings.append({
                 "id": (result.get("partialFingerprints") or {}).get("findingId") or "",
+                "fingerprint": (result.get("partialFingerprints") or {}).get("findingFingerprint") or "",
                 "type": (rules_by_id.get(rule_id, {}).get("name")) or rule_id,
                 "severity": _sarif_level_to_severity(result.get("level")),
                 "detector_id": rule_id,
@@ -83,8 +84,8 @@ def _sarif_level_to_severity(level: Any) -> str:
 def diff_reports(baseline: ScanReport, current: ScanReport) -> ScanReport:
     """Return a ScanReport containing only findings *new* in ``current``."""
 
-    baseline_ids: Set[str] = {f.id for f in baseline.findings if f.id}
-    new_findings = [f for f in current.findings if f.id and f.id not in baseline_ids]
+    baseline_ids: Set[str] = {_identity(f) for f in baseline.findings if _identity(f)}
+    new_findings = [f for f in current.findings if _identity(f) and _identity(f) not in baseline_ids]
     return build_report(
         current.target or baseline.target,
         new_findings,
@@ -92,3 +93,7 @@ def diff_reports(baseline: ScanReport, current: ScanReport) -> ScanReport:
         profile=current.extra.get("profile") if isinstance(current.extra, dict) else "diff",
         packs=current.extra.get("packs") if isinstance(current.extra, dict) else None,
     )
+
+
+def _identity(finding: Finding) -> str:
+    return finding.fingerprint or finding.id

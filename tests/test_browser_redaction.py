@@ -24,6 +24,19 @@ class BrowserRedactionTests(unittest.TestCase):
         self.assertNotIn(SECRET, f.evidence.redacted_value)
         self.assertNotIn(SECRET, f.evidence.snippet)
         self.assertIn("[redacted", f.evidence.redacted_value)
+        self.assertTrue(f.fingerprint.startswith("klfp1_"))
+        self.assertNotIn(SECRET, f.fingerprint)
+
+    def test_to_finding_fingerprint_survives_redaction_salt_rotation(self):
+        entry = {"detector_id": "leak.openai_api_key", "type": "openai_api_key",
+                 "severity": "critical", "source": "localStorage:t", "value": SECRET}
+
+        first = _to_finding(entry, "https://app.example.test/", b"\x00" * 32)
+        second = _to_finding(entry, "https://app.example.test/", b"\x11" * 32)
+
+        self.assertNotEqual(first.evidence.redacted_value, second.evidence.redacted_value)
+        self.assertNotEqual(first.id, second.id)
+        self.assertEqual(first.fingerprint, second.fingerprint)
 
     def test_report_dict_contains_no_raw_secret(self):
         report = evaluate_findings_payload(
