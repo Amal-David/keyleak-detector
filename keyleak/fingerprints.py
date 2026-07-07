@@ -3,10 +3,13 @@
 from __future__ import annotations
 
 import hashlib
+import hmac
+import os
 from typing import Optional
 
 
 FINGERPRINT_PREFIX = "klfp1"
+FINDING_FINGERPRINT_HMAC_KEY_ENV = "KEYLEAK_FINDING_FINGERPRINT_KEY"
 
 
 def finding_fingerprint(
@@ -36,5 +39,10 @@ def finding_fingerprint(
         "" if line is None else str(line),
         text,
     ]
-    digest = hashlib.sha256("\0".join(parts).encode("utf-8", errors="replace")).hexdigest()[:24]
+    payload = "\0".join(parts).encode("utf-8", errors="replace")
+    key = os.environ.get(FINDING_FINGERPRINT_HMAC_KEY_ENV)
+    if key:
+        digest = hmac.new(key.encode("utf-8"), payload, hashlib.sha256).hexdigest()[:24]
+    else:
+        digest = hashlib.sha256(payload).hexdigest()[:24]
     return f"{FINGERPRINT_PREFIX}_{digest}"

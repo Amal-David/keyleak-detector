@@ -3,11 +3,13 @@ import tempfile
 import unittest
 from argparse import Namespace
 from pathlib import Path
+from unittest import mock
 
 from keyleak.access_control import compare_access_control_urls
 from keyleak.cli import _scan_request_payload
 from keyleak.diff import diff_reports
 from keyleak.extension_bundle import extension_pattern_payload, extension_patterns_js
+from keyleak.fingerprints import finding_fingerprint
 from keyleak.local_scanner import _is_generated_file, scan_file, scan_path, scan_text
 from keyleak.detectors import DETECTORS, DETECTOR_PACKS, HEATMAP_ROWS, detectors_for_packs, normalize_packs
 from keyleak.local_scanner import _is_placeholder
@@ -142,6 +144,31 @@ class ReportingTests(unittest.TestCase):
         self.assertEqual(first.fingerprint, second.fingerprint)
         self.assertTrue(first.fingerprint.startswith("klfp1_"))
         self.assertNotIn(raw_key, json.dumps(first.to_dict()))
+
+    def test_finding_fingerprint_uses_hmac_when_key_configured(self):
+        with mock.patch.dict(
+            "os.environ",
+            {"KEYLEAK_FINDING_FINGERPRINT_KEY": "unit-test-fingerprint-key"},
+            clear=False,
+        ):
+            first = finding_fingerprint(
+                detector_id="test:openai_api_key",
+                source="app.py",
+                raw_value="sk-proj-secret-value",
+                request_url="https://example.com/app.js",
+                line=12,
+            )
+            second = finding_fingerprint(
+                detector_id="test:openai_api_key",
+                source="app.py",
+                raw_value="sk-proj-secret-value",
+                request_url="https://example.com/app.js",
+                line=12,
+            )
+
+        self.assertEqual(first, second)
+        self.assertTrue(first.startswith("klfp1_"))
+        self.assertNotIn("sk-proj-secret-value", first)
 
     def test_baseline_suppresses_across_redaction_salt_rotation(self):
         raw_key = "sk-proj-AbCdEf1234567890GhIjKlMnOpQrStUvWxYz9876543210"
