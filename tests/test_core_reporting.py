@@ -135,9 +135,13 @@ class ReportingTests(unittest.TestCase):
         raw_key = "sk-proj-AbCdEf1234567890GhIjKlMnOpQrStUvWxYz9876543210"
         content = f'OPENAI_API_KEY="{raw_key}"\n'
         detector = _detector("openai_api_key")
-
-        first = scan_text(content, "app.py", [detector], run_salt=b"\x00" * 32)[0]
-        second = scan_text(content, "app.py", [detector], run_salt=b"\x11" * 32)[0]
+        with mock.patch.dict(
+            "os.environ",
+            {"KEYLEAK_FINDING_FINGERPRINT_KEY": "unit-test-fingerprint-key"},
+            clear=False,
+        ):
+            first = scan_text(content, "app.py", [detector], run_salt=b"\x00" * 32)[0]
+            second = scan_text(content, "app.py", [detector], run_salt=b"\x11" * 32)[0]
 
         self.assertNotEqual(first.evidence.redacted_value, second.evidence.redacted_value)
         self.assertNotEqual(first.id, second.id)
@@ -170,21 +174,38 @@ class ReportingTests(unittest.TestCase):
         self.assertTrue(first.startswith("klfp1_"))
         self.assertNotIn("sk-proj-secret-value", first)
 
+    def test_finding_fingerprint_skips_output_without_key(self):
+        with mock.patch.dict("os.environ", {}, clear=True):
+            fingerprint = finding_fingerprint(
+                detector_id="test:openai_api_key",
+                source="app.py",
+                raw_value="sk-proj-secret-value",
+                request_url="https://example.com/app.js",
+                line=12,
+            )
+
+        self.assertEqual(fingerprint, "")
+
     def test_finding_fingerprint_ignores_line_shifts(self):
-        first = finding_fingerprint(
-            detector_id="test:openai_api_key",
-            source="app.py",
-            raw_value="sk-proj-secret-value",
-            request_url="https://example.com/app.js",
-            line=12,
-        )
-        second = finding_fingerprint(
-            detector_id="test:openai_api_key",
-            source="app.py",
-            raw_value="sk-proj-secret-value",
-            request_url="https://example.com/app.js",
-            line=99,
-        )
+        with mock.patch.dict(
+            "os.environ",
+            {"KEYLEAK_FINDING_FINGERPRINT_KEY": "unit-test-fingerprint-key"},
+            clear=False,
+        ):
+            first = finding_fingerprint(
+                detector_id="test:openai_api_key",
+                source="app.py",
+                raw_value="sk-proj-secret-value",
+                request_url="https://example.com/app.js",
+                line=12,
+            )
+            second = finding_fingerprint(
+                detector_id="test:openai_api_key",
+                source="app.py",
+                raw_value="sk-proj-secret-value",
+                request_url="https://example.com/app.js",
+                line=99,
+            )
 
         self.assertEqual(first, second)
 
@@ -192,8 +213,13 @@ class ReportingTests(unittest.TestCase):
         raw_key = "sk-proj-AbCdEf1234567890GhIjKlMnOpQrStUvWxYz9876543210"
         content = f'OPENAI_API_KEY="{raw_key}"\n'
         detector = _detector("openai_api_key")
-        baseline_finding = scan_text(content, "app.py", [detector], run_salt=b"\x00" * 32)[0]
-        current_finding = scan_text(content, "app.py", [detector], run_salt=b"\x11" * 32)[0]
+        with mock.patch.dict(
+            "os.environ",
+            {"KEYLEAK_FINDING_FINGERPRINT_KEY": "unit-test-fingerprint-key"},
+            clear=False,
+        ):
+            baseline_finding = scan_text(content, "app.py", [detector], run_salt=b"\x00" * 32)[0]
+            current_finding = scan_text(content, "app.py", [detector], run_salt=b"\x11" * 32)[0]
 
         current = ScanReport("app.py", "local", [current_finding])
         baseline = {"findings": [baseline_finding.to_dict()]}
@@ -261,8 +287,13 @@ class ReportingTests(unittest.TestCase):
         raw_key = "sk-proj-AbCdEf1234567890GhIjKlMnOpQrStUvWxYz9876543210"
         content = f'OPENAI_API_KEY="{raw_key}"\n'
         detector = _detector("openai_api_key")
-        baseline_finding = scan_text(content, "app.py", [detector], run_salt=b"\x00" * 32)[0]
-        current_finding = scan_text(content, "app.py", [detector], run_salt=b"\x11" * 32)[0]
+        with mock.patch.dict(
+            "os.environ",
+            {"KEYLEAK_FINDING_FINGERPRINT_KEY": "unit-test-fingerprint-key"},
+            clear=False,
+        ):
+            baseline_finding = scan_text(content, "app.py", [detector], run_salt=b"\x00" * 32)[0]
+            current_finding = scan_text(content, "app.py", [detector], run_salt=b"\x11" * 32)[0]
 
         diff = diff_reports(
             ScanReport("app.py", "local", [baseline_finding]),
@@ -274,7 +305,12 @@ class ReportingTests(unittest.TestCase):
     def test_diff_reports_matches_legacy_ids_against_current_fingerprints(self):
         raw_key = "sk-proj-AbCdEf1234567890GhIjKlMnOpQrStUvWxYz9876543210"
         detector = _detector("openai_api_key")
-        current_finding = scan_text(f'OPENAI_API_KEY="{raw_key}"\n', "app.py", [detector], run_salt=b"\x11" * 32)[0]
+        with mock.patch.dict(
+            "os.environ",
+            {"KEYLEAK_FINDING_FINGERPRINT_KEY": "unit-test-fingerprint-key"},
+            clear=False,
+        ):
+            current_finding = scan_text(f'OPENAI_API_KEY="{raw_key}"\n', "app.py", [detector], run_salt=b"\x11" * 32)[0]
         legacy_baseline = Finding.from_dict(
             {
                 **current_finding.to_dict(),
@@ -294,7 +330,12 @@ class ReportingTests(unittest.TestCase):
     def test_sarif_partial_fingerprints_include_stable_fingerprint(self):
         raw_key = "sk-proj-AbCdEf1234567890GhIjKlMnOpQrStUvWxYz9876543210"
         detector = _detector("openai_api_key")
-        finding = scan_text(f'OPENAI_API_KEY="{raw_key}"\n', "app.py", [detector], run_salt=b"\x00" * 32)[0]
+        with mock.patch.dict(
+            "os.environ",
+            {"KEYLEAK_FINDING_FINGERPRINT_KEY": "unit-test-fingerprint-key"},
+            clear=False,
+        ):
+            finding = scan_text(f'OPENAI_API_KEY="{raw_key}"\n', "app.py", [detector], run_salt=b"\x00" * 32)[0]
         sarif = json.loads(format_sarif(ScanReport("app.py", "local", [finding])))
         partials = sarif["runs"][0]["results"][0]["partialFingerprints"]
 

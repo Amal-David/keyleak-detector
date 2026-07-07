@@ -40,8 +40,7 @@ def finding_fingerprint(
     ]
     payload = "\0".join(parts).encode("utf-8", errors="replace")
     key = os.environ.get(FINDING_FINGERPRINT_HMAC_KEY_ENV)
-    if key:
-        digest = hmac.new(key.encode("utf-8"), payload, hashlib.sha256).hexdigest()[:24]
-    else:
-        digest = hashlib.sha256(payload).hexdigest()[:24]
+    if not key:
+        return ""
+    digest = hmac.new(key.encode("utf-8"), payload, hashlib.sha256).hexdigest()[:24]
     return f"{FINGERPRINT_PREFIX}_{digest}"
