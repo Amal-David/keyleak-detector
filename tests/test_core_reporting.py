@@ -174,6 +174,26 @@ class ReportingTests(unittest.TestCase):
 
         self.assertEqual(diff.findings, [])
 
+    def test_diff_reports_matches_legacy_ids_against_current_fingerprints(self):
+        raw_key = "sk-proj-AbCdEf1234567890GhIjKlMnOpQrStUvWxYz9876543210"
+        detector = _detector("openai_api_key")
+        current_finding = scan_text(f'OPENAI_API_KEY="{raw_key}"\n', "app.py", [detector], run_salt=b"\x11" * 32)[0]
+        legacy_baseline = Finding.from_dict(
+            {
+                **current_finding.to_dict(),
+                "fingerprint": "",
+                "id": "legacy-baseline-id",
+            }
+        )
+        current_finding.id = "legacy-baseline-id"
+
+        diff = diff_reports(
+            ScanReport("app.py", "local", [legacy_baseline]),
+            ScanReport("app.py", "local", [current_finding]),
+        )
+
+        self.assertEqual(diff.findings, [])
+
     def test_sarif_partial_fingerprints_include_stable_fingerprint(self):
         raw_key = "sk-proj-AbCdEf1234567890GhIjKlMnOpQrStUvWxYz9876543210"
         detector = _detector("openai_api_key")

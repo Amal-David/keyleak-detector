@@ -84,8 +84,15 @@ def _sarif_level_to_severity(level: Any) -> str:
 def diff_reports(baseline: ScanReport, current: ScanReport) -> ScanReport:
     """Return a ScanReport containing only findings *new* in ``current``."""
 
-    baseline_ids: Set[str] = {_identity(f) for f in baseline.findings if _identity(f)}
-    new_findings = [f for f in current.findings if _identity(f) and _identity(f) not in baseline_ids]
+    baseline_ids: Set[str] = {
+        key
+        for finding in baseline.findings
+        for key in _identity_keys(finding)
+    }
+    new_findings = [
+        f for f in current.findings
+        if not _identity_keys(f).intersection(baseline_ids)
+    ]
     return build_report(
         current.target or baseline.target,
         new_findings,
@@ -95,5 +102,5 @@ def diff_reports(baseline: ScanReport, current: ScanReport) -> ScanReport:
     )
 
 
-def _identity(finding: Finding) -> str:
-    return finding.fingerprint or finding.id
+def _identity_keys(finding: Finding) -> Set[str]:
+    return {key for key in (finding.fingerprint, finding.id) if key}
