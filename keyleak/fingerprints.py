@@ -36,7 +36,6 @@ def finding_fingerprint(
         "" if detector_id is None else str(detector_id),
         "" if source is None else str(source),
         "" if request_url is None else str(request_url),
-        "" if line is None else str(line),
         text,
     ]
     payload = "\0".join(parts).encode("utf-8", errors="replace")

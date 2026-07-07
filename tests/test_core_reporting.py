@@ -170,6 +170,24 @@ class ReportingTests(unittest.TestCase):
         self.assertTrue(first.startswith("klfp1_"))
         self.assertNotIn("sk-proj-secret-value", first)
 
+    def test_finding_fingerprint_ignores_line_shifts(self):
+        first = finding_fingerprint(
+            detector_id="test:openai_api_key",
+            source="app.py",
+            raw_value="sk-proj-secret-value",
+            request_url="https://example.com/app.js",
+            line=12,
+        )
+        second = finding_fingerprint(
+            detector_id="test:openai_api_key",
+            source="app.py",
+            raw_value="sk-proj-secret-value",
+            request_url="https://example.com/app.js",
+            line=99,
+        )
+
+        self.assertEqual(first, second)
+
     def test_baseline_suppresses_across_redaction_salt_rotation(self):
         raw_key = "sk-proj-AbCdEf1234567890GhIjKlMnOpQrStUvWxYz9876543210"
         content = f'OPENAI_API_KEY="{raw_key}"\n'
