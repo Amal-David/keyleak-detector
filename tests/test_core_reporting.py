@@ -305,11 +305,7 @@ class ReportingTests(unittest.TestCase):
         raw_key = "sk-proj-AbCdEf1234567890GhIjKlMnOpQrStUvWxYz9876543210"
         content = f'OPENAI_API_KEY="{raw_key}"\n'
         detector = _detector("openai_api_key")
-        with mock.patch.dict(
-            "os.environ",
-            {"KEYLEAK_FINDING_FINGERPRINT_KEY": "unit-test-fingerprint-key"},
-            clear=False,
-        ):
+        with self._fingerprint_key():
             baseline_finding = scan_text(content, "app.py", [detector], run_salt=b"\x00" * 32)[0]
             current_finding = scan_text(content, "app.py", [detector], run_salt=b"\x11" * 32)[0]
 
@@ -323,11 +319,7 @@ class ReportingTests(unittest.TestCase):
     def test_diff_reports_matches_legacy_ids_against_current_fingerprints(self):
         raw_key = "sk-proj-AbCdEf1234567890GhIjKlMnOpQrStUvWxYz9876543210"
         detector = _detector("openai_api_key")
-        with mock.patch.dict(
-            "os.environ",
-            {"KEYLEAK_FINDING_FINGERPRINT_KEY": "unit-test-fingerprint-key"},
-            clear=False,
-        ):
+        with self._fingerprint_key():
             current_finding = scan_text(f'OPENAI_API_KEY="{raw_key}"\n', "app.py", [detector], run_salt=b"\x11" * 32)[0]
         legacy_baseline = Finding.from_dict(
             {
@@ -348,11 +340,7 @@ class ReportingTests(unittest.TestCase):
     def test_sarif_partial_fingerprints_include_stable_fingerprint(self):
         raw_key = "sk-proj-AbCdEf1234567890GhIjKlMnOpQrStUvWxYz9876543210"
         detector = _detector("openai_api_key")
-        with mock.patch.dict(
-            "os.environ",
-            {"KEYLEAK_FINDING_FINGERPRINT_KEY": "unit-test-fingerprint-key"},
-            clear=False,
-        ):
+        with self._fingerprint_key():
             finding = scan_text(f'OPENAI_API_KEY="{raw_key}"\n', "app.py", [detector], run_salt=b"\x00" * 32)[0]
         sarif = json.loads(format_sarif(ScanReport("app.py", "local", [finding])))
         partials = sarif["runs"][0]["results"][0]["partialFingerprints"]
