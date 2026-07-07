@@ -4,12 +4,15 @@ from __future__ import annotations
 
 import hashlib
 import hmac
+import logging
 import os
 from typing import Optional
 
 
 FINGERPRINT_PREFIX = "klfp1"
 FINDING_FINGERPRINT_HMAC_KEY_ENV = "KEYLEAK_FINDING_FINGERPRINT_KEY"
+logger = logging.getLogger(__name__)
+_warned_missing_key = False
 
 
 def finding_fingerprint(
@@ -41,6 +44,13 @@ def finding_fingerprint(
     payload = "\0".join(parts).encode("utf-8", errors="replace")
     key = os.environ.get(FINDING_FINGERPRINT_HMAC_KEY_ENV)
     if not key:
+        global _warned_missing_key
+        if not _warned_missing_key:
+            logger.warning(
+                "%s is not set; finding fingerprints are disabled.",
+                FINDING_FINGERPRINT_HMAC_KEY_ENV,
+            )
+            _warned_missing_key = True
         return ""
     digest = hmac.new(key.encode("utf-8"), payload, hashlib.sha256).hexdigest()[:24]
     return f"{FINGERPRINT_PREFIX}_{digest}"

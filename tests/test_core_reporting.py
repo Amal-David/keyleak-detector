@@ -1,3 +1,4 @@
+import contextlib
 import json
 import tempfile
 import unittest
@@ -5,6 +6,7 @@ from argparse import Namespace
 from pathlib import Path
 from unittest import mock
 
+import keyleak.fingerprints as fingerprints_module
 from keyleak.access_control import compare_access_control_urls
 from keyleak.cli import _scan_request_payload
 from keyleak.diff import diff_reports
@@ -20,6 +22,15 @@ from keyleak.suppressions import apply_suppressions, load_suppressions
 
 
 class ReportingTests(unittest.TestCase):
+    @contextlib.contextmanager
+    def _fingerprint_key(self, key: str = "unit-test-fingerprint-key"):
+        with mock.patch.dict(
+            "os.environ",
+            {"KEYLEAK_FINDING_FINGERPRINT_KEY": key},
+            clear=False,
+        ):
+            yield
+
     def test_redacts_long_values(self):
         self.assertEqual(redact_value("sk-proj-abcdefghijklmnopqrstuvwxyz"), "sk-pro...[redacted]...wxyz")
 
@@ -135,11 +146,7 @@ class ReportingTests(unittest.TestCase):
         raw_key = "sk-proj-AbCdEf1234567890GhIjKlMnOpQrStUvWxYz9876543210"
         content = f'OPENAI_API_KEY="{raw_key}"\n'
         detector = _detector("openai_api_key")
-        with mock.patch.dict(
-            "os.environ",
-            {"KEYLEAK_FINDING_FINGERPRINT_KEY": "unit-test-fingerprint-key"},
-            clear=False,
-        ):
+        with self._fingerprint_key():
             first = scan_text(content, "app.py", [detector], run_salt=b"\x00" * 32)[0]
             second = scan_text(content, "app.py", [detector], run_salt=b"\x11" * 32)[0]
 
@@ -150,11 +157,7 @@ class ReportingTests(unittest.TestCase):
         self.assertNotIn(raw_key, json.dumps(first.to_dict()))
 
     def test_finding_fingerprint_uses_hmac_when_key_configured(self):
-        with mock.patch.dict(
-            "os.environ",
-            {"KEYLEAK_FINDING_FINGERPRINT_KEY": "unit-test-fingerprint-key"},
-            clear=False,
-        ):
+        with self._fingerprint_key():
             first = finding_fingerprint(
                 detector_id="test:openai_api_key",
                 source="app.py",
@@ -175,23 +178,42 @@ class ReportingTests(unittest.TestCase):
         self.assertNotIn("sk-proj-secret-value", first)
 
     def test_finding_fingerprint_skips_output_without_key(self):
-        with mock.patch.dict("os.environ", {}, clear=True):
-            fingerprint = finding_fingerprint(
-                detector_id="test:openai_api_key",
-                source="app.py",
-                raw_value="sk-proj-secret-value",
-                request_url="https://example.com/app.js",
-                line=12,
-            )
+        with mock.patch.object(fingerprints_module, "_warned_missing_key", False):
+            with self.assertLogs("keyleak.fingerprints", level="WARNING") as captured:
+                with mock.patch.dict("os.environ", {}, clear=True):
+                    fingerprint = finding_fingerprint(
+                        detector_id="test:openai_api_key",
+                        source="app.py",
+                        raw_value="sk-proj-secret-value",
+                        request_url="https://example.com/app.js",
+                        line=12,
+                    )
 
         self.assertEqual(fingerprint, "")
+        self.assertEqual(
+            captured.output,
+            ["WARNING:keyleak.fingerprints:KEYLEAK_FINDING_FINGERPRINT_KEY is not set; finding fingerprints are disabled."],
+        )
+
+    def test_finding_fingerprint_warns_once_without_key(self):
+        with mock.patch.object(fingerprints_module, "_warned_missing_key", False):
+            with mock.patch.dict("os.environ", {}, clear=True):
+                with self.assertLogs("keyleak.fingerprints", level="WARNING") as captured:
+                    finding_fingerprint(
+                        detector_id="test:openai_api_key",
+                        source="app.py",
+                        raw_value="sk-proj-secret-value",
+                    )
+                self.assertEqual(len(captured.output), 1)
+                with self.assertNoLogs("keyleak.fingerprints", level="WARNING"):
+                    finding_fingerprint(
+                        detector_id="test:openai_api_key",
+                        source="app.py",
+                        raw_value="sk-proj-secret-value",
+                    )
 
     def test_finding_fingerprint_ignores_line_shifts(self):
-        with mock.patch.dict(
-            "os.environ",
-            {"KEYLEAK_FINDING_FINGERPRINT_KEY": "unit-test-fingerprint-key"},
-            clear=False,
-        ):
+        with self._fingerprint_key():
             first = finding_fingerprint(
                 detector_id="test:openai_api_key",
                 source="app.py",
@@ -213,11 +235,7 @@ class ReportingTests(unittest.TestCase):
         raw_key = "sk-proj-AbCdEf1234567890GhIjKlMnOpQrStUvWxYz9876543210"
         content = f'OPENAI_API_KEY="{raw_key}"\n'
         detector = _detector("openai_api_key")
-        with mock.patch.dict(
-            "os.environ",
-            {"KEYLEAK_FINDING_FINGERPRINT_KEY": "unit-test-fingerprint-key"},
-            clear=False,
-        ):
+        with self._fingerprint_key():
             baseline_finding = scan_text(content, "app.py", [detector], run_salt=b"\x00" * 32)[0]
             current_finding = scan_text(content, "app.py", [detector], run_salt=b"\x11" * 32)[0]
 
