@@ -34,11 +34,16 @@ try:
     from mitmproxy.tools.dump import DumpMaster
     from mitmproxy.options import Options
     MITMPROXY_IMPORT_ERROR = None
-except ImportError as exc:
+except Exception as exc:
     http = None
     DumpMaster = None
     Options = None
     MITMPROXY_IMPORT_ERROR = exc
+    logging.getLogger(__name__).warning(
+        "mitmproxy import disabled: %s: %s",
+        exc.__class__.__name__,
+        exc,
+    )
 import time
 import threading
 import uuid as _uuid
