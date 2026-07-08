@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import sys
 import os
 
@@ -25,10 +27,23 @@ from dotenv import load_dotenv
 import regex as re
 from playwright.async_api import async_playwright
 
-# Now we can safely import mitmproxy (our custom imghdr is already in the path)
-from mitmproxy import http, ctx
-from mitmproxy.tools.dump import DumpMaster
-from mitmproxy.options import Options
+# Now we can safely import mitmproxy (our custom imghdr is already in the path).
+# mitmproxy is optional; fail only when the proxy-backed scan path is used.
+try:
+    from mitmproxy import http
+    from mitmproxy.tools.dump import DumpMaster
+    from mitmproxy.options import Options
+    MITMPROXY_IMPORT_ERROR = None
+except Exception as exc:
+    http = None
+    DumpMaster = None
+    Options = None
+    MITMPROXY_IMPORT_ERROR = exc
+    logging.getLogger(__name__).warning(
+        "mitmproxy import disabled: %s: %s",
+        exc.__class__.__name__,
+        exc,
+    )
 import time
 import threading
 import uuid as _uuid
@@ -1269,6 +1284,11 @@ request_handler = RequestHandler()
 def start_proxy(port: int = 8080):
     """Start the mitmproxy server."""
     try:
+        if MITMPROXY_IMPORT_ERROR is not None or DumpMaster is None or Options is None:
+            raise RuntimeError(
+                "mitmproxy is not installed; basic and extensive proxy scans are unavailable."
+            ) from MITMPROXY_IMPORT_ERROR
+
         logger.info(f"Starting mitmproxy on port {port}...")
         
         # Disable mitmproxy's logging to avoid event_loop issues

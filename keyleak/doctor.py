@@ -89,7 +89,7 @@ def check_mitmproxy_cert() -> CheckResult:
         return _warn(
             "mitmproxy",
             "mitmproxy not installed; `keyleak scan` traffic capture unavailable.",
-            fix="`pip install mitmproxy` (already a project dep — run `poetry install`)",
+            fix="Install mitmproxy separately when proxy capture is needed.",
         )
     return _ok("mitmproxy", "mitmproxy Python bindings installed.")
 
