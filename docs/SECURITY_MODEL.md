@@ -75,11 +75,22 @@ The extension stores per-tab reports in `chrome.storage.local` and renders redac
 
 ## Hosted Scanning
 
-Hosted scanning is intentionally deferred. A hosted version would require abuse controls, tenancy, credential-handling policy, retention policy, and legal review. The default project direction is local-first.
+Hosted scanning is intentionally deferred. The V1 agentic audit layer is local
+and self-hosted: `keyleak audit` runs deterministic scanners on the operator's
+machine, writes redacted local artifacts, and only performs active probing inside
+an explicit `--authorized-scope`.
+
+The future cloud shape is a control plane over isolated local or self-hosted
+workers, not hosted scanning by default. Tenancy, retention policy, abuse
+controls, credential custody, and legal review remain deferred until the local
+artifact and safety model are proven.
 
 ## Limits
 
-KeyLeak is not a full DAST or exploit framework. It does not prove exploitability for every finding. Treat results as high-signal evidence that needs remediation or human review.
+KeyLeak is not a full DAST or exploit framework. It does not prove exploitability
+for every finding. Treat `lead` findings as high-signal prompts, `validated`
+findings as deterministic evidence, and `confirmed` findings as active
+probe/exploit-validation evidence.
 
 ## GDPR Article 30 Record
 

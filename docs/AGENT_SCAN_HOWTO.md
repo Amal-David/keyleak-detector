@@ -16,18 +16,19 @@ patterns that trip up a naive read of the output.
 
 ```bash
 # From the repo root, after setup (see Step 1):
-poetry run keyleak site-scan example.com \
-  --launch-profile full \
-  --depth 3 --max-pages 100 --max-subdomains 25 \
-  --baas-validate \
-  --fail-on low \
-  --json > report.json
+poetry run keyleak audit example.com \
+  --intent security-audit \
+  --depth exploit-validation \
+  --authorized-scope "owned domain + staging accounts" \
+  --json
 ```
 
-This enumerates subdomains (crt.sh + DNS), crawls every reachable page per host, runs
-**all** detector packs, and actively validates any BaaS config it finds. `--json`
-writes the full structured report; render other formats from it (Step 6) instead of
-re-crawling.
+This classifies the target, records an audit plan, runs the right deterministic
+scanner (`local`, `archive`, `browser-scan`, or `site-scan`), writes redacted
+artifacts under `.keyleak/audits/<timestamp>-<target>/`, and reports skipped
+exploit-validation phases honestly. For a domain, it enumerates subdomains (crt.sh
++ DNS), crawls reachable pages, runs detector packs, and actively validates BaaS
+config when authorized.
 
 ---
 
@@ -93,6 +94,7 @@ path doesn't import the missing module — but don't trust a green result from a
 
 | Goal | Command | Notes |
 |---|---|---|
+| Let KeyLeak pick the right workflow and persist audit artifacts | `keyleak audit <target>` | Preferred for agents and OSS users. Supports local path, archive, URL, or domain. |
 | Scan a **local repo / build artifacts** for secrets, MCP/CI configs, source maps | `keyleak local <path>` | No network. Fastest. Good for CI / pre-merge gates. |
 | Scan **one live page or SPA** | `keyleak browser-scan <url>` | Headless Playwright injects the analyzer into a single URL. |
 | Scan a **whole domain** (subdomains + crawl) | `keyleak site-scan <domain>` | The comprehensive live option. Bounded by `--depth` / `--max-pages` / `--max-subdomains`. |
@@ -100,11 +102,45 @@ path doesn't import the missing module — but don't trust a green result from a
 | Scan via the **Flask web bridge** (mitmproxy capture) | `keyleak scan <url> --server http://127.0.0.1:5002` | Start `python app.py` first. |
 | Audit **this repo's own** supply-chain hygiene | `keyleak self-audit .` | Tag pins, dangerous workflow triggers, lockfile, CODEOWNERS. |
 
-For "run a full comprehensive scan of a website," the answer is **`site-scan`**.
+For "run a security audit", "vulnerability detection", "bug bounty scan", "check
+this app/repo", or "is this exploitable?", the answer is **`keyleak audit`**.
+Use the lower-level commands only when the user explicitly asks for that scanner.
 
 ---
 
-## Step 4 — Run the comprehensive scan
+## Step 4 — Run the comprehensive audit
+
+```bash
+keyleak audit example.com \
+  --intent security-audit \
+  --depth exploit-validation \
+  --authorized-scope "owned domain + staging accounts" \
+  --max-pages 100 \
+  --max-subdomains 25 \
+  --scan-budget 30 \
+  --fail-on low \
+  --json
+```
+
+`security-audit` and `bug-bounty` default to `--depth exploit-validation`; `ship`
+defaults to `--depth active`. Active network scans and exploit-validation refuse
+to run unless `--authorized-scope` is present. If two-user credentials are not
+provided, KeyLeak records that access-control validation was skipped and tells you
+which credentials to supply next.
+
+The audit writes:
+
+- `audit-plan.json`
+- `report.json`
+- `findings.jsonl`
+- `coverage.json`
+- `evidence-ledger.json`
+- `summary.md`
+
+These artifacts are redacted. They must not contain raw auth headers, cookies,
+bearer tokens, browser payloads, or raw secrets.
+
+### Lower-level equivalent
 
 ```bash
 keyleak site-scan example.com \
@@ -175,6 +211,12 @@ print(report_to_text(report))   # terminal summary
 The report carries a top-level `verdict` (`SAFE_TO_SHIP`, `REVIEW`, or `BLOCK_SHIP`), a `summary` with
 per-severity counts, a `pack_summary`, the `subdomains` and `scanned_urls` covered, and
 `provenance` (which URLs each finding appeared on).
+
+Audit reports also include `audit_plan`, `coverage`, `validation_attempts`,
+`skipped_phases`, `authorization_scope`, `artifact_dir`, and `next_probes`.
+Validation vocabulary is strict: `lead` means a plausible static/passive signal,
+`validated` means deterministic evidence supports the finding, and `confirmed`
+means active probe or exploit-validation evidence confirmed impact.
 
 **Exit codes** are driven by `--fail-on` (`low`/`medium`/`high`/`critical`):
 

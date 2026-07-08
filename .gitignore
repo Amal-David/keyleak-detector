@@ -46,6 +46,8 @@ tmp/
 !DOCKER.md
 !DISCLAIMER.md
 !LICENSE.md
+!.claude/skills/**/SKILL.md
+!.codex/skills/**/SKILL.md
 
 # Pattern cache
 patterns_cache.json
