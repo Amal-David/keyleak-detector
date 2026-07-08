@@ -168,6 +168,21 @@ The `--html` flag generates a self-contained dark-theme vulnerability report:
 - **87 vendor CDN suppression**: No false positives from Google Analytics, PostHog, Segment, etc.
 - **200+ first-party domains**: Google, Microsoft, AWS, Apple, Meta, Anthropic, Stripe -- their own keys on their own sites are never flagged
 
+## v0.6.1 -- What's New
+
+A patch release for finding identity, report reliability, and dependency
+hardening. Full notes in [CHANGELOG.md](CHANGELOG.md).
+
+- **Stable finding identity** -- report fingerprints survive harmless line shifts
+  and can use configured HMAC material for reproducible, non-secret IDs.
+- **Baseline compatibility** -- legacy baselines and suppressions continue to
+  match after the newer fingerprint/report identity shape.
+- **Louder report failures** -- scan errors and suppression-loading problems no
+  longer disappear into misleadingly clean reports.
+- **Python dependency hardening** -- the vulnerable dependency graph was updated,
+  and optional `mitmproxy` import failures are preserved/logged while proxy mode
+  falls back to the disabled path when unavailable.
+
 ## v0.6.0 -- What's New
 
 A security-and-usefulness release. Full notes in [CHANGELOG.md](CHANGELOG.md).

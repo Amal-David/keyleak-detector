@@ -4,6 +4,26 @@ All notable changes to KeyLeak Detector are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and the project aims to follow [Semantic Versioning](https://semver.org/).
 
+## [0.6.1] — 2026-07-08
+
+A patch release for finding identity, report reliability, and Python dependency
+hardening after the 0.6.0 launch.
+
+### Security
+- Updated the Python dependency graph, including the JWT/request stack, and moved
+  `mitmproxy` out of the core package dependency path so normal installs are not
+  blocked by optional proxy-capture dependencies.
+- Proxy capture now preserves and logs concrete `mitmproxy` import-time failures
+  before falling back to the existing disabled-proxy runtime path.
+
+### Fixed
+- Finding fingerprints are stable across harmless line shifts and can be keyed
+  with configured HMAC material for reproducible, non-secret report identity.
+- Legacy baseline and suppression files remain compatible with the newer
+  fingerprint/report identity shape.
+- Scan errors and suppression loading now fail louder instead of silently
+  producing misleadingly clean reports.
+
 ## [0.6.0] — 2026-06-10
 
 A security-and-usefulness release. Highlights: an attack-chain correlation engine,
@@ -85,4 +105,5 @@ The browser extension is versioned independently of the Python package
 - SSRF-guarded remote-resource fetches (internal-host + redirect protections).
 - Shared detection logic kept in sync with the CLI detector bundle.
 
+[0.6.1]: https://github.com/Amal-David/keyleak-detector/releases/tag/v0.6.1
 [0.6.0]: https://github.com/Amal-David/keyleak-detector/releases/tag/v0.6.0
