@@ -1,12 +1,17 @@
+import contextlib
 import json
 import tempfile
 import unittest
 from argparse import Namespace
 from pathlib import Path
+from unittest import mock
 
+import keyleak.fingerprints as fingerprints_module
 from keyleak.access_control import compare_access_control_urls
 from keyleak.cli import _scan_request_payload
+from keyleak.diff import diff_reports
 from keyleak.extension_bundle import extension_pattern_payload, extension_patterns_js
+from keyleak.fingerprints import finding_fingerprint
 from keyleak.local_scanner import _is_generated_file, scan_file, scan_path, scan_text
 from keyleak.detectors import DETECTORS, DETECTOR_PACKS, HEATMAP_ROWS, detectors_for_packs, normalize_packs
 from keyleak.local_scanner import _is_placeholder
@@ -17,6 +22,15 @@ from keyleak.suppressions import apply_suppressions, load_suppressions
 
 
 class ReportingTests(unittest.TestCase):
+    @contextlib.contextmanager
+    def _fingerprint_key(self, key: str = "unit-test-fingerprint-key"):
+        with mock.patch.dict(
+            "os.environ",
+            {"KEYLEAK_FINDING_FINGERPRINT_KEY": key},
+            clear=False,
+        ):
+            yield
+
     def test_redacts_long_values(self):
         self.assertEqual(redact_value("sk-proj-abcdefghijklmnopqrstuvwxyz"), "sk-pro...[redacted]...wxyz")
 
@@ -69,6 +83,15 @@ class ReportingTests(unittest.TestCase):
 
         self.assertEqual(report.retest_command, "keyleak local '/tmp/my repo'")
 
+    def test_retest_command_matches_scan_mode(self):
+        browser_report = build_report("https://preview.example.com", [], scan_mode="browser")
+        site_report = build_report("example.com", [], scan_mode="full-site")
+        basic_report = build_report("https://preview.example.com", [], scan_mode="basic")
+
+        self.assertEqual(browser_report.retest_command, "keyleak browser-scan https://preview.example.com")
+        self.assertEqual(site_report.retest_command, "keyleak site-scan example.com")
+        self.assertEqual(basic_report.retest_command, "keyleak scan https://preview.example.com")
+
     def test_report_round_trips_server_payload(self):
         report = build_report("https://preview.example.com", [], scan_mode="basic")
         payload = report.to_dict()
@@ -118,6 +141,212 @@ class ReportingTests(unittest.TestCase):
         )
 
         self.assertNotEqual(first.id, second.id)
+
+    def test_finding_fingerprint_survives_redaction_salt_rotation(self):
+        raw_key = "sk-proj-AbCdEf1234567890GhIjKlMnOpQrStUvWxYz9876543210"
+        content = f'OPENAI_API_KEY="{raw_key}"\n'
+        detector = _detector("openai_api_key")
+        with self._fingerprint_key():
+            first = scan_text(content, "app.py", [detector], run_salt=b"\x00" * 32)[0]
+            second = scan_text(content, "app.py", [detector], run_salt=b"\x11" * 32)[0]
+
+        self.assertNotEqual(first.evidence.redacted_value, second.evidence.redacted_value)
+        self.assertNotEqual(first.id, second.id)
+        self.assertEqual(first.fingerprint, second.fingerprint)
+        self.assertTrue(first.fingerprint.startswith("klfp1_"))
+        self.assertNotIn(raw_key, json.dumps(first.to_dict()))
+
+    def test_finding_fingerprint_uses_hmac_when_key_configured(self):
+        with self._fingerprint_key():
+            first = finding_fingerprint(
+                detector_id="test:openai_api_key",
+                source="app.py",
+                raw_value="sk-proj-secret-value",
+                request_url="https://example.com/app.js",
+                line=12,
+            )
+            second = finding_fingerprint(
+                detector_id="test:openai_api_key",
+                source="app.py",
+                raw_value="sk-proj-secret-value",
+                request_url="https://example.com/app.js",
+                line=12,
+            )
+
+        self.assertEqual(first, second)
+        self.assertTrue(first.startswith("klfp1_"))
+        self.assertNotIn("sk-proj-secret-value", first)
+
+    def test_finding_fingerprint_skips_output_without_key(self):
+        with mock.patch.object(fingerprints_module, "_warned_missing_key", False):
+            with self.assertLogs("keyleak.fingerprints", level="WARNING") as captured:
+                with mock.patch.dict("os.environ", {}, clear=True):
+                    fingerprint = finding_fingerprint(
+                        detector_id="test:openai_api_key",
+                        source="app.py",
+                        raw_value="sk-proj-secret-value",
+                        request_url="https://example.com/app.js",
+                        line=12,
+                    )
+
+        self.assertEqual(fingerprint, "")
+        self.assertEqual(
+            captured.output,
+            ["WARNING:keyleak.fingerprints:KEYLEAK_FINDING_FINGERPRINT_KEY is not set; finding fingerprints are disabled."],
+        )
+
+    def test_finding_fingerprint_warns_once_without_key(self):
+        with mock.patch.object(fingerprints_module, "_warned_missing_key", False):
+            with mock.patch.dict("os.environ", {}, clear=True):
+                with self.assertLogs("keyleak.fingerprints", level="WARNING") as captured:
+                    finding_fingerprint(
+                        detector_id="test:openai_api_key",
+                        source="app.py",
+                        raw_value="sk-proj-secret-value",
+                    )
+                self.assertEqual(len(captured.output), 1)
+                with self.assertNoLogs("keyleak.fingerprints", level="WARNING"):
+                    finding_fingerprint(
+                        detector_id="test:openai_api_key",
+                        source="app.py",
+                        raw_value="sk-proj-secret-value",
+                    )
+
+    def test_finding_fingerprint_ignores_line_shifts(self):
+        with self._fingerprint_key():
+            first = finding_fingerprint(
+                detector_id="test:openai_api_key",
+                source="app.py",
+                raw_value="sk-proj-secret-value",
+                request_url="https://example.com/app.js",
+                line=12,
+            )
+            second = finding_fingerprint(
+                detector_id="test:openai_api_key",
+                source="app.py",
+                raw_value="sk-proj-secret-value",
+                request_url="https://example.com/app.js",
+                line=99,
+            )
+
+        self.assertEqual(first, second)
+
+    def test_baseline_suppresses_across_redaction_salt_rotation(self):
+        raw_key = "sk-proj-AbCdEf1234567890GhIjKlMnOpQrStUvWxYz9876543210"
+        content = f'OPENAI_API_KEY="{raw_key}"\n'
+        detector = _detector("openai_api_key")
+        with self._fingerprint_key():
+            baseline_finding = scan_text(content, "app.py", [detector], run_salt=b"\x00" * 32)[0]
+            current_finding = scan_text(content, "app.py", [detector], run_salt=b"\x11" * 32)[0]
+
+        current = ScanReport("app.py", "local", [current_finding])
+        baseline = {"findings": [baseline_finding.to_dict()]}
+        with tempfile.NamedTemporaryFile("w", suffix=".json") as handle:
+            json.dump(baseline, handle)
+            handle.flush()
+            filtered = apply_suppressions(current, baseline_path=handle.name, apply_defaults=False)
+
+        self.assertEqual(filtered.findings, [])
+        self.assertEqual(filtered.verdict["status"], "SAFE_TO_SHIP")
+
+    def test_baseline_preserves_legacy_detector_and_source_suppressions(self):
+        baseline = {
+            "findings": [
+                {
+                    "id": "baseline-id",
+                    "detector_id": "leak.openai_api_key",
+                    "type": "openai_api_key",
+                    "source": "app.py",
+                    "evidence": {"source": "app.py", "line": 1, "redacted_value": "[redacted:11111111]"},
+                }
+            ]
+        }
+        current = ScanReport(
+            "app.py",
+            "local",
+            [
+                Finding(
+                    type="openai_api_key",
+                    severity="critical",
+                    confidence=0.9,
+                    detector_id="leak.openai_api_key",
+                    source="app.py",
+                    evidence=Evidence(source="app.py", line=99, redacted_value="[redacted:22222222]"),
+                    risk_reason="risk",
+                    remediation="fix",
+                )
+            ],
+        )
+        with tempfile.NamedTemporaryFile("w", suffix=".json") as handle:
+            json.dump(baseline, handle)
+            handle.flush()
+            filtered = apply_suppressions(current, baseline_path=handle.name, apply_defaults=False)
+
+        self.assertEqual(filtered.findings, [])
+        self.assertEqual(filtered.verdict["status"], "SAFE_TO_SHIP")
+
+    def test_rules_source_fallback_does_not_create_repo_wide_substring_suppression(self):
+        rules = {
+            "rules": [
+                {
+                    "detector_id": "other.detector",
+                    "source": "app.py",
+                }
+            ]
+        }
+        with tempfile.NamedTemporaryFile("w", suffix=".json") as handle:
+            json.dump(rules, handle)
+            handle.flush()
+            suppressions = load_suppressions(handle.name, baseline_mode=False)
+
+        self.assertEqual(suppressions.source_contains, [])
+
+    def test_diff_reports_uses_fingerprint_across_redaction_salt_rotation(self):
+        raw_key = "sk-proj-AbCdEf1234567890GhIjKlMnOpQrStUvWxYz9876543210"
+        content = f'OPENAI_API_KEY="{raw_key}"\n'
+        detector = _detector("openai_api_key")
+        with self._fingerprint_key():
+            baseline_finding = scan_text(content, "app.py", [detector], run_salt=b"\x00" * 32)[0]
+            current_finding = scan_text(content, "app.py", [detector], run_salt=b"\x11" * 32)[0]
+
+        diff = diff_reports(
+            ScanReport("app.py", "local", [baseline_finding]),
+            ScanReport("app.py", "local", [current_finding]),
+        )
+
+        self.assertEqual(diff.findings, [])
+
+    def test_diff_reports_matches_legacy_ids_against_current_fingerprints(self):
+        raw_key = "sk-proj-AbCdEf1234567890GhIjKlMnOpQrStUvWxYz9876543210"
+        detector = _detector("openai_api_key")
+        with self._fingerprint_key():
+            current_finding = scan_text(f'OPENAI_API_KEY="{raw_key}"\n', "app.py", [detector], run_salt=b"\x11" * 32)[0]
+        legacy_baseline = Finding.from_dict(
+            {
+                **current_finding.to_dict(),
+                "fingerprint": "",
+                "id": "legacy-baseline-id",
+            }
+        )
+        current_finding.id = "legacy-baseline-id"
+
+        diff = diff_reports(
+            ScanReport("app.py", "local", [legacy_baseline]),
+            ScanReport("app.py", "local", [current_finding]),
+        )
+
+        self.assertEqual(diff.findings, [])
+
+    def test_sarif_partial_fingerprints_include_stable_fingerprint(self):
+        raw_key = "sk-proj-AbCdEf1234567890GhIjKlMnOpQrStUvWxYz9876543210"
+        detector = _detector("openai_api_key")
+        with self._fingerprint_key():
+            finding = scan_text(f'OPENAI_API_KEY="{raw_key}"\n', "app.py", [detector], run_salt=b"\x00" * 32)[0]
+        sarif = json.loads(format_sarif(ScanReport("app.py", "local", [finding])))
+        partials = sarif["runs"][0]["results"][0]["partialFingerprints"]
+
+        self.assertEqual(partials["findingFingerprint"], finding.fingerprint)
+        self.assertNotIn(raw_key, json.dumps(sarif))
 
 
 class HtmlReportTests(unittest.TestCase):
@@ -189,6 +418,38 @@ class HtmlReportTests(unittest.TestCase):
         self.assertIn("confirmed", output)
         self.assertIn("leak, baas", output)
         self.assertIn("browser", output)
+
+    def test_html_distinguishes_static_validated_from_active_confirmed(self):
+        findings = [
+            Finding(
+                type="active_secret",
+                severity="critical",
+                confidence=0.95,
+                detector_id="leak:active_secret",
+                source="bundle.js",
+                evidence=Evidence(source="bundle.js", redacted_value="[redacted:11111111]"),
+                risk_reason="Actively confirmed secret.",
+                remediation="Rotate the key.",
+                validation_status="confirmed",
+                category="leak",
+            ),
+            Finding(
+                type="static_secret",
+                severity="high",
+                confidence=0.9,
+                detector_id="leak:static_secret",
+                source="bundle.js",
+                evidence=Evidence(source="bundle.js", redacted_value="[redacted:22222222]"),
+                risk_reason="Static detector match.",
+                remediation="Review and rotate if live.",
+                validation_status="validated",
+                category="leak",
+            ),
+        ]
+        output = format_html(build_report("https://preview.example.com", findings, scan_mode="browser"))
+
+        self.assertEqual(output.count('class="badge-confirmed">confirmed</span>'), 1)
+        self.assertIn('class="badge-validated">validated</span>', output)
 
     def test_html_report_escapes_dynamic_content(self):
         finding = Finding(

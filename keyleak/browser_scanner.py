@@ -35,6 +35,7 @@ from .local_scanner import scan_text
 from .models import Evidence, Finding, ScanReport
 from .proxy import playwright_proxy
 from .redaction import new_run_salt, redact_url, redact_value, stable_id
+from .fingerprints import finding_fingerprint
 from .reporting import build_report
 
 
@@ -503,8 +504,15 @@ class _CdpNetworkCapture:
             return
         if len(text.encode("utf-8", errors="ignore")) > CDP_MAX_BODY_BYTES:
             return
-        for finding in scan_text(text, source, self._detectors, run_salt=self.run_salt):
-            finding.evidence.request_url = redact_url(request_url)
+        safe_request_url = redact_url(request_url)
+        for finding in scan_text(
+            text,
+            source,
+            self._detectors,
+            run_salt=self.run_salt,
+            request_url=safe_request_url,
+        ):
+            finding.evidence.request_url = safe_request_url
             if response_status is not None:
                 finding.evidence.response_status = response_status
             finding.id = stable_id(
@@ -786,6 +794,7 @@ def _run_baas_validation(
 def _to_finding(entry: Dict[str, Any], target: str, run_salt: Optional[bytes] = None) -> Finding:
     source = entry.get("source") or target
     value = str(entry.get("value") or "")
+    safe_target = redact_url(target)
     # Redact before the value ever leaves this process. The browser path used to
     # store the raw match in ``redacted_value``/``snippet``, leaking cleartext
     # secrets into reports, CI artifacts, and the /scan JSON response. Always use
@@ -798,7 +807,7 @@ def _to_finding(entry: Dict[str, Any], target: str, run_salt: Optional[bytes] = 
         source=source,
         snippet=redacted,
         redacted_value=redacted,
-        request_url=target,
+        request_url=safe_target,
     )
     detector_id = str(entry.get("detector_id") or "browser:unknown")
     return Finding(
@@ -812,6 +821,12 @@ def _to_finding(entry: Dict[str, Any], target: str, run_salt: Optional[bytes] = 
         remediation="Rotate the exposed credential and remove it from the bundle / storage.",
         validation_status="lead",
         category="leak",
+        fingerprint=finding_fingerprint(
+            detector_id=detector_id,
+            source=source,
+            raw_value=value,
+            request_url=safe_target,
+        ),
     )
 
 
