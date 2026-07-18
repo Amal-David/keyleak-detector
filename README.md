@@ -87,6 +87,10 @@ uv sync && uv run playwright install chromium
 ## Usage
 
 ```bash
+# Agentic audit front door: local path, archive, URL, or domain
+keyleak audit . --intent security-audit --depth exploit-validation --authorized-scope "owned repo"
+keyleak audit example.com --intent bug-bounty --depth exploit-validation --authorized-scope "owned domain + staging accounts" --attest-network-scope --include-subdomains --html > audit.html
+
 # Scan a single page
 keyleak browser-scan https://your-app.vercel.app --html > report.html
 
@@ -104,6 +108,18 @@ keyleak local . --fail-on high
 
 # Output formats: --json, --sarif, --markdown, --html
 ```
+
+`keyleak audit` writes durable redacted artifacts to
+`.keyleak/audits/<timestamp>-<target>/` by default: `audit-plan.json`,
+`report.json`, `findings.jsonl`, `coverage.json`, `evidence-ledger.json`, and
+`summary.md`. Active network scans and exploit-validation require both an
+`--authorized-scope` statement and `--attest-network-scope`; this is an operator
+attestation, not independent technical proof of authorization. Audit planning is
+available with `--plan` and does not scan, navigate, or install tooling. Audit
+execution never uses external PATH discovery tools; raw cookies, bearer tokens,
+browser payloads, and raw secrets are not persisted. Under `--offline`, URL and
+domain audits are refused before Chromium launches; use a local path or archive
+audit instead.
 
 ### Private scans through a proxy
 

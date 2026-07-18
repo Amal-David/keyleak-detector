@@ -499,6 +499,18 @@ class HtmlReportTests(unittest.TestCase):
 
 
 class LocalScannerTests(unittest.TestCase):
+    def test_scan_path_does_not_follow_file_symlinks(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "root"
+            outside = Path(tmp) / "outside.env"
+            root.mkdir()
+            outside.write_text("OPENAI_API_KEY=sk-super-secret-value\n", encoding="utf-8")
+            (root / "linked.env").symlink_to(outside)
+
+            report = scan_path(str(root), profile="launch-gate")
+
+        self.assertFalse(report.findings)
+
     def test_vulnerable_fixture_produces_actionable_report(self):
         report = scan_path("fixtures/vulnerable-demo")
         finding_types = [finding.type for finding in report.findings]

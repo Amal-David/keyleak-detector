@@ -24,7 +24,12 @@ Use this operating model:
 - Revoke test credentials after scanning sensitive environments.
 - Do not paste real customer data into bug reports or screenshots.
 
-Two-user access-control comparison is opt-in. Provide a second throwaway user with `--bearer-b` or `--cookie-b`; KeyLeak will only compare object-looking URLs with those explicit credentials and will not reuse browser cookies automatically.
+Two-user access-control comparison is opt-in on the direct `keyleak scan` command.
+Provide a second throwaway user with `--bearer-b` or `--cookie-b`; KeyLeak will
+only compare object-looking URLs with those explicit credentials and will not
+reuse browser cookies automatically. The agentic `keyleak audit` command never
+accepts raw credentials on the command line and does not currently offer this
+comparison.
 
 ## Private Scans Through a Proxy
 
@@ -75,11 +80,30 @@ The extension stores per-tab reports in `chrome.storage.local` and renders redac
 
 ## Hosted Scanning
 
-Hosted scanning is intentionally deferred. A hosted version would require abuse controls, tenancy, credential-handling policy, retention policy, and legal review. The default project direction is local-first.
+Hosted scanning is intentionally deferred. The V1 agentic audit layer is local
+and self-hosted: `keyleak audit` runs deterministic scanners on the operator's
+machine, writes redacted local artifacts, and only performs active probing after
+an explicit `--authorized-scope` plus `--attest-network-scope`. This is an
+operator attestation, not independent technical proof of authorization. The audit
+front door invokes direct KeyLeak APIs only; it does not invoke shell commands,
+user-specified scripts, arbitrary external tools, or package installation. The
+optional Poetry lock-drift subprocess is deliberately skipped during agentic
+audits. Browser URL coverage is
+reported as partial because redirect and subresource containment are not currently
+enforced by that path. `--offline` refuses URL and domain audits before the browser
+scanner launches, because Chromium runs outside Python's socket-level offline guard.
+
+The future cloud shape is a control plane over isolated local or self-hosted
+workers, not hosted scanning by default. Tenancy, retention policy, abuse
+controls, credential custody, and legal review remain deferred until the local
+artifact and safety model are proven.
 
 ## Limits
 
-KeyLeak is not a full DAST or exploit framework. It does not prove exploitability for every finding. Treat results as high-signal evidence that needs remediation or human review.
+KeyLeak is not a full DAST or exploit framework. It does not prove exploitability
+for every finding. Treat `lead` findings as high-signal prompts, `validated`
+findings as deterministic evidence, and `confirmed` findings as active
+probe/exploit-validation evidence.
 
 ## GDPR Article 30 Record
 
@@ -92,6 +116,7 @@ Honest record of every field KeyLeak captures, where it lives, how long, and why
 | `keyleak scan` | Response bodies (≤5 MiB) | mitmproxy capture | RAM | Scan lifetime | Bundle / source-map detection |
 | `keyleak scan` | Session cookies / bearer tokens | User-supplied via `--bearer/--cookie` flags | RAM | Scan lifetime | Authenticated scan |
 | `keyleak self-audit` | Workflow YAML, lockfile metadata, CODEOWNERS, package.json | Local FS | RAM | Scan lifetime | Supply-chain hygiene |
+| `keyleak audit` | Redacted plan, findings, coverage, evidence ledger, and Markdown summary | Local scan + derived reports | `.keyleak/audits/<timestamp>-<target>/` or explicit `--out-dir` | Until operator deletes the directory | Durable, redacted assessment handoff |
 | `keyleak allowlist-diff` | Per-PR allowlist + changed-file list | Git refs / repo working tree | RAM | Scan lifetime | Allowlist provenance gate |
 | Chrome extension (legacy / sunsetting) | DOM, localStorage, sessionStorage | content script | `chrome.storage.local` | Until tab close + redact | Live in-browser detection |
 
@@ -105,7 +130,7 @@ Honest record of every field KeyLeak captures, where it lives, how long, and why
 
 - No telemetry. No analytics. No phone-home.
 - No crash reports.
-- No findings are persisted to disk by KeyLeak. The user must explicitly redirect stdout to a file (`> report.json`) or upload it as a CI artifact.
+- Apart from the explicit redacted `keyleak audit` artifact directory, findings are not persisted to disk by KeyLeak. Delete the audit output directory to erase that local record; do not place it in shared storage without an appropriate retention policy.
 - No outbound network call is made under `--offline` mode (Wave 1.5).
 
 ### Right to erasure
