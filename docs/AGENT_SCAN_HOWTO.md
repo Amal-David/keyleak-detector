@@ -20,15 +20,17 @@ poetry run keyleak audit example.com \
   --intent security-audit \
   --depth exploit-validation \
   --authorized-scope "owned domain + staging accounts" \
+  --attest-network-scope \
+  --include-subdomains \
   --json
 ```
 
 This classifies the target, records an audit plan, runs the right deterministic
 scanner (`local`, `archive`, `browser-scan`, or `site-scan`), writes redacted
 artifacts under `.keyleak/audits/<timestamp>-<target>/`, and reports skipped
-exploit-validation phases honestly. For a domain, it enumerates subdomains (crt.sh
-+ DNS), crawls reachable pages, runs detector packs, and actively validates BaaS
-config when authorized.
+exploit-validation phases honestly. A domain audit is exact-host by default; add
+`--include-subdomains` only when the stated authorization covers registrable-domain
+discovery and crawling.
 
 ---
 
@@ -115,6 +117,8 @@ keyleak audit example.com \
   --intent security-audit \
   --depth exploit-validation \
   --authorized-scope "owned domain + staging accounts" \
+  --attest-network-scope \
+  --include-subdomains \
   --max-pages 100 \
   --max-subdomains 25 \
   --scan-budget 30 \
@@ -124,9 +128,19 @@ keyleak audit example.com \
 
 `security-audit` and `bug-bounty` default to `--depth exploit-validation`; `ship`
 defaults to `--depth active`. Active network scans and exploit-validation refuse
-to run unless `--authorized-scope` is present. If two-user credentials are not
-provided, KeyLeak records that access-control validation was skipped and tells you
-which credentials to supply next.
+to run unless both `--authorized-scope` and `--attest-network-scope` are present.
+The scope text is an operator attestation, not independent technical proof of
+authorization. `--plan` produces a redacted plan without scanning, navigating, or
+installing tooling. The audit command intentionally does not accept raw credentials
+on the command line; its two-user access-control comparison remains explicitly
+unavailable until a non-command-line credential handoff is implemented.
+
+Use `--assessment-mode blue-team` to frame the summary around defensive posture and
+remediation, `--assessment-mode red-team` for bounded attacker-perspective exposure
+questions, or the default `balanced` view for both. This changes the plan and
+summary framing only; it never expands the allowed tools or network permissions.
+An `--auth-state` file is supported only for an exact URL/host audit; the command
+refuses it with `--include-subdomains` rather than silently losing authentication.
 
 The audit writes:
 
@@ -212,8 +226,11 @@ The report carries a top-level `verdict` (`SAFE_TO_SHIP`, `REVIEW`, or `BLOCK_SH
 per-severity counts, a `pack_summary`, the `subdomains` and `scanned_urls` covered, and
 `provenance` (which URLs each finding appeared on).
 
-Audit reports also include `audit_plan`, `coverage`, `validation_attempts`,
-`skipped_phases`, `authorization_scope`, `artifact_dir`, and `next_probes`.
+Audit reports also include `audit_plan`, `audit_coverage`, `validation_attempts`,
+`skipped_phases`, `operator_attestation`, `artifact_dir`, and `next_probes`.
+`audit_coverage` is explicitly incomplete when any phase is skipped, blocked, or
+failed. URL/browser coverage is partial: existing guards check initial targets
+where applied, but browser redirect and subresource containment is not enforced.
 Validation vocabulary is strict: `lead` means a plausible static/passive signal,
 `validated` means deterministic evidence supports the finding, and `confirmed`
 means active probe or exploit-validation evidence confirmed impact.

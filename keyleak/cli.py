@@ -36,8 +36,29 @@ def main(argv: Optional[List[str]] = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
 
+    if args.command == "audit" and any(
+        getattr(args, name, "")
+        for name in ("bearer", "cookie", "bearer_b", "cookie_b")
+    ):
+        print(
+            "audit does not accept credentials on the command line; use a 0600 --auth-state file for single-user browser scans.",
+            file=sys.stderr,
+        )
+        return 1
+
     if args.command == "bundles":
         return _print_bundles()
+
+    if args.command == "audit" and args.plan:
+        from .audit import AuditError, plan_audit
+
+        try:
+            plan = plan_audit(_audit_options_from_args(args, proxy=args.proxy or None, offline=args.offline))
+        except (AuditError, ValueError) as exc:
+            print(f"audit plan failed: {exc}", file=sys.stderr)
+            return 1
+        print(json.dumps(plan, indent=2, sort_keys=True))
+        return 0
 
     if getattr(args, "bundle", ""):
         if _apply_bundle_selection(args) != 0:
@@ -79,36 +100,10 @@ def main(argv: Optional[List[str]] = None) -> int:
         return _emit_report(report, args)
 
     if args.command == "audit":
-        from .audit import AuditAuthorizationError, AuditError, AuditOptions, run_audit
+        from .audit import AuditAuthorizationError, AuditError, run_audit
 
         try:
-            report = run_audit(
-                AuditOptions(
-                    target=args.target,
-                    intent=args.intent,
-                    depth=args.depth or None,
-                    authorized_scope=args.authorized_scope,
-                    out_dir=args.out_dir,
-                    launch_profile=args.launch_profile,
-                    max_pages=int(args.max_pages),
-                    max_subdomains=int(args.max_subdomains),
-                    crawl_depth=int(args.crawl_depth),
-                    scan_budget_seconds=int(args.scan_budget),
-                    headless=not args.headed,
-                    baas_validate=args.baas_validate,
-                    bearer=args.bearer,
-                    cookie=args.cookie,
-                    bearer_b=args.bearer_b,
-                    cookie_b=args.cookie_b,
-                    auth_state_path=args.auth_state,
-                    offline=offline,
-                    proxy=proxy,
-                    auto_install=not args.no_auto_install,
-                    baseline_path=args.baseline,
-                    allowlist_path=args.allowlist,
-                    apply_default_suppressions=not getattr(args, "no_default_suppressions", False),
-                )
-            )
+            report = run_audit(_audit_options_from_args(args, proxy=proxy, offline=offline))
         except AuditAuthorizationError as exc:
             print(str(exc), file=sys.stderr)
             return 1
@@ -116,10 +111,14 @@ def main(argv: Optional[List[str]] = None) -> int:
             print(f"audit failed: {exc}", file=sys.stderr)
             return 1
         except Exception as exc:
-            print(f"audit failed: {exc}", file=sys.stderr)
+            print(f"audit failed: {exc.__class__.__name__}", file=sys.stderr)
             return 1
         args.suppressions_applied = True
-        return _emit_report(report, args)
+        exit_code = _emit_report(report, args)
+        audit_coverage = report.extra.get("audit_coverage")
+        if exit_code == 0 and isinstance(audit_coverage, dict) and audit_coverage.get("status") != "complete":
+            return 1
+        return exit_code
 
     if args.command == "scan":
         try:
@@ -391,26 +390,42 @@ def build_parser() -> argparse.ArgumentParser:
     )
     audit.add_argument("target", help="Local path, archive, URL, or domain to audit.")
     audit.add_argument("--intent", default="security-audit", choices=["ship", "security-audit", "bug-bounty"])
+    audit.add_argument(
+        "--assessment-mode",
+        default="balanced",
+        choices=["balanced", "blue-team", "red-team"],
+        help="Frame the summary around defensive posture, attacker-perspective questions, or both; permissions do not change.",
+    )
     audit.add_argument("--depth", default="", choices=["passive", "active", "exploit-validation"])
     audit.add_argument(
         "--authorized-scope",
         default="",
-        help="Required for active network/probing audits; describe the owned/authorized scope.",
+        help="Operator scope statement required with --attest-network-scope for active network audits; not technical authorization proof.",
     )
+    audit.add_argument(
+        "--attest-network-scope",
+        action="store_true",
+        help="Explicitly attest that the stated scope authorizes this network assessment; this is not independently verified.",
+    )
+    audit.add_argument("--plan", action="store_true", help="Print a redacted plan without running scanners, network checks, or installation.")
     audit.add_argument("--out-dir", default="", help="Write audit artifacts here; default .keyleak/audits/<timestamp>-<target>.")
     audit.add_argument("--launch-profile", default="", choices=["", "launch-gate", "local-dev", "bug-bounty", "ci", "full"])
     audit.add_argument("--crawl-depth", default="3", help="Link crawl depth for domain audits.")
     audit.add_argument("--max-pages", default="100", help="Maximum pages for domain audits.")
     audit.add_argument("--max-subdomains", default="50", help="Maximum subdomains for domain audits.")
     audit.add_argument("--scan-budget", default="30", help="Per-page timeout in seconds.")
+    audit.add_argument(
+        "--include-subdomains",
+        action="store_true",
+        help="Explicitly expand a domain target to its registrable domain and discovered subdomains. Default is the exact host only.",
+    )
     audit.add_argument("--headed", action="store_true", help="Show browser windows.")
-    audit.add_argument("--no-auto-install", action="store_true", help="Do not auto-install optional subdomain tools.")
     audit.add_argument("--baas-validate", action="store_true", help="Enable active BaaS validation probes.")
-    audit.add_argument("--auth-state", default="", help="Path to Playwright storageState.json for authenticated single-user scans.")
-    audit.add_argument("--bearer", default="", help="Throwaway user A bearer token for validation.")
-    audit.add_argument("--cookie", default="", help="Throwaway user A cookie for validation.")
-    audit.add_argument("--bearer-b", default="", help="Throwaway user B bearer token for two-user comparison.")
-    audit.add_argument("--cookie-b", default="", help="Throwaway user B cookie for two-user comparison.")
+    audit.add_argument("--auth-state", default="", help="Path to a 0600 Playwright storageState.json for an authenticated single-user scan.")
+    audit.add_argument("--bearer", default="", help=argparse.SUPPRESS)
+    audit.add_argument("--cookie", default="", help=argparse.SUPPRESS)
+    audit.add_argument("--bearer-b", default="", help=argparse.SUPPRESS)
+    audit.add_argument("--cookie-b", default="", help=argparse.SUPPRESS)
     audit.add_argument("--fail-on", default="high", choices=["low", "medium", "high", "critical"])
     audit.add_argument("--baseline", default="", help="Suppress findings already present in a previous KeyLeak JSON report.")
     audit.add_argument("--allowlist", default="", help="Suppress known findings from a JSON or line-based allowlist.")
@@ -648,6 +663,34 @@ def _add_audit_format_flags(parser: argparse.ArgumentParser) -> None:
     group.add_argument("--json", action="store_true", help="Emit KeyLeak JSON report.")
     group.add_argument("--markdown", action="store_true", help="Emit Markdown report.")
     group.add_argument("--html", action="store_true", help="Emit self-contained HTML report.")
+
+
+def _audit_options_from_args(args: argparse.Namespace, *, proxy: Optional[str], offline: bool):
+    from .audit import AuditOptions
+
+    return AuditOptions(
+        target=args.target,
+        intent=args.intent,
+        assessment_mode=args.assessment_mode,
+        depth=args.depth or None,
+        authorized_scope=args.authorized_scope,
+        network_attested=args.attest_network_scope,
+        out_dir=args.out_dir,
+        launch_profile=args.launch_profile,
+        max_pages=int(args.max_pages),
+        max_subdomains=int(args.max_subdomains),
+        crawl_depth=int(args.crawl_depth),
+        scan_budget_seconds=int(args.scan_budget),
+        headless=not args.headed,
+        baas_validate=args.baas_validate,
+        auth_state_path=args.auth_state,
+        offline=offline,
+        proxy=proxy,
+        include_subdomains=args.include_subdomains,
+        baseline_path=args.baseline,
+        allowlist_path=args.allowlist,
+        apply_default_suppressions=not getattr(args, "no_default_suppressions", False),
+    )
 
 
 def _print_bundles() -> int:
