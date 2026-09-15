@@ -47,7 +47,7 @@ Playwright crawl, and BaaS validation probes. The local KeyLeak web bridge
 
 ## Detector Packs
 
-The default CLI and web profile runs the `leak` pack. The Chrome extension runs `leak`, `appsec`, and `access-control` as a launch-gate front door. `correctness` and `housekeeping` are repo/CI-oriented packs and are advisory unless the caller opts into blocking on their severities.
+The default CLI and web profile runs the `leak` pack. The Chrome extension runs `leak`, `appsec`, `access-control`, and `baas` as a launch-gate front door. `correctness` and `housekeeping` are repo/CI-oriented packs and are advisory unless the caller opts into blocking on their severities.
 
 Appsec and correctness checks are intentionally labeled as leads unless KeyLeak has direct proof, such as a two-user access-control comparison. Treat lead findings as review prompts, not exploit claims.
 
@@ -77,9 +77,9 @@ Confirmed open-table findings require a returned record, not just HTTP 200 or a 
 
 An explicit popup action can reveal those one or two raw rows. They are held only in the tab's in-memory BaaS state and are never included in normalized findings, storage, reports, logs, clipboard exports, or native messages. Navigation, clear, tab close, and service-worker restart discard them. Empty arrays produce a low-severity readable-empty observation, not a confirmed data-exposure finding, and expose no reveal action.
 
-Convex validation is observation-only. The page-world interceptor strips client WebSocket messages down to query ID, function path, and authentication state; it never forwards Convex auth tokens or arguments. A finding is confirmed only when a matching anonymous subscription receives a `QueryUpdated` result. KeyLeak never calls Convex's query, mutation, action, or HTTP-action APIs and never guesses functions. The public deployment URL and public-function declaration are leads, not vulnerabilities by themselves. See [Convex support](CONVEX_SUPPORT.md) for current protocol and coverage limits.
+Convex validation is observation-only. The page-world interceptor strips client WebSocket messages down to an opaque connection ID, query ID, function path, and authentication state; it never forwards Convex auth tokens or arguments. A finding is confirmed only when a matching anonymous subscription on the same socket receives a `QueryUpdated` result. KeyLeak never calls Convex's query, mutation, action, or HTTP-action APIs and never guesses functions. The public deployment URL and public-function declaration are leads, not vulnerabilities by themselves. See [Convex support](CONVEX_SUPPORT.md) for current protocol and coverage limits.
 
-`RUN FULL SCAN` is an explicit user action. If the loopback scanner is unavailable, the extension sends only a fixed `ensure_running` message to the installed Chrome native host. The host can open Docker Desktop and run this repository's named Compose service; it does not accept commands, URLs, credentials, or report data. While the scan runs, fixed `touch` messages renew an idle lease. Only a container whose ID was recorded when the helper started it can be stopped after about five idle minutes. Pre-existing local scanners and containers are not claimed or stopped.
+`RUN FULL SCAN` is an explicit user action. The extension sends a fixed `ensure_running` message with a random challenge to the installed Chrome native host. The host can open Docker Desktop and run this repository's named Compose service, then returns a proof derived from a local per-install secret; it does not accept commands, URLs, site credentials, findings, or report data. The extension verifies the proof before sending the target URL to the authenticated extension scan endpoint. While the scan runs, fixed `touch` messages renew an idle lease. Only a container whose ID was recorded when the helper started it can be stopped after about five idle minutes. Pre-existing local scanners and containers are not claimed or stopped.
 
 ## Hosted Scanning
 

@@ -15,6 +15,7 @@ import asyncio
 import tempfile
 from urllib.parse import urlparse, parse_qs
 
+from keyleak.extension_runtime import ActiveScanCounter, challenge_proof, proof_matches
 from keyleak.net_guard import scan_target_block_reason as _scan_target_is_blocked
 from datetime import datetime
 from functools import wraps
@@ -66,6 +67,7 @@ logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
 load_dotenv()
+_active_scans = ActiveScanCounter()
 
 # Global state for mitmproxy
 mitm_thread = None
@@ -1430,7 +1432,18 @@ def index():
 def healthz():
     """Identify the loopback scanner process for extension startup checks."""
 
-    return jsonify({'status': 'ok', 'service': 'keyleak-detector'})
+    payload = {
+        'status': 'ok',
+        'service': 'keyleak-detector',
+        'scan_active': _active_scans.active,
+    }
+    proof = challenge_proof(
+        os.getenv('KEYLEAK_EXTENSION_TOKEN', ''),
+        request.args.get('challenge', ''),
+    )
+    if proof:
+        payload['proof'] = proof
+    return jsonify(payload)
 
 async def _run_full_site_scan(url, parsed_url, scan_id):
     """Full Site Scan: enumerate subdomains + crawl all pages of a domain.
@@ -1504,6 +1517,7 @@ async def _run_full_site_scan(url, parsed_url, scan_id):
 
 
 @app.route('/scan', methods=['POST'])
+@_active_scans.track
 async def scan():
     global mitm_thread, mitm_running
     
@@ -1851,6 +1865,20 @@ async def scan():
             'error': error_message,
             'status': 'error'
         }), 500
+
+
+@app.route('/extension/scan', methods=['POST'])
+async def extension_scan():
+    """Run an extension-requested scan only with native-host proof."""
+
+    if not proof_matches(
+        os.getenv('KEYLEAK_EXTENSION_TOKEN', ''),
+        request.headers.get('X-KeyLeak-Challenge', ''),
+        request.headers.get('X-KeyLeak-Proof', ''),
+    ):
+        return jsonify({'error': 'Extension scanner authentication failed.'}), 401
+    return await scan()
+
 
 @app.route('/stop-proxy', methods=['POST'])
 def stop_proxy():

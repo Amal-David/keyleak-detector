@@ -94,9 +94,14 @@ function redactSampleNode(value, depth = 0) {
   if (typeof value === 'string') {
     const text = value.replace(/\s+/g, ' ').trim();
     if (!text) return '[empty string]';
-    const scrubbed = scrubText(text);
-    if (scrubbed !== text) return scrubbed;
     const length = Array.from(text).length;
+    const scrubbed = scrubText(text);
+    if (scrubbed !== text) {
+      const markers = [...new Set(
+        scrubbed.match(/\[(?:email|phone|ssn|card-or-num)\]/g) || [],
+      )];
+      return `${markers.join(' ')} [${length} chars]`;
+    }
     if (TOKEN_LIKE_SAMPLE.test(text)) return `[token-like string: ${length} chars]`;
     const visible = Array.from(text).slice(0, Math.min(4, Math.max(1, length - 1))).join('');
     return `${visible}… [${length} chars]`;

@@ -54,7 +54,12 @@ def discover_extension_ids(extension_dir: Path, roots: Iterable[Path] | None = N
                 payload = json.loads(preferences.read_text(encoding="utf-8"))
             except (OSError, ValueError, TypeError):
                 continue
-            settings = payload.get("extensions", {}).get("settings", {})
+            if not isinstance(payload, dict):
+                continue
+            extensions = payload.get("extensions")
+            if not isinstance(extensions, dict):
+                continue
+            settings = extensions.get("settings", {})
             if not isinstance(settings, dict):
                 continue
             for extension_id, config in settings.items():

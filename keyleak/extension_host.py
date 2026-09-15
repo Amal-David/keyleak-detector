@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 from pathlib import Path
+import secrets
 import shutil
 import struct
 import subprocess
@@ -14,6 +15,8 @@ from typing import Any
 from urllib.request import Request, urlopen
 from uuid import uuid4
 
+from keyleak.extension_runtime import CHALLENGE_PATTERN, challenge_proof
+
 
 HOST_NAME = "com.keyleak.detector"
 COMPOSE_SERVICE = "keyleak-detector"
@@ -22,6 +25,7 @@ COMPOSE_FILE = REPO_ROOT / "compose.yml"
 STATE_DIR = Path.home() / ".cache" / "keyleak-detector"
 OWNER_FILE = STATE_DIR / "extension-host-owner.json"
 LEASE_FILE = STATE_DIR / "extension-host-lease.json"
+AUTH_FILE = STATE_DIR / "extension-host-auth.json"
 SCANNER_HEALTH_URL = "http://127.0.0.1:5002/healthz"
 IDLE_SECONDS = 300
 STARTUP_SECONDS = 300
@@ -31,12 +35,15 @@ class NativeHostError(RuntimeError):
     """A safe, user-facing native-host failure."""
 
 
-def is_keyleak_health(payload: object) -> bool:
-    return bool(
+def is_keyleak_health(payload: object, expected_proof: str = "") -> bool:
+    identity_matches = bool(
         isinstance(payload, dict)
         and payload.get("status") == "ok"
         and payload.get("service") == COMPOSE_SERVICE
     )
+    if not identity_matches or not expected_proof:
+        return identity_matches
+    return secrets.compare_digest(str(payload.get("proof") or ""), expected_proof)
 
 
 def _state_dir() -> None:
@@ -63,16 +70,34 @@ def _read_json(path: Path) -> dict[str, Any] | None:
     return payload if isinstance(payload, dict) else None
 
 
-def scanner_health() -> dict[str, Any] | None:
+def extension_token() -> str:
+    payload = _read_json(AUTH_FILE) or {}
+    token = str(payload.get("token") or "")
+    if len(token) == 64:
+        return token
+    token = secrets.token_hex(32)
+    _write_json(AUTH_FILE, {"token": token})
+    return token
+
+
+def scanner_health(
+    challenge: str = "",
+    expected_proof: str = "",
+) -> dict[str, Any] | None:
+    health_url = (
+        f"{SCANNER_HEALTH_URL}?challenge={challenge}"
+        if CHALLENGE_PATTERN.fullmatch(challenge)
+        else SCANNER_HEALTH_URL
+    )
     try:
-        request = Request(SCANNER_HEALTH_URL, headers={"Accept": "application/json"})
+        request = Request(health_url, headers={"Accept": "application/json"})
         with urlopen(request, timeout=2) as response:
             if response.status != 200:
                 return None
             payload = json.loads(response.read().decode("utf-8"))
     except (OSError, ValueError, TypeError):
         return None
-    return payload if is_keyleak_health(payload) else None
+    return payload if is_keyleak_health(payload, expected_proof) else None
 
 
 def docker_binary() -> str:
@@ -90,13 +115,19 @@ def docker_binary() -> str:
     raise NativeHostError("Docker Desktop is not installed or its Docker command is unavailable.")
 
 
-def _run_docker(*args: str, timeout: int = 30, check: bool = True) -> subprocess.CompletedProcess[str]:
+def _run_docker(
+    *args: str,
+    timeout: int = 30,
+    check: bool = True,
+    env: dict[str, str] | None = None,
+) -> subprocess.CompletedProcess[str]:
     try:
         return subprocess.run(
             [docker_binary(), *args],
             cwd=REPO_ROOT,
             capture_output=True,
             check=check,
+            env=env,
             text=True,
             timeout=timeout,
         )
@@ -129,15 +160,19 @@ def ensure_docker_ready() -> None:
     raise NativeHostError("Docker Desktop did not become ready. Open it and try RUN FULL SCAN again.")
 
 
-def run_compose(*args: str) -> None:
+def run_compose(*args: str, auth_token: str = "") -> None:
     if not COMPOSE_FILE.is_file():
         raise NativeHostError("The KeyLeak Compose file is missing from this checkout.")
     try:
+        environment = os.environ.copy()
+        if auth_token:
+            environment["KEYLEAK_EXTENSION_TOKEN"] = auth_token
         _run_docker(
             "compose",
             "-f",
             str(COMPOSE_FILE),
             *args,
+            env=environment,
             timeout=STARTUP_SECONDS,
         )
     except NativeHostError as error:
@@ -197,12 +232,23 @@ def schedule_watchdog(token: str) -> None:
     )
 
 
-def ensure_running() -> dict[str, Any]:
-    if scanner_health():
+def ensure_running(challenge: str) -> dict[str, Any]:
+    if not CHALLENGE_PATTERN.fullmatch(challenge):
+        raise NativeHostError("The extension startup challenge is invalid.")
+    auth_token = extension_token()
+    expected_proof = challenge_proof(auth_token, challenge)
+    if scanner_health(challenge, expected_proof):
         owned = owned_container_is_current()
         if owned:
             renew_lease()
-        return {"ok": True, "status": "already_running", "owned": owned}
+        return {
+            "ok": True,
+            "status": "already_running",
+            "owned": owned,
+            "proof": expected_proof,
+        }
+
+    existing_health = scanner_health()
 
     ensure_docker_ready()
     existing_container = compose_container_id()
@@ -212,11 +258,16 @@ def ensure_running() -> dict[str, Any]:
         and owner
         and owner.get("container_id") == existing_container
     )
-    run_compose("up", "-d", COMPOSE_SERVICE)
+    if existing_health and not existing_was_owned:
+        raise NativeHostError(
+            "A manually managed KeyLeak scanner is already using the local port "
+            "without extension authentication. Stop it, then try RUN FULL SCAN again."
+        )
+    run_compose("up", "-d", COMPOSE_SERVICE, auth_token=auth_token)
 
     deadline = time.monotonic() + STARTUP_SECONDS
     while time.monotonic() < deadline:
-        health = scanner_health()
+        health = scanner_health(challenge, expected_proof)
         if health:
             break
         time.sleep(1)
@@ -232,7 +283,12 @@ def ensure_running() -> dict[str, Any]:
     if owned:
         token = renew_lease()
         schedule_watchdog(token)
-    return {"ok": True, "status": "started", "owned": owned}
+    return {
+        "ok": True,
+        "status": "started",
+        "owned": owned,
+        "proof": expected_proof,
+    }
 
 
 def touch() -> dict[str, Any]:
@@ -273,13 +329,20 @@ def run_watchdog(token: str) -> None:
 
 
 def handle_message(message: object) -> dict[str, Any]:
-    if not isinstance(message, dict) or set(message) != {"action"}:
+    if not isinstance(message, dict):
         return {"ok": False, "code": "INVALID_MESSAGE", "error": "Invalid native-host message."}
     action = message.get("action")
     try:
         if action == "ensure_running":
-            return ensure_running()
+            if set(message) != {"action", "challenge"}:
+                return {"ok": False, "code": "INVALID_MESSAGE", "error": "Invalid native-host message."}
+            challenge = message.get("challenge")
+            if not isinstance(challenge, str) or not CHALLENGE_PATTERN.fullmatch(challenge):
+                return {"ok": False, "code": "INVALID_MESSAGE", "error": "Invalid native-host message."}
+            return ensure_running(challenge)
         if action == "touch":
+            if set(message) != {"action"}:
+                return {"ok": False, "code": "INVALID_MESSAGE", "error": "Invalid native-host message."}
             return touch()
         return {"ok": False, "code": "UNSUPPORTED_ACTION", "error": "Unsupported native-host action."}
     except NativeHostError as error:

@@ -2,19 +2,47 @@ const LOCAL_SERVER = 'http://127.0.0.1:5002';
 const NATIVE_HOST = 'com.keyleak.detector';
 const HEALTH_TIMEOUT_MS = 1_500;
 const HEARTBEAT_MS = 60_000;
+const AUTH_VALUE = /^[a-f0-9]{64}$/;
 
-export async function checkLocalScannerHealth({ fetchImpl = globalThis.fetch } = {}) {
+function randomChallenge() {
+  const bytes = new Uint8Array(32);
+  globalThis.crypto.getRandomValues(bytes);
+  return Array.from(bytes, value => value.toString(16).padStart(2, '0')).join('');
+}
+
+export function scannerRequestHeaders(auth) {
+  if (!AUTH_VALUE.test(auth?.challenge || '') || !AUTH_VALUE.test(auth?.proof || '')) {
+    throw new Error('The local scanner authentication session is invalid.');
+  }
+  return {
+    'X-KeyLeak-Challenge': auth.challenge,
+    'X-KeyLeak-Proof': auth.proof,
+  };
+}
+
+export async function checkLocalScannerHealth(
+  auth,
+  { fetchImpl = globalThis.fetch } = {},
+) {
+  if (!AUTH_VALUE.test(auth?.challenge || '') || !AUTH_VALUE.test(auth?.proof || '')) {
+    return false;
+  }
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), HEALTH_TIMEOUT_MS);
   try {
-    const response = await fetchImpl(`${LOCAL_SERVER}/healthz`, {
-      cache: 'no-store',
-      credentials: 'omit',
-      signal: controller.signal,
-    });
+    const response = await fetchImpl(
+      `${LOCAL_SERVER}/healthz?challenge=${encodeURIComponent(auth.challenge)}`,
+      {
+        cache: 'no-store',
+        credentials: 'omit',
+        signal: controller.signal,
+      },
+    );
     if (!response.ok) return false;
     const payload = await response.json();
-    return payload?.status === 'ok' && payload?.service === 'keyleak-detector';
+    return payload?.status === 'ok'
+      && payload?.service === 'keyleak-detector'
+      && payload?.proof === auth.proof;
   } catch (_error) {
     return false;
   } finally {
@@ -56,19 +84,28 @@ function setupError(error) {
 export async function ensureLocalScanner({
   runtime = globalThis.chrome?.runtime,
   checkHealth = checkLocalScannerHealth,
+  createChallenge = randomChallenge,
 } = {}) {
-  if (await checkHealth()) {
-    return { status: 'already_running', owned: false };
-  }
-
+  const challenge = createChallenge();
   let result;
   try {
-    result = await sendNativeMessage(runtime, { action: 'ensure_running' });
+    result = await sendNativeMessage(runtime, { action: 'ensure_running', challenge });
   } catch (error) {
     throw setupError(error);
   }
 
-  return result;
+  const auth = { challenge, proof: String(result.proof || '') };
+  if (!AUTH_VALUE.test(auth.challenge) || !AUTH_VALUE.test(auth.proof)) {
+    throw new Error('The native startup helper returned an invalid authentication proof.');
+  }
+  if (!await checkHealth(auth)) {
+    throw new Error('The local scanner could not authenticate after startup.');
+  }
+  return {
+    status: result.status || 'started',
+    owned: result.owned === true,
+    auth,
+  };
 }
 
 async function touchLocalScanner(runtime) {
@@ -84,6 +121,7 @@ export async function localScannerActivity(task, {
   setIntervalFn = globalThis.setInterval,
   clearIntervalFn = globalThis.clearInterval,
 } = {}) {
+  await touchLocalScanner(runtime);
   const heartbeat = setIntervalFn(() => touchLocalScanner(runtime), HEARTBEAT_MS);
   try {
     return await task();

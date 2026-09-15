@@ -12,6 +12,7 @@ services:
       # Container listens on all interfaces (reachable via the port mapping);
       # the host default is loopback-only.
       - KEYLEAK_HOST=0.0.0.0
+      - KEYLEAK_EXTENSION_TOKEN=${KEYLEAK_EXTENSION_TOKEN:-}
     volumes:
       # Mount logs directory (optional - for persistent logs)
       - ./logs:/app/logs

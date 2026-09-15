@@ -21,11 +21,11 @@ Official sources:
 
 ## What KeyLeak Confirms
 
-The extension recognizes default `*.convex.cloud` sync endpoints and `*.convex.site` HTTP-action endpoints. It forwards only sanitized query metadata from client WebSocket messages: query ID, function path, and whether the socket has authenticated. It never forwards a Convex bearer token or query arguments.
+The extension recognizes default `*.convex.cloud` sync endpoints and `*.convex.site` HTTP-action endpoints. It forwards only sanitized query metadata from client WebSocket messages: an opaque connection ID, query ID, function path, and whether that socket has authenticated. It never forwards a Convex bearer token or query arguments, and it never correlates authentication or query IDs across sockets.
 
 When an unauthenticated query later receives a `QueryUpdated` value, KeyLeak emits a confirmed `convex_anonymous_query_data` finding. A public query can be intentional, so ordinary function names are medium severity; names that indicate private, administrative, billing, credential, or token data are high severity. Empty results are low-severity observations rather than confirmed exposed data.
 
-The default finding contains a redacted structural preview. `REVEAL RAW SAMPLE` can display up to two actual result rows held in tab-scoped service-worker memory. Those rows never enter extension storage, reports, logs, clipboard exports, or native messages.
+The default finding contains a redacted structural preview. `REVEAL RAW SAMPLE` can display up to two actual result rows held in tab-scoped service-worker memory. Each observed result has its own sample key, so a later update cannot replace the rows referenced by an earlier finding. Those rows never enter extension storage, reports, logs, clipboard exports, or native messages.
 
 ## Safety Boundary
 

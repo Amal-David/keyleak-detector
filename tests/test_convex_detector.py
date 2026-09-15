@@ -34,13 +34,19 @@ class ConvexDetectorTests(unittest.TestCase):
 
     def test_injector_forwards_only_sanitized_convex_query_metadata(self):
         injector = (REPO_ROOT / "extension" / "injector.js").read_text(encoding="utf-8")
+        content_script = (REPO_ROOT / "extension" / "content-script.js").read_text(
+            encoding="utf-8"
+        )
         worker = (REPO_ROOT / "extension" / "service-worker.js").read_text(encoding="utf-8")
 
         self.assertIn("convex-client", injector)
         self.assertIn("udfPath", injector)
         self.assertIn("authenticated", injector)
+        self.assertIn("connectionId", injector)
         self.assertNotIn("modification.args", injector)
         self.assertNotIn("message.value", injector)
+        self.assertIn("connectionId: event.data.connectionId", content_script)
+        self.assertIn("observeServerMessage(url, body, connectionId)", worker)
         self.assertIn("ConvexTabState", worker)
         self.assertIn("convexTabStates", worker)
 
@@ -51,6 +57,20 @@ class ConvexDetectorTests(unittest.TestCase):
         self.assertIn("does not guess function names", support)
         self.assertIn("public deployment URL is not a vulnerability", support)
         self.assertIn("Transition", support)
+
+    def test_extension_security_docs_match_the_shipped_profile_and_revision(self):
+        security_model = (REPO_ROOT / "docs" / "SECURITY_MODEL.md").read_text(
+            encoding="utf-8"
+        )
+        privacy_policy = (REPO_ROOT / "extension" / "PRIVACY_POLICY.md").read_text(
+            encoding="utf-8"
+        )
+
+        self.assertIn(
+            "runs `leak`, `appsec`, `access-control`, and `baas`",
+            security_model,
+        )
+        self.assertIn("**Last updated:** September 15, 2026", privacy_policy)
 
 
 if __name__ == "__main__":

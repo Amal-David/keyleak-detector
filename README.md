@@ -529,7 +529,7 @@ Detector educational content is sourced from `keyleak/detectors.py` (`descriptio
 
 ### Extension Permissions
 
-The extension requests `webRequest`, `storage`, `activeTab`, `tabs`, and `<all_urls>` because it observes requests, headers, page content, and fetch/XHR responses locally. It requests `nativeMessaging` only to send fixed `ensure_running` and `touch` lifecycle messages to the installed KeyLeak helper; page URLs, credentials, and findings are never included in those native messages.
+The extension requests `webRequest`, `storage`, `activeTab`, `tabs`, and `<all_urls>` because it observes requests, headers, page content, and fetch/XHR responses locally. It requests `nativeMessaging` only to send fixed lifecycle actions, a random startup challenge, and its local proof to the installed KeyLeak helper; page URLs, site credentials, findings, and captured browser content are never included in those native messages. The proof authenticates the loopback scanner before the extension sends a scan target.
 
 Use it for development, staging, bug bounty scopes, or owned systems. Disable it when browsing unrelated sensitive sites. See [docs/SECURITY_MODEL.md](docs/SECURITY_MODEL.md) before using it on sensitive browsing sessions.
 

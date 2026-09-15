@@ -26,6 +26,22 @@ const SENSITIVE_PREFIXES = [
 export const MAX_PROBES_PER_TAB = 30;
 const PROBE_DELAY_MS = 1000;
 
+export function baasSampleKey(baasInfo) {
+  let deployment = String(baasInfo.baseUrl || '').trim().toLowerCase();
+  try {
+    deployment = new URL(deployment).origin;
+  } catch (_error) {
+    // Preserve the bounded observation when a provider emitted a malformed URL.
+  }
+  return [
+    'baas',
+    baasInfo.provider,
+    deployment,
+    baasInfo.type || 'unknown',
+    baasInfo.endpoint,
+  ].map(value => encodeURIComponent(String(value || ''))).join(':');
+}
+
 export function classifyTable(name) {
   const lower = (name || '').toLowerCase();
   for (const prefix of SENSITIVE_PREFIXES) {
@@ -253,7 +269,7 @@ export function buildBaaSFinding(baasInfo, probeResult) {
   const evidence = {
     source: baasInfo.baseUrl,
     snippet: snippets[type] || `${provider} ${type} '${endpoint}' is open.`,
-    redacted_value: `${type}:${endpoint}`,
+    redacted_value: baasSampleKey(baasInfo),
     response_status: probeResult.status,
   };
   if (type === 'table' && probeResult.sample) evidence.sample = probeResult.sample;
@@ -318,7 +334,7 @@ export class BaaSTabState {
 
   rememberRawSample(baasInfo, rows) {
     const bounded = boundedRawSampleRows(rows);
-    if (bounded.length > 0) this.rawSamples.set(`${baasInfo.type}:${baasInfo.endpoint}`, bounded);
+    if (bounded.length > 0) this.rawSamples.set(baasSampleKey(baasInfo), bounded);
   }
 
   getRawSample(sampleKey) {

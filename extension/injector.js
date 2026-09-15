@@ -23,7 +23,7 @@
       ct.includes('application/x-www-form-urlencoded');
   }
 
-  function scanMessageBody(source, url, body, contentType = 'text/plain') {
+  function scanMessageBody(source, url, body, contentType = 'text/plain', metadata = {}) {
     if (typeof body !== 'string') return;
     if (!body || body.length >= MAX_BODY_SIZE) return;
     sendToContentScript({
@@ -34,6 +34,7 @@
       body: body.slice(0, MAX_BODY_SIZE),
       headers: [],
       captureType: source,
+      ...metadata,
     });
   }
 
@@ -54,6 +55,12 @@
     } catch (_error) {
       return false;
     }
+  }
+
+  function newConnectionId() {
+    const bytes = new Uint8Array(16);
+    crypto.getRandomValues(bytes);
+    return Array.from(bytes, value => value.toString(16).padStart(2, '0')).join('');
   }
 
   // --- Patch fetch() ---
@@ -134,6 +141,7 @@
       const socket = protocols === undefined ? new OriginalWebSocket(url) : new OriginalWebSocket(url, protocols);
       const socketUrl = String(url || '');
       const isConvex = isConvexSyncUrl(socketUrl);
+      const connectionId = isConvex ? newConnectionId() : '';
       let convexAuthenticated = false;
       const originalSend = socket.send;
       socket.send = function (data) {
@@ -153,6 +161,7 @@
                 }),
                 headers: [],
                 captureType: 'convex-client',
+                connectionId,
               });
             } else if (message?.type === 'ModifyQuerySet') {
               const modifications = (message.modifications || []).flatMap(modification => {
@@ -185,6 +194,7 @@
                   }),
                   headers: [],
                   captureType: 'convex-client',
+                  connectionId,
                 });
               }
             }
@@ -196,7 +206,13 @@
       };
       socket.addEventListener('message', function (event) {
         try {
-          scanMessageBody('websocket', String(url || ''), event.data, 'text/plain');
+          scanMessageBody(
+            'websocket',
+            socketUrl,
+            event.data,
+            'text/plain',
+            isConvex ? { connectionId } : {},
+          );
         } catch (e) {
           // Never break the page.
         }

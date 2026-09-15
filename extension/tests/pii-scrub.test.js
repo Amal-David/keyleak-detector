@@ -1,7 +1,12 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { scrubText, scrubSnippet, normalizeFinding } from '../lib/reporting.js';
+import {
+  normalizeFinding,
+  redactStructuredSample,
+  scrubSnippet,
+  scrubText,
+} from '../lib/reporting.js';
 
 test('scrubText masks adjacent PII', () => {
   const out = scrubText('owner jane.doe@acme.com call 555-123-4567 ssn 123-45-6789');
@@ -33,4 +38,14 @@ test('normalizeFinding scrubs PII in the live browser-scan path', () => {
   });
   assert.ok(!finding.evidence.snippet.includes('help@acme.com'));
   assert.ok(!finding.evidence.snippet.includes('555-987-6543'));
+});
+
+test('structured samples discard non-PII text surrounding a PII match', () => {
+  const preview = redactStructuredSample([
+    { note: 'password=alpha; owner@example.com' },
+  ]);
+
+  assert.match(preview, /\[email\]/);
+  assert.match(preview, /chars/);
+  assert.doesNotMatch(preview, /password|alpha|owner@example\.com/);
 });

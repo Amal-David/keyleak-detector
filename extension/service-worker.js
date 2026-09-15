@@ -20,6 +20,7 @@ import {
   ensureLocalScanner,
   localScannerActivity,
   LOCAL_SERVER,
+  scannerRequestHeaders,
 } from './lib/local-scanner.js';
 
 const STORAGE_PREFIX = 'keyleak_tab_';
@@ -297,10 +298,13 @@ async function runFullScan(tabId, targetUrl) {
   data.full_scan_error = '';
 
   try {
-    await ensureLocalScanner();
-    const response = await localScannerActivity(() => fetch(`${LOCAL_SERVER}/scan`, {
+    const scanner = await ensureLocalScanner();
+    const response = await localScannerActivity(() => fetch(`${LOCAL_SERVER}/extension/scan`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        ...scannerRequestHeaders(scanner.auth),
+      },
       body: JSON.stringify({
         url: targetUrl,
         scan_mode: 'basic',
@@ -351,7 +355,17 @@ async function clearTab(tabId) {
 }
 
 async function handleAnalyzeIntercepted(tabId, data = {}) {
-  const { url, body, headers, pageUrl, status, contentType, source, captureType } = data;
+  const {
+    url,
+    body,
+    headers,
+    pageUrl,
+    status,
+    contentType,
+    source,
+    captureType,
+    connectionId,
+  } = data;
   const tabData = await readTabData(tabId, pageUrl);
   if (captureType === 'websocket') tabData.stats.websockets += body ? 1 : 0;
   else if (captureType === 'eventstream') tabData.stats.eventStreams += body ? 1 : 0;
@@ -364,9 +378,9 @@ async function handleAnalyzeIntercepted(tabId, data = {}) {
     if (!convexTabStates.has(tabId)) convexTabStates.set(tabId, new ConvexTabState());
     const convexState = convexTabStates.get(tabId);
     const convexFindings = captureType === 'convex-client'
-      ? convexState.observeClientMessage(url, body)
+      ? convexState.observeClientMessage(url, body, connectionId)
       : captureType === 'websocket'
-        ? convexState.observeServerMessage(url, body)
+        ? convexState.observeServerMessage(url, body, connectionId)
         : [];
     findings.push(...convexFindings);
   }

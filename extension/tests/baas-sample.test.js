@@ -1,7 +1,12 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { BaaSTabState, buildBaaSFinding, testRLS } from '../lib/baas-detector.js';
+import {
+  baasSampleKey,
+  BaaSTabState,
+  buildBaaSFinding,
+  testRLS,
+} from '../lib/baas-detector.js';
 import { buildReport, redactStructuredSample } from '../lib/reporting.js';
 
 test('redactStructuredSample proves a row exists without retaining raw values', () => {
@@ -71,7 +76,12 @@ test('Supabase table probe returns a redacted preview and two in-memory raw rows
 
 test('raw rows live only in the bounded tab state cache', () => {
   const state = new BaaSTabState();
-  const info = { provider: 'supabase', type: 'table', endpoint: 'featured_prompts' };
+  const info = {
+    provider: 'supabase',
+    type: 'table',
+    baseUrl: 'https://project.supabase.co',
+    endpoint: 'featured_prompts',
+  };
   const rows = [
     { id: 1, title: 'Actual row one' },
     { id: 2, title: 'Actual row two' },
@@ -79,11 +89,11 @@ test('raw rows live only in the bounded tab state cache', () => {
   ];
 
   state.rememberRawSample(info, rows);
-  assert.deepEqual(state.getRawSample('table:featured_prompts'), rows.slice(0, 2));
-  assert.doesNotMatch(JSON.stringify(state.getRawSample('table:featured_prompts')), /Must not be retained/);
+  assert.deepEqual(state.getRawSample(baasSampleKey(info)), rows.slice(0, 2));
+  assert.doesNotMatch(JSON.stringify(state.getRawSample(baasSampleKey(info))), /Must not be retained/);
 
   state.clearRawSamples();
-  assert.equal(state.getRawSample('table:featured_prompts'), null);
+  assert.equal(state.getRawSample(baasSampleKey(info)), null);
 });
 
 test('probe processing caches raw rows before emitting the safe finding', async (t) => {
@@ -108,7 +118,7 @@ test('probe processing caches raw rows before emitting the safe finding', async 
 
   assert.equal(globalThis.fetch.mock.callCount(), 1);
   assert.equal(findings[0].evidence.raw_sample_available, true);
-  assert.deepEqual(state.getRawSample('table:featured_prompts'), rows);
+  assert.deepEqual(state.getRawSample(baasSampleKey(info)), rows);
   assert.doesNotMatch(JSON.stringify(findings), /Visible first row|Visible second row/);
 });
 
@@ -118,13 +128,47 @@ test('oversized rows are not retained for raw reveal', () => {
     { provider: 'supabase', type: 'table', endpoint: 'huge' },
     [{ body: 'x'.repeat(20_000) }],
   );
-  assert.equal(state.getRawSample('table:huge'), null);
+  assert.equal(state.getRawSample(baasSampleKey({
+    provider: 'supabase',
+    type: 'table',
+    baseUrl: 'https://project.supabase.co',
+    endpoint: 'huge',
+  })), null);
 
   state.rememberRawSample(
     { provider: 'supabase', type: 'table', endpoint: 'huge_unicode' },
     [{ body: '😀'.repeat(5_000) }],
   );
-  assert.equal(state.getRawSample('table:huge_unicode'), null);
+  assert.equal(state.getRawSample(baasSampleKey({
+    provider: 'supabase',
+    type: 'table',
+    baseUrl: 'https://project.supabase.co',
+    endpoint: 'huge_unicode',
+  })), null);
+});
+
+test('raw samples cannot collide across BaaS deployments', () => {
+  const state = new BaaSTabState();
+  const first = {
+    provider: 'supabase',
+    type: 'table',
+    baseUrl: 'https://first.supabase.co',
+    endpoint: 'profiles',
+  };
+  const second = { ...first, baseUrl: 'https://second.supabase.co' };
+
+  state.rememberRawSample(first, [{ owner: 'first deployment' }]);
+  state.rememberRawSample(second, [{ owner: 'second deployment' }]);
+
+  assert.notEqual(baasSampleKey(first), baasSampleKey(second));
+  assert.deepEqual(state.getRawSample(baasSampleKey(first)), [{ owner: 'first deployment' }]);
+  assert.deepEqual(state.getRawSample(baasSampleKey(second)), [{ owner: 'second deployment' }]);
+  assert.equal(buildBaaSFinding(first, {
+    open: true,
+    status: 200,
+    rowCount: 1,
+    rawSampleRows: [{ owner: 'first deployment' }],
+  }).evidence.redacted_value, baasSampleKey(first));
 });
 
 test('an empty readable table is not reported as exposed records', async (t) => {
