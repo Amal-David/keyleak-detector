@@ -53,3 +53,14 @@ Thumbs.db
 *.temp
 .cache/
 
+# Local credentials and runtime-generated detector state
+.env
+.env.*
+!fixtures/vulnerable-demo/.env.leaky
+patterns_cache.json
+
+# Local planning and generated reports
+.superplan/
+report*.json
+report*.html
+report*.sarif

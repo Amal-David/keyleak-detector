@@ -192,6 +192,13 @@ function renderFindings(findings) {
     const sourceDisplay = group.length === 1
       ? `<a class="source-link" href="#" data-url="${escapeHtml(f.url || evidence.request_url || '')}" data-source="${escapeHtml(evidence.source || f.source)}">${escapeHtml(evidence.source || f.source)}</a>`
       : `${group.length} locations`;
+    const sampleHtml = evidence.sample
+      ? `<div class="sample-preview"><strong>redacted sample row</strong><pre>${escapeHtml(evidence.sample)}</pre></div>`
+      : '';
+    const rawSampleHtml = evidence.raw_sample_available
+      ? `<button class="raw-sample-btn" data-id="${escapeHtml(f.id)}" data-sample-key="${escapeHtml(evidence.redacted_value || '')}">REVEAL RAW SAMPLE</button>
+         <pre class="raw-sample-preview" data-raw-sample-for="${escapeHtml(f.id)}" hidden></pre>`
+      : '';
 
     return `
       <div class="finding" data-severity="${escapeHtml(f.severity)}">
@@ -205,6 +212,8 @@ function renderFindings(findings) {
         <div class="finding-detail"><strong>pack:</strong> ${escapeHtml(f.category || 'unknown')}</div>
         <div class="finding-detail"><strong>confidence:</strong> ${escapeHtml(String(f.confidence || 'n/a'))} | <strong>status:</strong> ${escapeHtml(f.validation_status || 'detected')}</div>
         <div class="finding-detail">${escapeHtml(f.risk_reason || '')}</div>
+        ${sampleHtml}
+        ${rawSampleHtml}
         <div class="fix"><strong>fix:</strong> ${escapeHtml(f.remediation || 'Review and remove exposed sensitive data.')}</div>
         <div class="finding-actions">
           ${TESTABLE_TYPES.has(f.type) && f.raw_value ? `<button class="test-btn primary" data-id="${escapeHtml(f.id)}" data-type="${escapeHtml(f.type)}" data-raw="${escapeHtml(f.raw_value)}">TEST</button>` : ''}
@@ -275,6 +284,41 @@ content.addEventListener('click', (event) => {
     if (url && url.startsWith('http')) {
       chrome.tabs.create({ url });
     }
+    return;
+  }
+
+  const rawSampleButton = event.target.closest('.raw-sample-btn');
+  if (rawSampleButton && activeTab) {
+    const findingId = rawSampleButton.dataset.id;
+    const rawSampleMount = content.querySelector(
+      `.raw-sample-preview[data-raw-sample-for="${CSS.escape(findingId)}"]`,
+    );
+    if (!rawSampleMount) return;
+    if (rawSampleMount.dataset.open === '1') {
+      rawSampleMount.textContent = '';
+      rawSampleMount.hidden = true;
+      rawSampleMount.dataset.open = '0';
+      rawSampleButton.textContent = 'REVEAL RAW SAMPLE';
+      return;
+    }
+
+    rawSampleButton.disabled = true;
+    rawSampleMount.hidden = false;
+    rawSampleMount.textContent = 'Loading in-memory sample…';
+    chrome.runtime.sendMessage({
+      action: 'reveal_backend_sample',
+      tabId: activeTab.id,
+      sampleKey: rawSampleButton.dataset.sampleKey,
+    }, (response) => {
+      rawSampleButton.disabled = false;
+      if (chrome.runtime.lastError || !response?.ok) {
+        rawSampleMount.textContent = response?.error || 'The in-memory sample is unavailable. Refresh the page and try again.';
+        return;
+      }
+      rawSampleMount.textContent = JSON.stringify(response.rows, null, 2);
+      rawSampleMount.dataset.open = '1';
+      rawSampleButton.textContent = 'HIDE RAW SAMPLE';
+    });
     return;
   }
 
@@ -381,10 +425,10 @@ clearBtn.addEventListener('click', async () => {
 fullScanBtn.addEventListener('click', async () => {
   activeTab = activeTab || await currentTab();
   if (!activeTab) return;
-  showStatus('Running full local scan through http://127.0.0.1:5002 ...');
+  showStatus('Starting the local scanner automatically, then running the full scan ...');
   chrome.runtime.sendMessage({ action: 'run_full_scan', tabId: activeTab.id, url: activeTab.url }, (response) => {
     if (chrome.runtime.lastError || !response?.ok) {
-      showStatus(response?.error || 'Start the local scanner with `poetry run python app.py` or `docker compose up -d`.');
+      showStatus(response?.error || 'The local scanner could not be started automatically.');
       loadFindings();
       return;
     }

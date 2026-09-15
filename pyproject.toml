@@ -21,7 +21,7 @@ classifiers = [
 
 [tool.poetry.dependencies]
 python = ">=3.12,<4.0"
-Flask = "3.1.3"
+Flask = {version = "3.1.3", extras = ["async"]}
 requests = "2.33.0"
 beautifulsoup4 = "4.12.2"
 python-dotenv = "1.2.2"
@@ -62,7 +62,7 @@ classifiers = [
 # `pip install .` / `uv pip install .` (which read this table, not poetry's)
 # ship a working package instead of zero deps (audit W8).
 dependencies = [
-    "Flask==3.1.3",
+    "Flask[async]==3.1.3",
     "requests==2.33.0",
     "beautifulsoup4==4.12.2",
     "python-dotenv==1.2.2",

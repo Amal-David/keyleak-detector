@@ -23,7 +23,7 @@
       ct.includes('application/x-www-form-urlencoded');
   }
 
-  function scanMessageBody(source, url, body, contentType = 'text/plain') {
+  function scanMessageBody(source, url, body, contentType = 'text/plain', metadata = {}) {
     if (typeof body !== 'string') return;
     if (!body || body.length >= MAX_BODY_SIZE) return;
     sendToContentScript({
@@ -34,6 +34,7 @@
       body: body.slice(0, MAX_BODY_SIZE),
       headers: [],
       captureType: source,
+      ...metadata,
     });
   }
 
@@ -43,6 +44,23 @@
     } catch (e) {
       // Silently fail — don't break the page
     }
+  }
+
+  function isConvexSyncUrl(rawUrl) {
+    try {
+      const parsed = new URL(String(rawUrl || ''));
+      return parsed.protocol === 'wss:'
+        && /^[a-z0-9](?:[a-z0-9-]{1,62}[a-z0-9])?\.convex\.cloud$/i.test(parsed.hostname)
+        && /\/api\/[^/]+\/sync$/.test(parsed.pathname);
+    } catch (_error) {
+      return false;
+    }
+  }
+
+  function newConnectionId() {
+    const bytes = new Uint8Array(16);
+    crypto.getRandomValues(bytes);
+    return Array.from(bytes, value => value.toString(16).padStart(2, '0')).join('');
   }
 
   // --- Patch fetch() ---
@@ -121,9 +139,80 @@
   if (OriginalWebSocket) {
     window.WebSocket = function (url, protocols) {
       const socket = protocols === undefined ? new OriginalWebSocket(url) : new OriginalWebSocket(url, protocols);
+      const socketUrl = String(url || '');
+      const isConvex = isConvexSyncUrl(socketUrl);
+      const connectionId = isConvex ? newConnectionId() : '';
+      let convexAuthenticated = false;
+      const originalSend = socket.send;
+      socket.send = function (data) {
+        if (isConvex && typeof data === 'string' && data.length < MAX_BODY_SIZE) {
+          try {
+            const message = JSON.parse(data);
+            if (message?.type === 'Authenticate') {
+              convexAuthenticated = message.tokenType !== 'None';
+              sendToContentScript({
+                source: 'convex-client',
+                url: socketUrl,
+                status: 0,
+                contentType: 'application/json',
+                body: JSON.stringify({
+                  type: 'Authenticate',
+                  authenticated: convexAuthenticated,
+                }),
+                headers: [],
+                captureType: 'convex-client',
+                connectionId,
+              });
+            } else if (message?.type === 'ModifyQuerySet') {
+              const modifications = (message.modifications || []).flatMap(modification => {
+                if (modification?.type === 'Remove' && Number.isInteger(modification.queryId)) {
+                  return [{ type: 'Remove', queryId: modification.queryId }];
+                }
+                if (
+                  modification?.type === 'Add'
+                  && Number.isInteger(modification.queryId)
+                  && typeof modification.udfPath === 'string'
+                ) {
+                  return [{
+                    type: 'Add',
+                    queryId: modification.queryId,
+                    udfPath: modification.udfPath.slice(0, 240),
+                  }];
+                }
+                return [];
+              });
+              if (modifications.length > 0) {
+                sendToContentScript({
+                  source: 'convex-client',
+                  url: socketUrl,
+                  status: 0,
+                  contentType: 'application/json',
+                  body: JSON.stringify({
+                    type: 'ModifyQuerySet',
+                    authenticated: convexAuthenticated,
+                    modifications,
+                  }),
+                  headers: [],
+                  captureType: 'convex-client',
+                  connectionId,
+                });
+              }
+            }
+          } catch (_error) {
+            // Ignore malformed or future protocol messages without affecting the page.
+          }
+        }
+        return originalSend.call(this, data);
+      };
       socket.addEventListener('message', function (event) {
         try {
-          scanMessageBody('websocket', String(url || ''), event.data, 'text/plain');
+          scanMessageBody(
+            'websocket',
+            socketUrl,
+            event.data,
+            'text/plain',
+            isConvex ? { connectionId } : {},
+          );
         } catch (e) {
           // Never break the page.
         }
