@@ -35,14 +35,14 @@ export async function checkLocalScannerHealth(
       {
         cache: 'no-store',
         credentials: 'omit',
+        headers: { 'X-KeyLeak-Proof': auth.proof },
         signal: controller.signal,
       },
     );
     if (!response.ok) return false;
     const payload = await response.json();
     return payload?.status === 'ok'
-      && payload?.service === 'keyleak-detector'
-      && payload?.proof === auth.proof;
+      && payload?.service === 'keyleak-detector';
   } catch (_error) {
     return false;
   } finally {

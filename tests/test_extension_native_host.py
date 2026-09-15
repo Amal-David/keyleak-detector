@@ -25,21 +25,27 @@ class NativeHostLifecycleTests(unittest.TestCase):
                 {"status": "ok", "service": "keyleak-detector"}
             )
         )
-        self.assertFalse(
-            extension_host.is_keyleak_health(
-                {"status": "ok", "service": "keyleak-detector"},
-                expected_proof=PROOF,
-            )
-        )
-        self.assertTrue(
-            extension_host.is_keyleak_health(
-                {
-                    "status": "ok",
-                    "service": "keyleak-detector",
-                    "proof": PROOF,
-                },
-                expected_proof=PROOF,
-            )
+
+    def test_scanner_health_sends_the_locally_derived_proof(self):
+        response = mock.MagicMock()
+        response.status = 200
+        response.read.return_value = json.dumps(
+            {"status": "ok", "service": "keyleak-detector"}
+        ).encode("utf-8")
+        response.__enter__.return_value = response
+
+        with mock.patch.object(
+            extension_host,
+            "urlopen",
+            return_value=response,
+        ) as open_url:
+            health = extension_host.scanner_health(CHALLENGE, PROOF)
+
+        request = open_url.call_args.args[0]
+        self.assertEqual(request.get_header("X-keyleak-proof"), PROOF)
+        self.assertEqual(
+            health,
+            {"status": "ok", "service": "keyleak-detector"},
         )
 
     def test_docker_binary_preserves_multicall_symlink_name(self):
@@ -181,7 +187,13 @@ class NativeHostLifecycleTests(unittest.TestCase):
             ),
             mock.patch.object(extension_host, "extension_token", return_value="token"),
             mock.patch.object(extension_host, "challenge_proof", return_value=PROOF),
-            mock.patch.object(extension_host, "owned_container_is_current", return_value=False),
+            mock.patch.object(extension_host, "ensure_docker_ready"),
+            mock.patch.object(
+                extension_host,
+                "compose_container_id",
+                return_value="manual-container",
+            ),
+            mock.patch.object(extension_host, "read_owner", return_value=None),
             mock.patch.object(extension_host, "run_compose") as run_compose,
             mock.patch.object(extension_host, "renew_lease") as renew,
         ):
@@ -198,6 +210,28 @@ class NativeHostLifecycleTests(unittest.TestCase):
                 "proof": PROOF,
             },
         )
+
+    def test_authenticated_health_without_a_compose_container_is_not_trusted(self):
+        with (
+            mock.patch.object(
+                extension_host,
+                "scanner_health",
+                return_value={"status": "ok", "service": "keyleak-detector"},
+            ),
+            mock.patch.object(extension_host, "extension_token", return_value="token"),
+            mock.patch.object(extension_host, "challenge_proof", return_value=PROOF),
+            mock.patch.object(extension_host, "ensure_docker_ready"),
+            mock.patch.object(extension_host, "compose_container_id", return_value=None),
+            mock.patch.object(extension_host, "read_owner", return_value=None),
+            mock.patch.object(extension_host, "run_compose") as run_compose,
+        ):
+            with self.assertRaisesRegex(
+                extension_host.NativeHostError,
+                "managed Compose container",
+            ):
+                extension_host.ensure_running(CHALLENGE)
+
+        run_compose.assert_not_called()
 
     def test_touch_renews_without_polling_compose_or_spawning_another_watchdog(self):
         with (

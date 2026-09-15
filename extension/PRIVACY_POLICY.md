@@ -4,14 +4,14 @@
 
 ## What KeyLeak Does
 
-KeyLeak Detector is a security tool that runs entirely in your browser. It analyzes web traffic to detect exposed API keys, BaaS misconfigurations, and secrets in JavaScript bundles.
+KeyLeak Detector is a security tool whose live extension analysis runs entirely in your browser. The optional Full Scan runs in a local Docker container and requests the target you explicitly select.
 
 ## Data Collection
 
-**KeyLeak does NOT collect, transmit, or store any user data.**
+**KeyLeak does not send data to KeyLeak-operated services or third-party analytics.**
 
-- All analysis happens locally in your browser
-- No data is sent to any external server
+- Captured browser content and live findings stay in your browser
+- Except for explicitly requested Full Scan traffic, analyzed data is not sent over the network
 - No analytics, telemetry, or tracking of any kind
 - No user accounts or registration required
 - Findings are stored only in Chrome's local storage (per-tab, cleared when tab closes)

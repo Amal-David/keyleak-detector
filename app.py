@@ -15,7 +15,7 @@ import asyncio
 import tempfile
 from urllib.parse import urlparse, parse_qs
 
-from keyleak.extension_runtime import ActiveScanCounter, challenge_proof, proof_matches
+from keyleak.extension_runtime import ActiveScanCounter, proof_matches
 from keyleak.net_guard import scan_target_block_reason as _scan_target_is_blocked
 from datetime import datetime
 from functools import wraps
@@ -1437,12 +1437,13 @@ def healthz():
         'service': 'keyleak-detector',
         'scan_active': _active_scans.active,
     }
-    proof = challenge_proof(
+    challenge = request.args.get('challenge', '')
+    if challenge and not proof_matches(
         os.getenv('KEYLEAK_EXTENSION_TOKEN', ''),
-        request.args.get('challenge', ''),
-    )
-    if proof:
-        payload['proof'] = proof
+        challenge,
+        request.headers.get('X-KeyLeak-Proof', ''),
+    ):
+        return jsonify({'error': 'Scanner health authentication failed.'}), 401
     return jsonify(payload)
 
 async def _run_full_site_scan(url, parsed_url, scan_id):

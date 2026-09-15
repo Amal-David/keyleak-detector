@@ -35,15 +35,12 @@ class NativeHostError(RuntimeError):
     """A safe, user-facing native-host failure."""
 
 
-def is_keyleak_health(payload: object, expected_proof: str = "") -> bool:
-    identity_matches = bool(
+def is_keyleak_health(payload: object) -> bool:
+    return bool(
         isinstance(payload, dict)
         and payload.get("status") == "ok"
         and payload.get("service") == COMPOSE_SERVICE
     )
-    if not identity_matches or not expected_proof:
-        return identity_matches
-    return secrets.compare_digest(str(payload.get("proof") or ""), expected_proof)
 
 
 def _state_dir() -> None:
@@ -89,15 +86,18 @@ def scanner_health(
         if CHALLENGE_PATTERN.fullmatch(challenge)
         else SCANNER_HEALTH_URL
     )
+    headers = {"Accept": "application/json"}
+    if CHALLENGE_PATTERN.fullmatch(challenge) and expected_proof:
+        headers["X-KeyLeak-Proof"] = expected_proof
     try:
-        request = Request(health_url, headers={"Accept": "application/json"})
+        request = Request(health_url, headers=headers)
         with urlopen(request, timeout=2) as response:
             if response.status != 200:
                 return None
             payload = json.loads(response.read().decode("utf-8"))
     except (OSError, ValueError, TypeError):
         return None
-    return payload if is_keyleak_health(payload, expected_proof) else None
+    return payload if is_keyleak_health(payload) else None
 
 
 def docker_binary() -> str:
@@ -209,11 +209,6 @@ def clear_owner() -> None:
     LEASE_FILE.unlink(missing_ok=True)
 
 
-def owned_container_is_current() -> bool:
-    owner = read_owner()
-    return bool(owner and owner.get("container_id") == compose_container_id())
-
-
 def renew_lease() -> str:
     lease = _read_json(LEASE_FILE) or {}
     token = str(lease.get("token") or uuid4().hex)
@@ -237,8 +232,20 @@ def ensure_running(challenge: str) -> dict[str, Any]:
         raise NativeHostError("The extension startup challenge is invalid.")
     auth_token = extension_token()
     expected_proof = challenge_proof(auth_token, challenge)
+    ensure_docker_ready()
+    existing_container = compose_container_id()
+    owner = read_owner()
+    existing_was_owned = bool(
+        existing_container
+        and owner
+        and owner.get("container_id") == existing_container
+    )
     if scanner_health(challenge, expected_proof):
-        owned = owned_container_is_current()
+        if not existing_container:
+            raise NativeHostError(
+                "The authenticated local service is not the managed Compose container."
+            )
+        owned = existing_was_owned
         if owned:
             renew_lease()
         return {
@@ -249,15 +256,6 @@ def ensure_running(challenge: str) -> dict[str, Any]:
         }
 
     existing_health = scanner_health()
-
-    ensure_docker_ready()
-    existing_container = compose_container_id()
-    owner = read_owner()
-    existing_was_owned = bool(
-        existing_container
-        and owner
-        and owner.get("container_id") == existing_container
-    )
     if existing_health and not existing_was_owned:
         raise NativeHostError(
             "A manually managed KeyLeak scanner is already using the local port "

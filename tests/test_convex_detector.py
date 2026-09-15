@@ -71,6 +71,10 @@ class ConvexDetectorTests(unittest.TestCase):
             security_model,
         )
         self.assertIn("**Last updated:** September 15, 2026", privacy_policy)
+        self.assertIn(
+            "Except for explicitly requested Full Scan traffic",
+            privacy_policy,
+        )
 
 
 if __name__ == "__main__":

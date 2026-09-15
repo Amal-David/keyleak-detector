@@ -33,17 +33,18 @@ test('health check accepts only the KeyLeak loopback service', async () => {
   assert.equal(await checkLocalScannerHealth({ challenge: CHALLENGE, proof: PROOF }, {
     fetchImpl: async (url, options) => {
       requests.push({ url, options });
-      return response({ status: 'ok', service: 'keyleak-detector' });
+      return { ok: false };
     },
   }), false);
   assert.equal(await checkLocalScannerHealth({ challenge: CHALLENGE, proof: PROOF }, {
     fetchImpl: async (url, options) => {
       requests.push({ url, options });
-      return response({ status: 'ok', service: 'keyleak-detector', proof: PROOF });
+      return response({ status: 'ok', service: 'keyleak-detector' });
     },
   }), true);
   assert.match(requests[0].url, new RegExp(`challenge=${CHALLENGE}`));
   assert.equal(requests[0].options.credentials, 'omit');
+  assert.equal(requests[0].options.headers['X-KeyLeak-Proof'], PROOF);
 });
 
 test('ensureLocalScanner authenticates the loopback service through the fixed native host', async () => {
