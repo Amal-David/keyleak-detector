@@ -74,6 +74,7 @@ window.addEventListener('message', (event) => {
       body: event.data.body,
       headers: event.data.headers,
       captureType: event.data.captureType,
+      connectionId: event.data.connectionId,
       pageUrl: window.location.href,
     },
   });

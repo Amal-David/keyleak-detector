@@ -39,6 +39,16 @@ def main(argv: Optional[List[str]] = None) -> int:
     if args.command == "bundles":
         return _print_bundles()
 
+    if args.command == "install-extension-host":
+        from .extension_host_install import main as install_extension_host
+
+        install_args = [
+            item
+            for extension_id in args.extension_id
+            for item in ("--extension-id", extension_id)
+        ]
+        return install_extension_host(install_args)
+
     if getattr(args, "bundle", ""):
         if _apply_bundle_selection(args) != 0:
             return 1
@@ -314,6 +324,17 @@ def build_parser() -> argparse.ArgumentParser:
     subparsers = parser.add_subparsers(dest="command")
 
     subparsers.add_parser("bundles", help="List scan bundles (named groups of detector packs + scan phases).")
+
+    extension_host = subparsers.add_parser(
+        "install-extension-host",
+        help="Install the one-time Chrome helper that starts the local Docker scanner.",
+    )
+    extension_host.add_argument(
+        "--extension-id",
+        action="append",
+        default=[],
+        help="Chrome extension ID to authorize when automatic discovery is unavailable.",
+    )
 
     scan = subparsers.add_parser("scan", help="Scan a running web app through the local KeyLeak web scanner.")
     scan.add_argument("url")
