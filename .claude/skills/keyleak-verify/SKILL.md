@@ -32,8 +32,9 @@ Choose target from the prompt:
 ## Authorization Gate
 
 Never run active network scans, exploit-validation, BaaS probes, or two-user
-access-control checks without explicit authorized scope. If scope is missing,
-ask only for the missing scope statement and stop.
+access-control checks without both an explicit `--authorized-scope` and
+`--attest-network-scope`. If either is absent, request only the missing input or
+inputs and stop; do not retry the active phase until both are present.
 If the operator requested `--offline`, do not run URL or domain audits: use
 `--plan`, a local path, or an archive instead because Chromium is a separate
 process outside Python's socket-level offline guard.

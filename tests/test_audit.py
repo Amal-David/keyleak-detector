@@ -55,6 +55,11 @@ class AuditTargetTests(unittest.TestCase):
             self.assertEqual(classify_target("https://preview.example.com/app"), "url")
             self.assertEqual(classify_target("example.com"), "domain")
 
+    def test_classifies_windows_drive_and_unc_paths_before_url_parsing(self):
+        self.assertEqual(classify_target(r"C:\repo"), "local_path")
+        self.assertEqual(classify_target(r"C:\release.zip"), "archive")
+        self.assertEqual(classify_target(r"\\server\share\repo"), "local_path")
+
     def test_security_audit_defaults_to_exploit_validation(self):
         self.assertEqual(default_depth("security-audit"), "exploit-validation")
         self.assertEqual(default_depth("bug-bounty"), "exploit-validation")
@@ -92,7 +97,8 @@ class AuditTargetTests(unittest.TestCase):
         runtime = next(phase for phase in plan["phases"] if phase["id"] == "runtime_evidence")
         self.assertEqual(runtime["status"], "blocked")
         self.assertIn("--attest-network-scope", runtime["reason"])
-        self.assertIn("Partial containment", plan["execution_constraints"]["network_scope"])
+        self.assertIn("redirects", plan["execution_constraints"]["network_scope"])
+        self.assertIn("WebSocket", plan["execution_constraints"]["network_scope"])
 
     def test_domain_plan_keeps_the_exact_host_without_expansion_opt_in(self):
         plan = plan_audit(
@@ -208,6 +214,7 @@ class AuditRunTests(unittest.TestCase):
 
         browser_scan.assert_called_once()
         self.assertEqual(browser_scan.call_args.args[0], "https://app.example.com")
+        self.assertTrue(callable(browser_scan.call_args.kwargs["target_guard"]))
         site_scan.assert_not_called()
 
     def test_local_audit_disables_self_audit_subprocesses(self):
@@ -322,7 +329,11 @@ class AuditRunTests(unittest.TestCase):
                  mock.patch.object(audit, "scan_path", side_effect=RuntimeError("token=SUPERSECRET")):
                 report = run_audit(AuditOptions(str(target), out_dir=str(out_dir)))
 
-            payload = (out_dir / "report.json").read_text(encoding="utf-8")
+            payload = "\n".join(
+                path.read_text(encoding="utf-8")
+                for path in out_dir.iterdir()
+                if path.is_file()
+            )
 
         local = next(phase for phase in report.extra["audit_coverage"]["phases"] if phase["id"] == "local_evidence")
         self.assertEqual(local["status"], "partial")
@@ -399,7 +410,11 @@ class AuditRunTests(unittest.TestCase):
                     )
                 )
 
-            payload = (out_dir / "report.json").read_text(encoding="utf-8")
+            payload = "\n".join(
+                path.read_text(encoding="utf-8")
+                for path in out_dir.iterdir()
+                if path.is_file()
+            )
 
         runtime = next(phase for phase in report.extra["audit_coverage"]["phases"] if phase["id"] == "runtime_evidence")
         self.assertEqual(runtime["status"], "partial")
@@ -490,6 +505,12 @@ class AuditRunTests(unittest.TestCase):
             artifact_payload = json.loads((out_dir / "report.json").read_text(encoding="utf-8"))
             self.assertEqual(report.findings, [])
             self.assertEqual(artifact_payload["findings"], [])
+            local_phase = next(
+                phase
+                for phase in artifact_payload["audit_coverage"]["phases"]
+                if phase["id"] == "local_evidence"
+            )
+            self.assertEqual(local_phase["findings"], 0)
             self.assertEqual(artifact_payload["verdict"]["status"], "REVIEW")
             self.assertIn("coverage is incomplete", artifact_payload["verdict"]["reason"])
 
@@ -511,6 +532,33 @@ class AuditRunTests(unittest.TestCase):
             self.assertTrue(artifact_dir.is_absolute())
             self.assertEqual(artifact_dir.parts[-3:-1], (".keyleak", "audits"))
             self.assertTrue((artifact_dir / "report.json").exists())
+
+    def test_default_artifact_directories_are_unique_within_one_second(self):
+        options = AuditOptions("/tmp/repo")
+
+        first = audit._resolve_artifact_dir(options)
+        second = audit._resolve_artifact_dir(options)
+
+        self.assertNotEqual(first, second)
+        self.assertTrue(first.is_absolute())
+        self.assertTrue(second.is_absolute())
+
+    def test_scrub_payload_redacts_structured_credential_fields(self):
+        payload = audit._scrub_payload({
+            "token": "token-value",
+            "secret": "secret-value",
+            "api-key": "api-key-value",
+            "client_secret": "client-secret-value",
+            "nested": {"password": "password-value"},
+            "safe": "visible",
+        })
+
+        self.assertEqual(payload["token"], "[redacted]")
+        self.assertEqual(payload["secret"], "[redacted]")
+        self.assertEqual(payload["api-key"], "[redacted]")
+        self.assertEqual(payload["client_secret"], "[redacted]")
+        self.assertEqual(payload["nested"]["password"], "[redacted]")
+        self.assertEqual(payload["safe"], "visible")
 
 
 class AuditCliTests(unittest.TestCase):
@@ -602,8 +650,21 @@ class AgentRunbookSmokeTests(unittest.TestCase):
         for phrase in ("security audit", "vulnerability detection", "pentest", "bug bounty", "is this exploitable"):
             self.assertIn(phrase, text)
         self.assertIn("keyleak audit", text)
+        self.assertIn("request only the missing input", text)
+        self.assertIn("--attest-network-scope", text)
         self.assertIn("BLOCK SHIP", text)
         self.assertIn("SAFE TO SHIP", text)
+
+    def test_audit_artifact_docs_state_absolute_paths_and_erasure(self):
+        readme = Path("README.md").read_text(encoding="utf-8")
+        howto = Path("docs/AGENT_SCAN_HOWTO.md").read_text(encoding="utf-8")
+        security = Path("docs/SECURITY_MODEL.md").read_text(encoding="utf-8")
+
+        self.assertIn("`artifact_dir` is reported as", readme)
+        self.assertIn("an absolute path", readme)
+        self.assertIn("absolute artifact directory", howto)
+        self.assertIn("normalized `--out-dir`", security)
+        self.assertIn("delete `.keyleak/audits/", security)
 
 
 if __name__ == "__main__":

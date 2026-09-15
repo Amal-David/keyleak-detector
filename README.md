@@ -110,9 +110,11 @@ keyleak local . --fail-on high
 ```
 
 `keyleak audit` writes durable redacted artifacts to
-`.keyleak/audits/<timestamp>-<target>/` by default: `audit-plan.json`,
+`.keyleak/audits/<timestamp>-<target>-<run-id>/` by default: `audit-plan.json`,
 `report.json`, `findings.jsonl`, `coverage.json`, `evidence-ledger.json`, and
-`summary.md`. Active network scans and exploit-validation require both an
+`summary.md`. That location is layout shorthand; `artifact_dir` is reported as
+an absolute path, as is a normalized explicit `--out-dir`. Active network scans
+and exploit-validation require both an
 `--authorized-scope` statement and `--attest-network-scope`; this is an operator
 attestation, not independent technical proof of authorization. Audit planning is
 available with `--plan` and does not scan, navigate, or install tooling. Audit

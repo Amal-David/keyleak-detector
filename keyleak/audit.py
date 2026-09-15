@@ -16,6 +16,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional
 from urllib.parse import urlparse, urlsplit, urlunsplit
+from uuid import uuid4
 
 from .archive_scanner import scan_archive
 from .doctor import run_doctor
@@ -101,17 +102,20 @@ def classify_target(target: str) -> str:
     if not raw:
         raise AuditError("audit target is required")
 
-    parsed = urlparse(raw)
-    if parsed.scheme:
-        if parsed.scheme in {"http", "https"} and parsed.netloc:
-            return "url"
-        raise AuditError("audit targets must be local paths, archives, http(s) URLs, or domains")
-
     path = Path(raw).expanduser()
     if path.exists():
         if path.is_file() and _is_archive_path(path):
             return "archive"
         return "local_path"
+
+    if re.match(r"^[A-Za-z]:[\\/]", raw) or raw.startswith("\\\\"):
+        return "archive" if _is_archive_path(path) else "local_path"
+
+    parsed = urlparse(raw)
+    if parsed.scheme:
+        if parsed.scheme in {"http", "https"} and parsed.netloc:
+            return "url"
+        raise AuditError("audit targets must be local paths, archives, http(s) URLs, or domains")
 
     if _looks_like_domain(raw):
         return "domain"
@@ -461,17 +465,17 @@ def _network_scope_note(target_type: str, include_subdomains: bool) -> str:
         if target_type == "domain" and include_subdomains:
             return (
                 "Requested registrable-domain and subdomain scope is enabled by explicit operator opt-in. "
-                "Discovered hosts receive the existing SSRF guard, but browser redirect and subresource containment "
-                "is not enforced."
+                "Discovered hosts and browser requests are guarded against localhost, private networks, "
+                "and metadata endpoints."
             )
         if target_type == "domain":
             return (
                 "Requested single-host scope: this domain starts at its exact host unless --include-subdomains is "
-                "explicitly supplied. Browser redirect and subresource containment is not enforced."
+                "explicitly supplied. Redirects and subresources remain subject to the browser request guard."
             )
         return (
-            "Partial containment: the initial URL/host is SSRF-guarded where the existing scanner applies that guard, "
-            "but the browser path does not currently enforce redirect or subresource containment."
+            "The initial URL, redirects, subresources, and WebSocket connections are guarded against localhost, "
+            "private networks, and metadata endpoints."
         )
     return "No network phase is planned for this target type."
 
@@ -588,6 +592,7 @@ def _run_local_phase(
         includes=DEFAULT_INCLUDES,
         profile=options.launch_profile,
     )
+    report = _apply_phase_suppressions(report, options)
     findings.extend(report.findings)
     source_reports.append(report)
     local_detail = {
@@ -610,6 +615,7 @@ def _run_local_phase(
     if _looks_repo_like(target):
         try:
             self_report = run_self_audit(target.resolve(), allow_external_commands=False)
+            self_report = _apply_phase_suppressions(self_report, options)
         except Exception as exc:
             _partial_phase(
                 plan,
@@ -651,6 +657,7 @@ def _run_archive_phase(
 ) -> None:
     envelope = scan_archive(options.target, profile=options.launch_profile)
     report = ScanReport.from_dict(envelope.get("report") or {})
+    report = _apply_phase_suppressions(report, options)
     findings.extend(report.findings)
     source_reports.append(report)
     _complete_phase(
@@ -703,7 +710,9 @@ def _run_runtime_phase(
                 headless=options.headless,
                 baas_validate=_should_baas_validate(options),
                 proxy=options.proxy,
+                target_guard=url_block_reason,
             )
+            report = _apply_phase_suppressions(report, options)
         except Exception as exc:
             _partial_phase(
                 plan,
@@ -753,6 +762,7 @@ def _run_runtime_phase(
             target_guard=scan_target_block_reason,
             external_discovery=False,
         )
+        report = _apply_phase_suppressions(report, options)
     except Exception as exc:
         _partial_phase(
             plan,
@@ -969,7 +979,8 @@ def _resolve_artifact_dir(options: AuditOptions) -> Path:
     if options.out_dir:
         return Path(options.out_dir).expanduser().resolve()
     stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-    return (Path(".keyleak") / "audits" / f"{stamp}-{_target_slug(options.target)}").resolve()
+    run_id = uuid4().hex[:8]
+    return (Path(".keyleak") / "audits" / f"{stamp}-{_target_slug(options.target)}-{run_id}").resolve()
 
 
 def _target_slug(target: str) -> str:
@@ -1054,6 +1065,14 @@ def _scrub_sensitive_text(text: str) -> str:
 def _sensitive_key(key: str) -> bool:
     lowered = key.lower().replace("-", "_")
     return lowered in {
+        "token",
+        "access_token",
+        "refresh_token",
+        "api_key",
+        "x_api_key",
+        "secret",
+        "client_secret",
+        "password",
         "authorization",
         "proxy_authorization",
         "cookie",
@@ -1067,6 +1086,15 @@ def _sensitive_key(key: str) -> bool:
         "auth_config",
         "comparison_auth_config",
     }
+
+
+def _apply_phase_suppressions(report: ScanReport, options: AuditOptions) -> ScanReport:
+    return apply_suppressions(
+        report,
+        baseline_path=options.baseline_path,
+        allowlist_path=options.allowlist_path,
+        apply_defaults=options.apply_default_suppressions,
+    )
 
 
 def _packs_from_reports(reports: Iterable[ScanReport]) -> List[str]:

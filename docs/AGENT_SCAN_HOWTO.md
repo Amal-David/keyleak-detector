@@ -27,7 +27,9 @@ poetry run keyleak audit example.com \
 
 This classifies the target, records an audit plan, runs the right deterministic
 scanner (`local`, `archive`, `browser-scan`, or `site-scan`), writes redacted
-artifacts under `.keyleak/audits/<timestamp>-<target>/`, and reports skipped
+artifacts to the absolute artifact directory emitted as `artifact_dir` (by
+default, `.keyleak/audits/<timestamp>-<target>-<run-id>/` resolved from the
+working directory), and reports skipped
 exploit-validation phases honestly. A domain audit is exact-host by default; add
 `--include-subdomains` only when the stated authorization covers registrable-domain
 discovery and crawling.
@@ -229,8 +231,9 @@ per-severity counts, a `pack_summary`, the `subdomains` and `scanned_urls` cover
 Audit reports also include `audit_plan`, `audit_coverage`, `validation_attempts`,
 `skipped_phases`, `operator_attestation`, `artifact_dir`, and `next_probes`.
 `audit_coverage` is explicitly incomplete when any phase is skipped, blocked, or
-failed. URL/browser coverage is partial: existing guards check initial targets
-where applied, but browser redirect and subresource containment is not enforced.
+failed. URL/browser coverage guards the initial request, redirects, subresources,
+and WebSocket connections against localhost, private networks, and metadata
+endpoints.
 Validation vocabulary is strict: `lead` means a plausible static/passive signal,
 `validated` means deterministic evidence supports the finding, and `confirmed`
 means active probe or exploit-validation evidence confirmed impact.

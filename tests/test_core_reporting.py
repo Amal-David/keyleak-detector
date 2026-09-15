@@ -504,12 +504,34 @@ class LocalScannerTests(unittest.TestCase):
             root = Path(tmp) / "root"
             outside = Path(tmp) / "outside.env"
             root.mkdir()
-            outside.write_text("OPENAI_API_KEY=sk-super-secret-value\n", encoding="utf-8")
+            outside.write_text(
+                "OPENAI_API_KEY=sk-proj-ABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890\n",
+                encoding="utf-8",
+            )
+            (direct_finding,) = scan_path(
+                str(outside),
+                profile="launch-gate",
+            ).findings
+            self.assertEqual(direct_finding.type, "openai_api_key")
             (root / "linked.env").symlink_to(outside)
 
             report = scan_path(str(root), profile="launch-gate")
 
         self.assertFalse(report.findings)
+
+    def test_scan_path_rejects_a_direct_symlink_target(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            outside = root / "outside.env"
+            outside.write_text(
+                "OPENAI_API_KEY=sk-proj-ABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890\n",
+                encoding="utf-8",
+            )
+            linked = root / "linked.env"
+            linked.symlink_to(outside)
+
+            with self.assertRaisesRegex(ValueError, "symlink"):
+                scan_path(str(linked), profile="launch-gate")
 
     def test_vulnerable_fixture_produces_actionable_report(self):
         report = scan_path("fixtures/vulnerable-demo")

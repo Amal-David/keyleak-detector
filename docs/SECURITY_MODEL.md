@@ -88,9 +88,9 @@ operator attestation, not independent technical proof of authorization. The audi
 front door invokes direct KeyLeak APIs only; it does not invoke shell commands,
 user-specified scripts, arbitrary external tools, or package installation. The
 optional Poetry lock-drift subprocess is deliberately skipped during agentic
-audits. Browser URL coverage is
-reported as partial because redirect and subresource containment are not currently
-enforced by that path. `--offline` refuses URL and domain audits before the browser
+audits. Browser URL coverage guards the initial navigation, redirects,
+subresources, and WebSocket connections against localhost, private networks, and
+metadata endpoints. `--offline` refuses URL and domain audits before the browser
 scanner launches, because Chromium runs outside Python's socket-level offline guard.
 
 The future cloud shape is a control plane over isolated local or self-hosted
@@ -116,7 +116,7 @@ Honest record of every field KeyLeak captures, where it lives, how long, and why
 | `keyleak scan` | Response bodies (≤5 MiB) | mitmproxy capture | RAM | Scan lifetime | Bundle / source-map detection |
 | `keyleak scan` | Session cookies / bearer tokens | User-supplied via `--bearer/--cookie` flags | RAM | Scan lifetime | Authenticated scan |
 | `keyleak self-audit` | Workflow YAML, lockfile metadata, CODEOWNERS, package.json | Local FS | RAM | Scan lifetime | Supply-chain hygiene |
-| `keyleak audit` | Redacted plan, findings, coverage, evidence ledger, and Markdown summary | Local scan + derived reports | `.keyleak/audits/<timestamp>-<target>/` or explicit `--out-dir` | Until operator deletes the directory | Durable, redacted assessment handoff |
+| `keyleak audit` | Redacted plan, findings, coverage, evidence ledger, and Markdown summary | Local scan + derived reports | Absolute `.keyleak/audits/<timestamp>-<target>-<run-id>/` path or normalized `--out-dir` | Until operator deletes the directory | Durable, redacted assessment handoff |
 | `keyleak allowlist-diff` | Per-PR allowlist + changed-file list | Git refs / repo working tree | RAM | Scan lifetime | Allowlist provenance gate |
 | Chrome extension (legacy / sunsetting) | DOM, localStorage, sessionStorage | content script | `chrome.storage.local` | Until tab close + redact | Live in-browser detection |
 
@@ -135,7 +135,7 @@ Honest record of every field KeyLeak captures, where it lives, how long, and why
 
 ### Right to erasure
 
-Because KeyLeak does not persist data, deleting a captured scan is the operator's responsibility: remove the redirected report file. The Chrome extension's `chrome.storage.local` data is cleared by uninstalling the extension or via the popup's "clear" control.
+Deleting a captured scan is the operator's responsibility. Remove redirected report files and delete `.keyleak/audits/<timestamp>-<target>-<run-id>/` or the configured `--out-dir` to erase durable audit artifacts. The Chrome extension's `chrome.storage.local` data is cleared by uninstalling the extension or via the popup's "clear" control.
 
 ### Responsible disclosure
 

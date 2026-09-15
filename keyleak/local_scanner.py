@@ -61,7 +61,10 @@ def scan_path(
     *,
     run_salt: Optional[bytes] = None,
 ):
-    target = Path(path).expanduser().resolve()
+    requested_target = Path(path).expanduser()
+    if requested_target.is_symlink():
+        raise ValueError("scan target must not be a symlink")
+    target = requested_target.resolve()
     findings: List[Finding] = []
     active_packs = normalize_packs(packs, profile=profile)
     active_includes = _effective_includes(includes, active_packs)
