@@ -250,6 +250,15 @@ class ScanReport:
                 "label": "REVIEW",
                 "reason": "Potential exposures or hardening issues need human review.",
             }
+        audit_coverage = self.extra.get("audit_coverage")
+        if isinstance(audit_coverage, dict) and audit_coverage.get("status") != "complete":
+            incomplete = audit_coverage.get("incomplete_phase_ids") or []
+            phase_text = ", ".join(str(phase) for phase in incomplete) or "one or more phases"
+            return {
+                "status": VERDICT_REVIEW,
+                "label": "REVIEW",
+                "reason": f"Audit coverage is incomplete ({phase_text}); do not treat this assessment as clean.",
+            }
         return {
             "status": VERDICT_SAFE,
             "label": "SAFE TO SHIP",

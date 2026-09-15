@@ -33,6 +33,7 @@ from .detectors import detectors_for_packs, normalize_packs
 from .extension_bundle import extension_pattern_payload
 from .local_scanner import scan_text
 from .models import Evidence, Finding, ScanReport
+from .net_guard import url_block_reason
 from .proxy import playwright_proxy
 from .redaction import new_run_salt, redact_url, redact_value, stable_id
 from .fingerprints import finding_fingerprint
@@ -55,6 +56,48 @@ CDP_TEXT_HINTS = (
     "graphql",
     "source-map",
 )
+
+
+def _guardable_browser_url(url: str) -> str:
+    parsed = urlparse(str(url or ""))
+    if parsed.scheme in {"http", "https"}:
+        return parsed.geturl()
+    if parsed.scheme in {"ws", "wss"}:
+        scheme = "https" if parsed.scheme == "wss" else "http"
+        return parsed._replace(scheme=scheme).geturl()
+    return ""
+
+
+def _browser_request_block_reason(
+    url: str,
+    target_guard: Callable[[str], Optional[str]],
+) -> Optional[str]:
+    guardable_url = _guardable_browser_url(url)
+    if guardable_url:
+        return target_guard(guardable_url)
+    if urlparse(url).scheme in {"about", "blob", "data"}:
+        return None
+    return "Refusing browser request with a non-http(s) network scheme."
+
+
+def _route_browser_request(route: Any, target_guard: Callable[[str], Optional[str]]) -> None:
+    url = str(route.request.url or "")
+    reason = _browser_request_block_reason(url, target_guard)
+    if reason:
+        _LOG.warning("Blocked browser request %s: %s", redact_url(url), reason)
+        route.abort("blockedbyclient")
+        return
+    route.continue_()
+
+
+def _route_browser_websocket(route: Any, target_guard: Callable[[str], Optional[str]]) -> None:
+    url = str(route.url or "")
+    reason = _browser_request_block_reason(url, target_guard)
+    if reason:
+        _LOG.warning("Blocked browser WebSocket %s: %s", redact_url(url), reason)
+        route.close()
+        return
+    route.connect_to_server()
 
 
 # The init script we inject into the page context. It exposes a global
@@ -683,12 +726,17 @@ def run_browser_scan(
     baas_prober: Optional[Any] = None,
     baas_tables: Optional[List[str]] = None,
     proxy: Optional[str] = None,
+    target_guard: Callable[[str], Optional[str]] = url_block_reason,
 ) -> ScanReport:
     """Drive Playwright Chromium, inject the analyzer, return a ScanReport.
 
     Raises ``ImportError`` if Playwright is not installed. When ``proxy`` is set,
     both the browser and BaaS validation probes route through it.
     """
+
+    reason = target_guard(url)
+    if reason:
+        raise ValueError(f"SSRF guard refused target: {reason}")
 
     try:
         from playwright.sync_api import sync_playwright  # type: ignore
@@ -708,6 +756,14 @@ def run_browser_scan(
         if auth_state_path:
             context_kwargs["storage_state"] = auth_state_path
         context = browser.new_context(**context_kwargs)
+        context.route(
+            "**/*",
+            lambda route: _route_browser_request(route, target_guard),
+        )
+        context.route_web_socket(
+            "**/*",
+            lambda route: _route_browser_websocket(route, target_guard),
+        )
         context.add_init_script(init_script)
 
         page = context.new_page()

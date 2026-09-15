@@ -32,15 +32,19 @@ from .reporting import build_report
 # Public entry point
 # ---------------------------------------------------------------------------
 
-def run_self_audit(repo_root: Path) -> ScanReport:
-    """Run every audit check against ``repo_root`` and return a ``ScanReport``."""
+def run_self_audit(repo_root: Path, *, allow_external_commands: bool = True) -> ScanReport:
+    """Run every audit check against ``repo_root`` and return a ``ScanReport``.
+
+    ``allow_external_commands`` disables the optional ``poetry check --lock``
+    subprocess for callers that need a strictly in-process assessment.
+    """
 
     repo_root = Path(repo_root).resolve()
     findings: List[Finding] = []
 
     findings.extend(_audit_workflows(repo_root))
     findings.extend(_audit_extension_package_json(repo_root))
-    findings.extend(_audit_poetry_lockfile(repo_root))
+    findings.extend(_audit_poetry_lockfile(repo_root, allow_external_commands=allow_external_commands))
     findings.extend(_audit_codeowners(repo_root))
     findings.extend(_audit_allowlist_yaml(repo_root))
 
@@ -240,7 +244,7 @@ def _audit_extension_package_json(repo_root: Path) -> List[Finding]:
 # poetry.lock audit
 # ---------------------------------------------------------------------------
 
-def _audit_poetry_lockfile(repo_root: Path) -> List[Finding]:
+def _audit_poetry_lockfile(repo_root: Path, *, allow_external_commands: bool = True) -> List[Finding]:
     findings: List[Finding] = []
     lock_path = repo_root / "poetry.lock"
     pyproject_path = repo_root / "pyproject.toml"
@@ -260,6 +264,9 @@ def _audit_poetry_lockfile(repo_root: Path) -> List[Finding]:
             ),
             remediation="Run `poetry lock --no-update` and commit poetry.lock.",
         ))
+        return findings
+
+    if not allow_external_commands:
         return findings
 
     poetry = shutil.which("poetry")

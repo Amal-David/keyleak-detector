@@ -223,6 +223,7 @@ def discover_subdomains(
     offline: bool = False,
     proxy: Optional[str] = None,
     auto_install: bool = False,
+    external_discovery: bool = True,
     sources_out: Optional[Dict[str, Any]] = None,
     on_progress: ProgressFn = None,
 ) -> List[str]:
@@ -250,9 +251,13 @@ def discover_subdomains(
             })
         return [domain]
 
-    _ensure_subfinder(auto_install=auto_install, on_progress=on_progress)
-    subfinder = set(_subfinder_subdomains(domain))
-    amass = set(_amass_subdomains(domain))
+    if external_discovery:
+        _ensure_subfinder(auto_install=auto_install, on_progress=on_progress)
+        subfinder = set(_subfinder_subdomains(domain))
+        amass = set(_amass_subdomains(domain))
+    else:
+        subfinder = set()
+        amass = set()
     crt = set(_crt_sh_subdomains(domain, proxy=proxy))
     brute_force = {f"{sub}.{domain}" for sub in COMMON_SUBDOMAINS}
     _emit(on_progress, "subdomains",
@@ -549,6 +554,7 @@ def scan_site(
     offline: bool = False,
     proxy: Optional[str] = None,
     auto_install: bool = True,
+    external_discovery: bool = True,
     target_guard: Optional[Callable[[str], Optional[str]]] = None,
     on_progress: ProgressFn = None,
 ) -> ScanReport:
@@ -574,7 +580,7 @@ def scan_site(
     discovery_sources: Dict[str, Any] = {}
     subdomains = discover_subdomains(
         domain, max_subdomains=max_subdomains, offline=offline,
-        proxy=proxy, auto_install=auto_install,
+        proxy=proxy, auto_install=auto_install, external_discovery=external_discovery,
         sources_out=discovery_sources, on_progress=on_progress,
     )
     if not subdomains:

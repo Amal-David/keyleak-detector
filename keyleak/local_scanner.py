@@ -61,7 +61,10 @@ def scan_path(
     *,
     run_salt: Optional[bytes] = None,
 ):
-    target = Path(path).expanduser().resolve()
+    requested_target = Path(path).expanduser()
+    if requested_target.is_symlink():
+        raise ValueError("scan target must not be a symlink")
+    target = requested_target.resolve()
     findings: List[Finding] = []
     active_packs = normalize_packs(packs, profile=profile)
     active_includes = _effective_includes(includes, active_packs)
@@ -352,6 +355,8 @@ def _iter_candidate_files(target: Path, includes: Sequence[str]):
         root_path = Path(root)
         for filename in files:
             file_path = root_path / filename
+            if file_path.is_symlink():
+                continue
             if _is_generated_file(file_path):
                 continue
             categories = _categories_for_file(file_path, includes)

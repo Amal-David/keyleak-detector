@@ -86,7 +86,7 @@ def _iter_manifests(root: Path, *, cap: int) -> Tuple[List[Path], bool]:
     out: List[Path] = []
     truncated = False
     root_pkg = root / "package.json"
-    if root_pkg.is_file():
+    if root_pkg.is_file() and not root_pkg.is_symlink():
         out.append(root_pkg)
     for dirpath, dirnames, filenames in os.walk(root):
         # Prune VCS/cache dirs for speed; keep walking into node_modules.
@@ -94,7 +94,10 @@ def _iter_manifests(root: Path, *, cap: int) -> Tuple[List[Path], bool]:
         if "node_modules" not in Path(dirpath).parts:
             continue
         if "package.json" in filenames:
-            out.append(Path(dirpath) / "package.json")
+            manifest = Path(dirpath) / "package.json"
+            if manifest.is_symlink():
+                continue
+            out.append(manifest)
             if len(out) >= cap:
                 truncated = True
                 return out, truncated
