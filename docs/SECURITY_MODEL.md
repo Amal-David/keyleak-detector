@@ -73,6 +73,14 @@ Avoid it when:
 
 The extension stores per-tab reports in `chrome.storage.local` and renders redacted evidence by default. The popup has a deliberate reveal control for local debugging, but copied JSON/Markdown reports use redacted values.
 
+Confirmed open-table findings require a returned record, not just HTTP 200 or a visible schema. The extension reuses up to two rows already returned by its bounded read probe and stores only a structural preview: safe field names, masked string prefixes and lengths, and type markers. PII, token-like identifiers, scalar values, nested content, excess fields, and excess output are masked or truncated before the finding reaches extension storage.
+
+An explicit popup action can reveal those one or two raw rows. They are held only in the tab's in-memory BaaS state and are never included in normalized findings, storage, reports, logs, clipboard exports, or native messages. Navigation, clear, tab close, and service-worker restart discard them. Empty arrays produce a low-severity readable-empty observation, not a confirmed data-exposure finding, and expose no reveal action.
+
+Convex validation is observation-only. The page-world interceptor strips client WebSocket messages down to query ID, function path, and authentication state; it never forwards Convex auth tokens or arguments. A finding is confirmed only when a matching anonymous subscription receives a `QueryUpdated` result. KeyLeak never calls Convex's query, mutation, action, or HTTP-action APIs and never guesses functions. The public deployment URL and public-function declaration are leads, not vulnerabilities by themselves. See [Convex support](CONVEX_SUPPORT.md) for current protocol and coverage limits.
+
+`RUN FULL SCAN` is an explicit user action. If the loopback scanner is unavailable, the extension sends only a fixed `ensure_running` message to the installed Chrome native host. The host can open Docker Desktop and run this repository's named Compose service; it does not accept commands, URLs, credentials, or report data. While the scan runs, fixed `touch` messages renew an idle lease. Only a container whose ID was recorded when the helper started it can be stopped after about five idle minutes. Pre-existing local scanners and containers are not claimed or stopped.
+
 ## Hosted Scanning
 
 Hosted scanning is intentionally deferred. A hosted version would require abuse controls, tenancy, credential-handling policy, retention policy, and legal review. The default project direction is local-first.

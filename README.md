@@ -13,7 +13,7 @@ Runtime leak detector for modern web apps. Finds exposed API keys, **validates B
 
 Static scanners find hardcoded secrets in source code. KeyLeak finds the ones that only appear at runtime -- and then **proves they're exploitable**.
 
-- **BaaS vulnerability scanner**: Detects Supabase/Firebase/Appwrite config in minified JS bundles, extracts table names, and actively probes whether Row-Level Security is enforced. A Supabase anon key is harmless if RLS works. KeyLeak tests whether it does.
+- **BaaS vulnerability scanner**: Detects Supabase, Firebase, Appwrite, PocketBase, and Convex usage. It validates Supabase access policies and correlates anonymous Convex query subscriptions with returned data without invoking mutations, actions, or guessed functions. See [Convex support and safety boundaries](docs/CONVEX_SUPPORT.md).
 - **Chrome extension**: Detects leaked keys in real-time as you browse. TEST button validates whether a found key is still active (supports 14 providers). JWT decoder surfaces suspicious claims (service_role, admin flags, broad scopes).
 - **Full Site Scan**: Enumerates subdomains (crt.sh certificate transparency + DNS, and a deep scan auto-installs **subfinder** — pinned, opt-out — for far richer discovery; **amass** is used too if present), crawls every page of the domain, and scans them all, reporting which subdomains/pages each leak appeared on plus a per-source discovery breakdown. One command (or one click in the web UI) for a full domain audit. Authorized targets only.
 - **200+ first-party domain suppression**: No false positives when browsing Google, AWS, Azure, GitHub, Stripe, etc.
@@ -67,9 +67,10 @@ Works with **Vercel**, **Netlify**, **Render**, **Railway** — anywhere a previ
 1. Open chrome://extensions
 2. Enable "Developer mode"
 3. Click "Load unpacked" → select the extension/ folder
+4. Run `poetry run keyleak install-extension-host` once, then reload the extension
 ```
 
-Browse any site. The extension icon shows a badge count for findings. Click to see details, TEST keys live, and view remediation.
+Browse any site. The extension icon shows a badge count for findings. Click to see details, TEST keys live, and view remediation. `RUN FULL SCAN` now opens Docker Desktop if necessary, starts the local scanner, and stops the helper-started container after about five idle minutes.
 
 ### From Source
 
@@ -147,7 +148,7 @@ The `--html` flag generates a self-contained dark-theme vulnerability report:
 | Category | What | How |
 |---|---|---|
 | **BaaS misconfig** | Open Supabase tables, missing RLS, public storage buckets, callable RPCs | Active validation -- probes the REST API with only the anon key |
-| **BaaS providers** | Supabase, Firebase, Appwrite, PocketBase | Config extraction from minified JS bundles |
+| **BaaS providers** | Supabase, Firebase, Appwrite, PocketBase, Convex | Config extraction plus provider-specific read-only validation |
 | **API keys** | OpenAI, Anthropic, Gemini, Stripe, GitHub, AWS, and 20+ more | Regex detection + live TEST validation |
 | **JWT analysis** | service_role exposure, admin flags, broad scopes, long expiry | Decode + claims analysis (no verification needed) |
 | **Client-side auth** | `isAdmin === true` checks in browser JS | Pattern detection in bundles |
@@ -160,7 +161,7 @@ The `--html` flag generates a self-contained dark-theme vulnerability report:
 
 ## Chrome Extension Features
 
-- **Real-time BaaS detection**: Intercepts Supabase/Firebase API requests and probes RLS live
+- **Real-time BaaS detection**: Probes Supabase/Firebase access and correlates anonymous Convex query results without invoking Convex functions
 - **TEST button**: Validates keys against 14 providers (Gemini, OpenAI, Anthropic, GitHub, Stripe, Groq, etc.)
 - **JWT decoder**: Click TEST on any JWT to see decoded claims with severity flags
 - **Finding grouping**: Same key in multiple scripts = one card with clickable source URLs
@@ -206,7 +207,7 @@ A security-and-usefulness release. Full notes in [CHANGELOG.md](CHANGELOG.md).
 
 ## v0.5.0 -- What's New
 
-- **BaaS vulnerability scanner** with active validation (Supabase, Firebase, Appwrite, PocketBase)
+- **BaaS vulnerability scanner** with provider-specific validation (Supabase, Firebase, Appwrite, PocketBase, Convex)
 - **Chrome extension** with real-time detection, TEST button, and JWT analysis
 - **Full Site Scan** (`keyleak site-scan` + web UI button) with crt.sh + DNS subdomain enumeration, multi-level crawl, and per-finding page provenance
 - **HTML report** output (`--html`)
@@ -480,14 +481,22 @@ The extension is not published to the Chrome Web Store yet. Load it from this re
 3. Enable `Developer mode`.
 4. Click `Load unpacked`.
 5. Select the `extension/` folder, not the repository root.
-6. Pin `KeyLeak Detector` from the Chrome toolbar extensions menu.
-7. Browse an app you own or have permission to test.
-8. Click the KeyLeak toolbar icon to see findings for the current tab.
+6. From the repository root, run `poetry run keyleak install-extension-host` once.
+7. Return to `chrome://extensions` and click Reload on KeyLeak Detector.
+8. Pin `KeyLeak Detector` from the Chrome toolbar extensions menu.
+9. Browse an app you own or have permission to test.
+10. Click the KeyLeak toolbar icon to see findings for the current tab.
 
 The exact folder to select is:
 
 ```text
 keyleak-detector/extension
+```
+
+The one-time setup discovers the unpacked extension ID in Chrome and installs an exact-origin native-messaging manifest for this checkout. If Chrome uses a profile the installer cannot discover, copy the extension ID from `chrome://extensions` and run:
+
+```bash
+poetry run keyleak install-extension-host --extension-id <extension-id>
 ```
 
 ### Use The Popup
@@ -501,7 +510,8 @@ The popup shows:
 - redacted proof, detector IDs, confidence, validation status, and fix guidance
 - report copy actions for redacted JSON and Markdown
 - per-finding suppression by stable finding ID for known launch-gate noise
-- a `RUN FULL SCAN` action that calls the local KeyLeak web scanner at `http://127.0.0.1:5002` without forwarding browser cookies or bearer tokens
+- a bounded `REDACTED SAMPLE ROW` on confirmed open BaaS tables plus an explicit `REVEAL RAW SAMPLE` control for up to two actual rows; raw rows stay in tab-scoped memory and never enter extension storage or copied reports
+- a `RUN FULL SCAN` action that starts the Docker Compose scanner automatically when loopback is unavailable, calls it at `http://127.0.0.1:5002` without forwarding browser cookies or bearer tokens, and stops only helper-started containers after about five idle minutes
 - a `CLEAR` button to reset findings for the current tab
 
 ### Use The DevTools Panel
@@ -519,7 +529,7 @@ Detector educational content is sourced from `keyleak/detectors.py` (`descriptio
 
 ### Extension Permissions
 
-The extension requests `webRequest`, `storage`, `activeTab`, `tabs`, and `<all_urls>` because it observes requests, headers, page content, and fetch/XHR responses locally.
+The extension requests `webRequest`, `storage`, `activeTab`, `tabs`, and `<all_urls>` because it observes requests, headers, page content, and fetch/XHR responses locally. It requests `nativeMessaging` only to send fixed `ensure_running` and `touch` lifecycle messages to the installed KeyLeak helper; page URLs, credentials, and findings are never included in those native messages.
 
 Use it for development, staging, bug bounty scopes, or owned systems. Disable it when browsing unrelated sensitive sites. See [docs/SECURITY_MODEL.md](docs/SECURITY_MODEL.md) before using it on sensitive browsing sessions.
 

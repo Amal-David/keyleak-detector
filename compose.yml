@@ -5,7 +5,7 @@ services:
       dockerfile: Dockerfile
     container_name: keyleak-detector
     ports:
-      - "5002:5002"
+      - "127.0.0.1:5002:5002"
     environment:
       - PORT=5002
       - PYTHONUNBUFFERED=1
@@ -17,7 +17,7 @@ services:
       - ./logs:/app/logs
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "python", "-c", "import requests; requests.get('http://localhost:5002', timeout=5)"]
+      test: ["CMD", "python", "-c", "import requests; response = requests.get('http://localhost:5002/healthz', timeout=5); response.raise_for_status()"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -34,4 +34,3 @@ services:
         reservations:
           cpus: '0.5'
           memory: 512M
-

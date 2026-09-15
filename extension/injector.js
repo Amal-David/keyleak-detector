@@ -45,6 +45,17 @@
     }
   }
 
+  function isConvexSyncUrl(rawUrl) {
+    try {
+      const parsed = new URL(String(rawUrl || ''));
+      return parsed.protocol === 'wss:'
+        && /^[a-z0-9](?:[a-z0-9-]{1,62}[a-z0-9])?\.convex\.cloud$/i.test(parsed.hostname)
+        && /\/api\/[^/]+\/sync$/.test(parsed.pathname);
+    } catch (_error) {
+      return false;
+    }
+  }
+
   // --- Patch fetch() ---
   const originalFetch = window.fetch;
   window.fetch = async function (...args) {
@@ -121,6 +132,68 @@
   if (OriginalWebSocket) {
     window.WebSocket = function (url, protocols) {
       const socket = protocols === undefined ? new OriginalWebSocket(url) : new OriginalWebSocket(url, protocols);
+      const socketUrl = String(url || '');
+      const isConvex = isConvexSyncUrl(socketUrl);
+      let convexAuthenticated = false;
+      const originalSend = socket.send;
+      socket.send = function (data) {
+        if (isConvex && typeof data === 'string' && data.length < MAX_BODY_SIZE) {
+          try {
+            const message = JSON.parse(data);
+            if (message?.type === 'Authenticate') {
+              convexAuthenticated = message.tokenType !== 'None';
+              sendToContentScript({
+                source: 'convex-client',
+                url: socketUrl,
+                status: 0,
+                contentType: 'application/json',
+                body: JSON.stringify({
+                  type: 'Authenticate',
+                  authenticated: convexAuthenticated,
+                }),
+                headers: [],
+                captureType: 'convex-client',
+              });
+            } else if (message?.type === 'ModifyQuerySet') {
+              const modifications = (message.modifications || []).flatMap(modification => {
+                if (modification?.type === 'Remove' && Number.isInteger(modification.queryId)) {
+                  return [{ type: 'Remove', queryId: modification.queryId }];
+                }
+                if (
+                  modification?.type === 'Add'
+                  && Number.isInteger(modification.queryId)
+                  && typeof modification.udfPath === 'string'
+                ) {
+                  return [{
+                    type: 'Add',
+                    queryId: modification.queryId,
+                    udfPath: modification.udfPath.slice(0, 240),
+                  }];
+                }
+                return [];
+              });
+              if (modifications.length > 0) {
+                sendToContentScript({
+                  source: 'convex-client',
+                  url: socketUrl,
+                  status: 0,
+                  contentType: 'application/json',
+                  body: JSON.stringify({
+                    type: 'ModifyQuerySet',
+                    authenticated: convexAuthenticated,
+                    modifications,
+                  }),
+                  headers: [],
+                  captureType: 'convex-client',
+                });
+              }
+            }
+          } catch (_error) {
+            // Ignore malformed or future protocol messages without affecting the page.
+          }
+        }
+        return originalSend.call(this, data);
+      };
       socket.addEventListener('message', function (event) {
         try {
           scanMessageBody('websocket', String(url || ''), event.data, 'text/plain');

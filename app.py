@@ -1425,6 +1425,13 @@ def scan_events(scan_id):
 def index():
     return render_template('index.html')
 
+
+@app.route('/healthz')
+def healthz():
+    """Identify the loopback scanner process for extension startup checks."""
+
+    return jsonify({'status': 'ok', 'service': 'keyleak-detector'})
+
 async def _run_full_site_scan(url, parsed_url, scan_id):
     """Full Site Scan: enumerate subdomains + crawl all pages of a domain.
 

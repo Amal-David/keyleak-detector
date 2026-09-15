@@ -8,6 +8,8 @@
  * All probes are read-only GET requests. Never writes, updates, or deletes.
  */
 
+import { boundedRawSampleRows, redactStructuredSample } from './reporting.js';
+
 const SUPABASE_TABLE_RE = /^(https:\/\/[a-z0-9]+\.supabase\.co)\/rest\/v1\/([a-z_][a-z0-9_]*)(?:\?|$)/;
 const SUPABASE_RPC_RE = /^(https:\/\/[a-z0-9]+\.supabase\.co)\/rest\/v1\/rpc\/([a-z_][a-z0-9_]*)(?:\?|$)/;
 const SUPABASE_STORAGE_RE = /^(https:\/\/[a-z0-9]+\.supabase\.co)\/storage\/v1/;
@@ -123,7 +125,7 @@ async function testSupabaseTable(baseUrl, table, apiKey) {
     const headers = {};
     if (apiKey) headers['apikey'] = apiKey;
     const resp = await fetch(
-      `${baseUrl}/rest/v1/${table}?select=*&limit=1`,
+      `${baseUrl}/rest/v1/${table}?select=*&limit=2`,
       { headers, credentials: 'omit' }
     );
     if (resp.status === 200) {
@@ -132,7 +134,15 @@ async function testSupabaseTable(baseUrl, table, apiKey) {
         const columns = body.length > 0 && typeof body[0] === 'object'
           ? Object.keys(body[0])
           : [];
-        return { open: true, status: 200, columns, rowCount: body.length };
+        return {
+          open: body.length > 0,
+          empty: body.length === 0,
+          status: 200,
+          columns,
+          rowCount: body.length,
+          sample: redactStructuredSample(body),
+          rawSampleRows: boundedRawSampleRows(body),
+        };
       }
     }
     return { open: false, status: resp.status };
@@ -209,20 +219,25 @@ async function testFirebaseDB(baseUrl) {
 
 export function buildBaaSFinding(baasInfo, probeResult) {
   const { provider, type, endpoint } = baasInfo;
-  const severity = type === 'database' ? 'critical'
+  const isEmptyTable = type === 'table' && probeResult.empty === true;
+  const severity = isEmptyTable ? 'low'
+    : type === 'database' ? 'critical'
     : type === 'table' ? classifyTable(endpoint)
     : type === 'storage' ? 'high'
     : 'medium';
 
   const typeLabels = {
-    table: 'baas_open_table',
+    table: isEmptyTable ? 'baas_readable_empty_table' : 'baas_open_table',
     rpc: 'baas_open_rpc',
     storage: 'baas_open_storage',
     database: 'baas_open_table',
   };
 
+  const rowCount = Number.isInteger(probeResult.rowCount) ? probeResult.rowCount : null;
   const snippets = {
-    table: `Table '${endpoint}' readable without user auth (HTTP ${probeResult.status}).${probeResult.columns?.length ? ' Columns: ' + probeResult.columns.slice(0, 8).join(', ') : ''}`,
+    table: isEmptyTable
+      ? `Table '${endpoint}' was readable without user auth (HTTP ${probeResult.status}) but returned 0 rows. This does not prove that records are exposed.`
+      : `Table '${endpoint}' returned ${rowCount ?? 'one or more'} row${rowCount === 1 ? '' : 's'} without user auth (HTTP ${probeResult.status}).${probeResult.columns?.length ? ' Columns: ' + probeResult.columns.slice(0, 8).join(', ') : ''}`,
     rpc: `RPC function '${endpoint}' callable without user auth (HTTP ${probeResult.status}).`,
     storage: `Storage bucket${probeResult.buckets ? 's: ' + probeResult.buckets.filter(b => b.public).map(b => b.name).join(', ') : ' accessible'} (HTTP ${probeResult.status}).`,
     database: `Firebase Realtime Database is publicly readable.${probeResult.keys?.length ? ' Top-level keys: ' + probeResult.keys.join(', ') : ''}`,
@@ -235,20 +250,26 @@ export function buildBaaSFinding(baasInfo, probeResult) {
     database: 'Set Firebase Security Rules to deny public access: {"rules": {".read": "auth != null"}}.',
   };
 
+  const evidence = {
+    source: baasInfo.baseUrl,
+    snippet: snippets[type] || `${provider} ${type} '${endpoint}' is open.`,
+    redacted_value: `${type}:${endpoint}`,
+    response_status: probeResult.status,
+  };
+  if (type === 'table' && probeResult.sample) evidence.sample = probeResult.sample;
+  if (type === 'table' && probeResult.rawSampleRows?.length) {
+    evidence.raw_sample_available = true;
+  }
+
   return {
     type: typeLabels[type] || 'baas_open_table',
     severity,
-    confidence: 0.95,
+    confidence: isEmptyTable ? 0.7 : 0.95,
     detector_id: `baas.${typeLabels[type] || 'open_table'}`,
     source: baasInfo.baseUrl,
     category: 'baas',
-    validation_status: 'confirmed',
-    evidence: {
-      source: baasInfo.baseUrl,
-      snippet: snippets[type] || `${provider} ${type} '${endpoint}' is open.`,
-      redacted_value: `${type}:${endpoint}`,
-      response_status: probeResult.status,
-    },
+    validation_status: isEmptyTable ? 'lead' : 'confirmed',
+    evidence,
     risk_reason: snippets[type],
     remediation: remediations[type] || 'Review access policies for this resource.',
   };
@@ -277,6 +298,7 @@ export class BaaSTabState {
     this.probeCount = 0;
     this.probeQueue = [];
     this.processing = false;
+    this.rawSamples = new Map();
   }
 
   _dedupeKey(baasInfo) {
@@ -292,6 +314,20 @@ export class BaaSTabState {
   markTested(baasInfo) {
     this.tested.add(this._dedupeKey(baasInfo));
     this.probeCount++;
+  }
+
+  rememberRawSample(baasInfo, rows) {
+    const bounded = boundedRawSampleRows(rows);
+    if (bounded.length > 0) this.rawSamples.set(`${baasInfo.type}:${baasInfo.endpoint}`, bounded);
+  }
+
+  getRawSample(sampleKey) {
+    const rows = this.rawSamples.get(sampleKey);
+    return rows ? structuredClone(rows) : null;
+  }
+
+  clearRawSamples() {
+    this.rawSamples.clear();
   }
 
   async enqueueProbe(baasInfo, addFindingsFn) {
@@ -317,7 +353,10 @@ export class BaaSTabState {
       const { baasInfo, addFindingsFn } = this.probeQueue.shift();
       try {
         const result = await testRLS(baasInfo);
-        if (result.open) {
+        if (result.open || result.empty) {
+          if (result.rawSampleRows?.length) {
+            this.rememberRawSample(baasInfo, result.rawSampleRows);
+          }
           const finding = buildBaaSFinding(baasInfo, result);
           addFindingsFn([finding]);
         }

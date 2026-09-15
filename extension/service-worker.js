@@ -12,19 +12,24 @@ import {
   severityRank,
 } from './lib/reporting.js';
 import { detectBaaSRequest, BaaSTabState } from './lib/baas-detector.js';
+import { ConvexTabState, parseConvexDeployment } from './lib/convex-detector.js';
 import { buildLibraryFindings } from './lib/library-cves.js';
 import { testKey } from './lib/key-tester.js';
 import { canScanUrl } from './lib/url-guard.js';
+import {
+  ensureLocalScanner,
+  localScannerActivity,
+  LOCAL_SERVER,
+} from './lib/local-scanner.js';
 
 const STORAGE_PREFIX = 'keyleak_tab_';
 const SETTINGS_KEY = 'keyleak_settings';
 const MAX_FINDINGS_PER_TAB = 300;
 const MAX_REMOTE_BODY_SIZE = 2 * 1024 * 1024;
-const LOCAL_SERVER = 'http://127.0.0.1:5002';
-const START_SERVER_COMMAND = 'poetry run python app.py';
 const DEFAULT_PACKS = ['leak', 'appsec', 'access-control', 'baas'];
 
 const baasTabStates = new Map();
+const convexTabStates = new Map();
 
 const EMPTY_STATS = {
   requests: 0,
@@ -284,7 +289,7 @@ async function runFullScan(tabId, targetUrl) {
   // The user explicitly chose to scan their current tab, so its own host is
   // always in scope (passed as both target and page origin).
   if (!canScanUrl(targetUrl, targetUrl)) {
-    return { ok: false, error: 'Full scan requires an http:// or https:// URL.', command: START_SERVER_COMMAND };
+    return { ok: false, error: 'Full scan requires an http:// or https:// URL.' };
   }
 
   const data = await readTabData(tabId, targetUrl);
@@ -292,7 +297,8 @@ async function runFullScan(tabId, targetUrl) {
   data.full_scan_error = '';
 
   try {
-    const response = await fetch(`${LOCAL_SERVER}/scan`, {
+    await ensureLocalScanner();
+    const response = await localScannerActivity(() => fetch(`${LOCAL_SERVER}/scan`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -301,7 +307,7 @@ async function runFullScan(tabId, targetUrl) {
         launch_profile: 'launch-gate',
         packs: DEFAULT_PACKS,
       }),
-    });
+    }));
 
     if (!response.ok) {
       throw new Error(`Local KeyLeak server returned HTTP ${response.status}`);
@@ -312,9 +318,9 @@ async function runFullScan(tabId, targetUrl) {
     await persistTabData(tabId, data);
     return { ok: true, report: data.full_scan_report };
   } catch (error) {
-    data.full_scan_error = `${error.message || error}. Start the local scanner with \`${START_SERVER_COMMAND}\` or \`docker compose up -d\`.`;
+    data.full_scan_error = error.message || String(error);
     await persistTabData(tabId, data);
-    return { ok: false, error: data.full_scan_error, command: START_SERVER_COMMAND };
+    return { ok: false, error: data.full_scan_error };
   }
 }
 
@@ -338,6 +344,7 @@ async function exportReport(tabId, format = 'json') {
 async function clearTab(tabId) {
   tabCache.delete(tabId);
   baasTabStates.delete(tabId);
+  convexTabStates.delete(tabId);
   await storageRemove(storageKey(tabId));
   chrome.action.setBadgeText({ text: '', tabId });
   return { ok: true };
@@ -352,6 +359,17 @@ async function handleAnalyzeIntercepted(tabId, data = {}) {
   await persistTabData(tabId, tabData);
 
   const findings = [];
+  const convexDeployment = parseConvexDeployment(url);
+  if (convexDeployment?.surface === 'sync') {
+    if (!convexTabStates.has(tabId)) convexTabStates.set(tabId, new ConvexTabState());
+    const convexState = convexTabStates.get(tabId);
+    const convexFindings = captureType === 'convex-client'
+      ? convexState.observeClientMessage(url, body)
+      : captureType === 'websocket'
+        ? convexState.observeServerMessage(url, body)
+        : [];
+    findings.push(...convexFindings);
+  }
   findings.push(...analyzeUrl(url, { url, status, contentType, capture_type: 'url' }));
   if (headers) findings.push(...analyzeHeaders(headers, 'Response Header', { url, status, contentType, capture_type: 'header' }));
   if (body) {
@@ -443,6 +461,23 @@ async function handleMessage(message, sender) {
     return suppressFinding(targetTabId, message.findingId);
   }
 
+  if (message.action === 'reveal_backend_sample') {
+    if (!Number.isInteger(targetTabId)) return { ok: false, error: 'No tab selected.' };
+    const sampleKey = String(message.sampleKey || '');
+    const data = await readTabData(targetTabId);
+    const finding = data.findings.find(item => (
+      item.evidence?.raw_sample_available === true
+      && item.evidence?.redacted_value === sampleKey
+    ));
+    if (!finding) return { ok: false, error: 'This finding has no raw sample to reveal.' };
+    const rows = baasTabStates.get(targetTabId)?.getRawSample(sampleKey)
+      || convexTabStates.get(targetTabId)?.getRawSample(sampleKey);
+    if (!rows) {
+      return { ok: false, error: 'The in-memory sample expired. Refresh the page to capture it again.' };
+    }
+    return { ok: true, rows };
+  }
+
   if (message.action === 'test_key') {
     const { type, raw_value } = message;
     if (!type || !raw_value) return { ok: false, error: 'Missing type or raw_value.' };
@@ -455,7 +490,7 @@ async function handleMessage(message, sender) {
   }
 
   if (message.action === 'run_full_scan') {
-    if (!Number.isInteger(targetTabId)) return { ok: false, error: 'No tab selected.', command: START_SERVER_COMMAND };
+    if (!Number.isInteger(targetTabId)) return { ok: false, error: 'No tab selected.' };
     return runFullScan(targetTabId, message.url || message.data?.url);
   }
 
@@ -507,15 +542,15 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 });
 
 chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
-  if (changeInfo.status === 'loading' && changeInfo.url) {
+  if (changeInfo.status === 'loading') {
     clearTab(tabId).catch(() => {});
-    baasTabStates.delete(tabId);
   }
 });
 
 chrome.tabs.onRemoved.addListener((tabId) => {
   tabCache.delete(tabId);
   baasTabStates.delete(tabId);
+  convexTabStates.delete(tabId);
   storageRemove(storageKey(tabId)).catch(() => {});
 });
 

@@ -869,6 +869,23 @@ DETECTORS = [
         validation_status="lead",
     ),
     Detector(
+        "convex_deployment_url",
+        r"\bhttps://[a-z0-9](?:[a-z0-9-]{1,62}[a-z0-9])?\.convex\.(?:cloud|site)\b",
+        "info",
+        "Convex deployment URL found in client-visible configuration. This URL is expected to be public and is not a secret by itself.",
+        "Review public Convex queries, mutations, and actions for argument validation, authentication, and authorization. Use internalQuery, internalMutation, or internalAction for functions clients must not call directly.",
+        ["sourcemaps", "code", "env"],
+        pack="baas",
+        finding_type="convex_deployment_url",
+        validation_status="lead",
+        references=(
+            "https://docs.convex.dev/client/react/deployment-urls",
+            "https://docs.convex.dev/functions/internal-functions",
+        ),
+        attack_scenario="The deployment URL only locates the backend. Risk exists when a public Convex function returns private data or performs privileged work without enforcing caller identity and authorization.",
+        extension=False,
+    ),
+    Detector(
         "firebase_client_config",
         r"apiKey['\"\s:=]+AIza[0-9A-Za-z_-]{35}",
         "medium",

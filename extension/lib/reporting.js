@@ -23,6 +23,14 @@ const SECRET_QUERY_KEYS = new Set([
   'token',
 ]);
 
+const SAMPLE_MAX_FIELDS = 8;
+const SAMPLE_MAX_ARRAY_ITEMS = 3;
+const SAMPLE_MAX_DEPTH = 2;
+const SAMPLE_MAX_OUTPUT = 1200;
+const TOKEN_LIKE_SAMPLE = /^[A-Za-z0-9_+./=-]{16,}$/;
+const RAW_SAMPLE_ROW_LIMIT = 2;
+const RAW_SAMPLE_BYTE_LIMIT = 16 * 1024;
+
 export function normalizeSeverity(severity) {
   const value = String(severity || 'info').toLowerCase();
   return Object.prototype.hasOwnProperty.call(SEVERITY_ORDER, value) ? value : 'info';
@@ -78,6 +86,70 @@ export function scrubText(text) {
   return out;
 }
 
+function redactSampleNode(value, depth = 0) {
+  if (value === null || value === undefined) return null;
+  if (typeof value === 'boolean') return '[boolean]';
+  if (typeof value === 'number' || typeof value === 'bigint') return '[number]';
+
+  if (typeof value === 'string') {
+    const text = value.replace(/\s+/g, ' ').trim();
+    if (!text) return '[empty string]';
+    const scrubbed = scrubText(text);
+    if (scrubbed !== text) return scrubbed;
+    const length = Array.from(text).length;
+    if (TOKEN_LIKE_SAMPLE.test(text)) return `[token-like string: ${length} chars]`;
+    const visible = Array.from(text).slice(0, Math.min(4, Math.max(1, length - 1))).join('');
+    return `${visible}… [${length} chars]`;
+  }
+
+  if (depth >= SAMPLE_MAX_DEPTH) {
+    return Array.isArray(value) ? `[nested array: ${value.length} items]` : '[nested object]';
+  }
+  if (Array.isArray(value)) {
+    const items = value.slice(0, SAMPLE_MAX_ARRAY_ITEMS)
+      .map(item => redactSampleNode(item, depth + 1));
+    if (value.length > SAMPLE_MAX_ARRAY_ITEMS) {
+      items.push(`[+${value.length - SAMPLE_MAX_ARRAY_ITEMS} items]`);
+    }
+    return items;
+  }
+  if (typeof value === 'object') {
+    const entries = Object.entries(value).slice(0, SAMPLE_MAX_FIELDS);
+    const redacted = {};
+    entries.forEach(([key, item], index) => {
+      const safeKey = /^[A-Za-z_][A-Za-z0-9_]{0,63}$/.test(key) ? key : `field_${index + 1}`;
+      redacted[safeKey] = redactSampleNode(item, depth + 1);
+    });
+    if (Object.keys(value).length > SAMPLE_MAX_FIELDS) redacted._truncated_fields = true;
+    return redacted;
+  }
+  return `[${typeof value}]`;
+}
+
+export function redactStructuredSample(rows) {
+  if (!Array.isArray(rows) || rows.length === 0) return '';
+  const preview = JSON.stringify(redactSampleNode(rows.slice(0, 1)), null, 2);
+  return preview.length <= SAMPLE_MAX_OUTPUT
+    ? preview
+    : `${preview.slice(0, SAMPLE_MAX_OUTPUT - 1)}…`;
+}
+
+export function boundedRawSampleRows(rows) {
+  if (!Array.isArray(rows) || rows.length === 0) return [];
+  const candidates = rows.slice(0, RAW_SAMPLE_ROW_LIMIT);
+  for (let count = candidates.length; count > 0; count -= 1) {
+    try {
+      const serialized = JSON.stringify(candidates.slice(0, count));
+      if (new TextEncoder().encode(serialized).byteLength <= RAW_SAMPLE_BYTE_LIMIT) {
+        return JSON.parse(serialized);
+      }
+    } catch (_error) {
+      return [];
+    }
+  }
+  return [];
+}
+
 export function scrubSnippet(snippet, preserve = '') {
   const text = String(snippet || '');
   if (!text) return text;
@@ -127,6 +199,10 @@ export function normalizeFinding(raw) {
     request_url: requestUrl,
     response_status: raw.status ?? raw.status_code ?? raw.evidence?.response_status ?? null,
     redacted_value: redactedValue,
+    sample: typeof raw.evidence?.sample === 'string'
+      ? raw.evidence.sample.slice(0, SAMPLE_MAX_OUTPUT)
+      : '',
+    raw_sample_available: raw.evidence?.raw_sample_available === true,
   };
 
   const id = raw.id || stableId([
