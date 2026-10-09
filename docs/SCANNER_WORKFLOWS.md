@@ -2,6 +2,8 @@
 
 Use this guide to pick a scan, try the local build checks on a fictional `ABCapp`, and understand what a clean or incomplete result means. The example key below is a synthetic detector test string, not a credential; the sample never calls a provider or contacts a real site.
 
+The flags here describe the PR source checkout; an installed release may not include them yet.
+
 ## Choose a scan
 
 | Goal | Command | What it does |
