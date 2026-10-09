@@ -45,7 +45,7 @@ outputs:
     description: 'Scan verdict: SAFE_TO_SHIP, REVIEW, or BLOCK_SHIP'
     value: ${{ steps.scan.outputs.verdict }}
   findings-count:
-    description: 'Total number of findings'
+    description: 'Total number of findings across the requested scans'
     value: ${{ steps.scan.outputs.findings_count }}
   report-path:
     description: 'Path to the generated report file'
@@ -64,11 +64,11 @@ runs:
         KL_MODE: ${{ inputs.mode }}
         KL_ACTION_PATH: ${{ github.action_path }}
       run: |
-        python -m pip install --upgrade pip
-        python -m pip install -e "$KL_ACTION_PATH"
+        python -I -m pip install --upgrade pip
+        python -I -m pip install -e "$KL_ACTION_PATH"
         if [ "$KL_MODE" = "browser" ] || [ "$KL_MODE" = "both" ]; then
-          python -m pip install playwright
-          python -m playwright install chromium --with-deps
+          python -I -m pip install playwright
+          python -I -m playwright install chromium --with-deps
         fi
 
     - name: Run KeyLeak scan
@@ -86,56 +86,185 @@ runs:
         KL_ALLOWLIST: ${{ inputs.allowlist }}
         KL_BAAS: ${{ inputs.baas-validate }}
       run: |
-        FORMAT_FLAG="--json"
-        [ "$KL_FORMAT" = "sarif" ] && FORMAT_FLAG="--sarif"
-        [ "$KL_FORMAT" = "markdown" ] && FORMAT_FLAG="--markdown"
-        [ "$KL_FORMAT" = "html" ] && FORMAT_FLAG="--html"
+        set -euo pipefail
 
+        invalid_input() {
+          echo "::error::$1" >&2
+          echo "verdict=BLOCK_SHIP" >> "$GITHUB_OUTPUT"
+          exit 2
+        }
+
+        case "$KL_MODE" in
+          local|browser|both) ;;
+          *) invalid_input "mode must be local, browser, or both" ;;
+        esac
+        case "$KL_FORMAT" in
+          json|sarif|markdown|html) ;;
+          *) invalid_input "output-format must be json, sarif, markdown, or html" ;;
+        esac
+        case "$KL_FAILON" in
+          low|medium|high|critical) ;;
+          *) invalid_input "fail-on must be low, medium, high, or critical" ;;
+        esac
+        case "$KL_PROFILE" in
+          launch-gate|local-dev|bug-bounty|ci|full) ;;
+          *) invalid_input "launch-profile is not supported" ;;
+        esac
+        case "$KL_BAAS" in
+          true|false) ;;
+          *) invalid_input "baas-validate must be true or false" ;;
+        esac
+        if [ "$KL_MODE" = "browser" ] || [ "$KL_MODE" = "both" ]; then
+          case "$KL_URL" in
+            http://?*|https://?*) ;;
+            *) invalid_input "browser and both modes require an HTTP(S) URL" ;;
+          esac
+        fi
+
+        # Keep generated reports outside the untrusted checkout. mktemp and
+        # owner-only permissions prevent pre-existing report symlinks from
+        # redirecting writes or adding arbitrary workspace files to artifacts.
+        umask 077
+        REPORT_DIR=$(mktemp -d "${RUNNER_TEMP:-/tmp}/keyleak-reports.XXXXXXXXXX")
         VERDICT="SAFE_TO_SHIP"
-        FINDINGS=0
-        REPORT="keyleak-report.$KL_FORMAT"
+        FINDINGS=""
+        EXIT_CODE=0
+        REPORT="$REPORT_DIR/keyleak-report.$KL_FORMAT"
+        JSON_REPORTS=()
 
+        # Keep every report for diagnosis, but never hide a failed scanner or
+        # a blocking finding behind a successful output/metadata step.
+        run_scan() {
+          local scan_report="$1"
+          shift
+          if "$@" > "$scan_report"; then
+            if [ ! -s "$scan_report" ]; then
+              echo "::error::KeyLeak produced an empty report" >&2
+              EXIT_CODE=1
+              VERDICT="BLOCK_SHIP"
+            fi
+          else
+            EXIT_CODE=$?
+            VERDICT="BLOCK_SHIP"
+            echo "::error::KeyLeak scan failed (exit $EXIT_CODE)" >&2
+          fi
+          JSON_REPORTS+=("$scan_report")
+        }
+
+        ALLOWLIST_ARGS=()
+        if [ -n "$KL_ALLOWLIST" ] && [ -f "$KL_ALLOWLIST" ]; then
+          ALLOWLIST_ARGS=(--allowlist "$KL_ALLOWLIST")
+        fi
+
+        # Execute the installed scanner in isolated Python, so inherited
+        # PYTHONPATH/PYTHONHOME cannot import code from the target checkout.
         # Local scan
         if [ "$KL_MODE" = "local" ] || [ "$KL_MODE" = "both" ]; then
-          ALLOWLIST_FLAG=""
-          [ -n "$KL_ALLOWLIST" ] && [ -f "$KL_ALLOWLIST" ] && ALLOWLIST_FLAG="--allowlist $KL_ALLOWLIST"
+          run_scan "$REPORT_DIR/keyleak-self-audit-report.json" \
+            python -I -m keyleak.cli self-audit . "${ALLOWLIST_ARGS[@]}" \
+            --json --fail-on "$KL_FAILON"
 
-          keyleak self-audit . --fail-on "$KL_FAILON" || true
-
-          keyleak local . \
+          run_scan "$REPORT_DIR/keyleak-report.json" python -I -m keyleak.cli local . \
             --launch-profile "$KL_PROFILE" \
-            $ALLOWLIST_FLAG \
-            $FORMAT_FLAG \
-            --fail-on "$KL_FAILON" > "$REPORT" || VERDICT="BLOCK_SHIP"
+            "${ALLOWLIST_ARGS[@]}" \
+            --json \
+            --fail-on "$KL_FAILON"
         fi
 
         # Browser scan
         if [ "$KL_MODE" = "browser" ] || [ "$KL_MODE" = "both" ]; then
-          if [ -n "$KL_URL" ]; then
-            BAAS_FLAG=""
-            [ "$KL_BAAS" = "true" ] && BAAS_FLAG="--baas-validate"
-
-            keyleak browser-scan "$KL_URL" \
-              $BAAS_FLAG \
-              $FORMAT_FLAG \
-              --fail-on "$KL_FAILON" > "keyleak-browser-report.$KL_FORMAT" || VERDICT="BLOCK_SHIP"
-
-            REPORT="keyleak-browser-report.$KL_FORMAT"
+          BAAS_ARGS=()
+          if [ "$KL_BAAS" = "true" ]; then
+            BAAS_ARGS=(--baas-validate)
           fi
+
+          REPORT="$REPORT_DIR/keyleak-browser-report.$KL_FORMAT"
+          run_scan "$REPORT_DIR/keyleak-browser-report.json" python -I -m keyleak.cli browser-scan "$KL_URL" \
+            "${BAAS_ARGS[@]}" \
+            "${ALLOWLIST_ARGS[@]}" \
+            --json \
+            --fail-on "$KL_FAILON"
+        fi
+
+        # Scan each stage once. Derive every output format and the action
+        # metadata from the same JSON, independent of the fail-on threshold.
+        # Isolated Python prevents target-checkout modules from being imported.
+        if METADATA=$(python -I - "$KL_FORMAT" "${JSON_REPORTS[@]}" <<'PY'
+        import json
+        import sys
+        from pathlib import Path
+
+        from keyleak.models import ScanReport
+        from keyleak.reporting import format_html, format_markdown, format_sarif
+
+        output_format = sys.argv[1]
+        formatters = {"html": format_html, "markdown": format_markdown, "sarif": format_sarif}
+        verdicts = {"SAFE_TO_SHIP": 0, "REVIEW": 1, "BLOCK_SHIP": 2}
+        findings = 0
+        verdict = "SAFE_TO_SHIP"
+        invalid = False
+        for path in sys.argv[2:]:
+            try:
+                with open(path, encoding="utf-8") as report_file:
+                    payload = json.load(report_file)
+                count = payload["summary"]["total_findings"]
+                status = payload["verdict"]["status"]
+                if type(count) is not int or count < 0 or status not in verdicts:
+                    raise ValueError("Invalid report metadata")
+                if not isinstance(payload["findings"], list):
+                    raise ValueError("Invalid report findings")
+                report = ScanReport.from_dict(payload)
+                if count != len(report.findings) or status != report.verdict["status"]:
+                    raise ValueError("Report metadata disagrees with findings")
+                findings += count
+                if verdicts[status] > verdicts[verdict]:
+                    verdict = status
+                if output_format != "json":
+                    rendered = formatters[output_format](report)
+                    Path(path).with_suffix(f".{output_format}").write_text(rendered, encoding="utf-8")
+            except (OSError, ValueError, KeyError, TypeError, AttributeError):
+                print("::error::KeyLeak report is invalid or could not be rendered", file=sys.stderr)
+                invalid = True
+        if invalid:
+            sys.exit(1)
+        print(findings, verdict)
+        PY
+        ); then
+          read -r FINDINGS REPORT_VERDICT <<< "$METADATA"
+          if [ "$EXIT_CODE" -eq 0 ]; then
+            VERDICT="$REPORT_VERDICT"
+          fi
+        else
+          EXIT_CODE=1
+          VERDICT="BLOCK_SHIP"
+        fi
+
+        # On a formatting/scan failure, the original JSON still provides the
+        # diagnostic report. Upload only paths produced in this invocation.
+        if [ ! -f "$REPORT" ]; then
+          REPORT="${REPORT%.*}.json"
         fi
 
         echo "verdict=$VERDICT" >> "$GITHUB_OUTPUT"
         echo "report_path=$REPORT" >> "$GITHUB_OUTPUT"
-
-        if [ -f "$REPORT" ] && [ "$KL_FORMAT" = "json" ]; then
-          FINDINGS=$(REPORT_PATH="$REPORT" python -c "import json,os; r=json.load(open(os.environ['REPORT_PATH'])); print(r.get('summary',{}).get('total_findings',0))" 2>/dev/null || echo 0)
-        fi
         echo "findings_count=$FINDINGS" >> "$GITHUB_OUTPUT"
+        {
+          echo 'report_paths<<KEYLEAK_REPORT_PATHS'
+          for json_report in "${JSON_REPORTS[@]}"; do
+            printf '%s\n' "$json_report"
+            formatted_report="${json_report%.json}.$KL_FORMAT"
+            if [ "$KL_FORMAT" != "json" ] && [ -f "$formatted_report" ]; then
+              printf '%s\n' "$formatted_report"
+            fi
+          done
+          echo 'KEYLEAK_REPORT_PATHS'
+        } >> "$GITHUB_OUTPUT"
+        exit "$EXIT_CODE"
 
     - name: Upload report artifact
-      if: always()
+      if: always() && steps.scan.outputs.report_paths != ''
       uses: actions/upload-artifact@65c4c4a1ddee5b72f698fdd19549f0f0fb45cf08  # v4.6.0
       with:
         name: keyleak-report
-        path: keyleak-*-report.*
+        path: ${{ steps.scan.outputs.report_paths }}
         if-no-files-found: ignore
