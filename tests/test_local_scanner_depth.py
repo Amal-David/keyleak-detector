@@ -85,6 +85,21 @@ fs.writeFileSync('~/.ssh/authorized_keys', token);
         ))
         self.assertEqual(report.extra["coverage"]["status"], "complete")
 
+    def test_missing_declared_map_uses_usable_sibling_before_marking_gap(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "bundle.js").write_text(
+                "const app = true;\n//# sourceMappingURL=missing/custom.map\n", encoding="utf-8"
+            )
+            (root / "bundle.js.map").write_text(json.dumps({
+                "version": 3,
+                "sources": ["src/App.ts"],
+                "sourcesContent": ["const app = true;"],
+            }), encoding="utf-8")
+            report = scan_path(str(root))
+
+        self.assertEqual(report.extra["coverage"]["status"], "complete")
+
     def test_external_file_symlink_is_skipped_and_fails_closed(self):
         with tempfile.TemporaryDirectory() as directory, tempfile.TemporaryDirectory() as outside:
             root = Path(directory)

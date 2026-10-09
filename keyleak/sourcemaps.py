@@ -126,13 +126,8 @@ def load_sourcemap_from_disk(
     map_path = None
     if map_url:
         map_path = resolve_declared_sourcemap_path(bundle_path, map_url, root or bundle_path.parent)
-        if map_path is None:
-            if on_incomplete is not None:
-                on_incomplete("declared source map is remote or unsafe for local reading")
-        elif not map_path.is_file():
-            if on_incomplete is not None:
-                on_incomplete("declared local source map is missing")
-            return []
+        if map_path is not None and not map_path.is_file():
+            map_path = None
     if map_path is None:
         map_path = bundle_path.with_suffix(bundle_path.suffix + ".map")
     if not map_path.is_file():
@@ -140,6 +135,8 @@ def load_sourcemap_from_disk(
         # default; some emit "app.map" — check that too.
         alt = bundle_path.with_suffix(".map")
         if not alt.is_file():
+            if map_url and on_incomplete is not None:
+                on_incomplete("declared source map is missing or no usable sibling map exists")
             return []
         map_path = alt
 

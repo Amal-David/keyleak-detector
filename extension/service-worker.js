@@ -75,12 +75,22 @@ function storageGet(key) {
   return new Promise(resolve => chrome.storage.local.get(key, resolve));
 }
 
-function storageSet(payload) {
+function storageSetRaw(payload) {
   return new Promise(resolve => chrome.storage.local.set(payload, resolve));
 }
 
-function storageRemove(key) {
+function storageRemoveRaw(key) {
   return new Promise(resolve => chrome.storage.local.remove(key, resolve));
+}
+
+async function storageSet(payload) {
+  await ensurePrivacyMigration();
+  return storageSetRaw(payload);
+}
+
+async function storageRemove(key) {
+  await ensurePrivacyMigration();
+  return storageRemoveRaw(key);
 }
 
 function cloneStats(stats = {}) {
@@ -149,7 +159,20 @@ async function sanitizePersistedFindings() {
   const stored = await storageGet(null);
   const updates = sanitizeStoredTabData(stored, STORAGE_PREFIX);
   updates[PRIVACY_MIGRATION_KEY] = PRIVACY_MIGRATION_VERSION;
-  await storageSet(updates);
+  await storageSetRaw(updates);
+}
+
+let privacyMigrationPromise;
+function ensurePrivacyMigration() {
+  if (!privacyMigrationPromise) {
+    privacyMigrationPromise = Promise.resolve()
+      .then(sanitizePersistedFindings)
+      .catch((error) => {
+        privacyMigrationPromise = null;
+        throw error;
+      });
+  }
+  return privacyMigrationPromise;
 }
 
 async function setOriginPaused(originValue, paused) {
@@ -857,4 +880,4 @@ chrome.webRequest.onHeadersReceived.addListener(
 );
 
 console.log('[KeyLeak] Service worker started - launch-gate monitoring active');
-sanitizePersistedFindings().catch(() => {});
+ensurePrivacyMigration().catch(() => {});

@@ -7,10 +7,19 @@ Uses unittest to match the repo's existing test style.
 from __future__ import annotations
 
 import unittest
+import sys
+from types import SimpleNamespace
 from unittest import mock
 
 import keyleak.site_scanner as ss
-from keyleak.models import Evidence, Finding, ScanReport, coverage_is_incomplete
+from keyleak.browser_scanner import bounded_browser_target_guard
+from keyleak.models import (
+    Evidence,
+    Finding,
+    ScanReport,
+    build_coverage,
+    coverage_is_incomplete,
+)
 
 
 def _finding(value: str, type_: str = "openai_api_key", sev: str = "critical") -> Finding:
@@ -158,8 +167,97 @@ class FilterLinksTests(unittest.TestCase):
         )
         self.assertEqual(len(out), 2)
 
+    def test_browser_target_guard_rechecks_each_request_host(self):
+        checked_hosts = []
+        outcomes = iter([None, "private after rebinding"])
+        guard = bounded_browser_target_guard(
+            lambda host: checked_hosts.append(host) or next(outcomes)
+        )
+
+        self.assertIsNone(guard("asset.example.com"))
+        self.assertEqual(guard("asset.example.com"), "private after rebinding")
+        self.assertEqual(checked_hosts, ["asset.example.com", "asset.example.com"])
+
+    def test_browser_target_guard_fails_closed_after_check_budget(self):
+        checked_hosts = []
+        with mock.patch("keyleak.browser_scanner.MAX_BROWSER_GUARD_CHECKS", 2):
+            guard = bounded_browser_target_guard(lambda host: checked_hosts.append(host))
+
+            self.assertIsNone(guard("one.example"))
+            self.assertIsNone(guard("two.example"))
+            self.assertIn("limit reached", guard("three.example"))
+            self.assertIn("limit reached", guard("four.example"))
+
+        self.assertEqual(checked_hosts, ["one.example", "two.example"])
+
 
 class ScanSiteTests(unittest.TestCase):
+    def test_crawl_navigation_failure_keeps_blocked_request_summary(self):
+        class Route:
+            request = SimpleNamespace(
+                url="http://169.254.169.254/latest/meta-data/",
+                method="GET",
+                post_data_buffer=None,
+                headers={},
+            )
+
+            def abort(self):
+                self.aborted = True
+
+        class Page:
+            def __init__(self, context):
+                self.context = context
+
+            def set_default_timeout(self, _timeout):
+                pass
+
+            def goto(self, _url, **_kwargs):
+                self.context.request_handler(Route())
+                raise RuntimeError("navigation was blocked")
+
+        class BrowserContext:
+            def route(self, _pattern, handler):
+                self.request_handler = handler
+
+            def route_web_socket(self, _pattern, _handler):
+                pass
+
+            def new_page(self):
+                return Page(self)
+
+            def close(self):
+                pass
+
+        context = BrowserContext()
+
+        class Browser:
+            def new_context(self, **_kwargs):
+                return context
+
+            def close(self):
+                pass
+
+        class PlaywrightManager:
+            chromium = SimpleNamespace(launch=lambda **_kwargs: Browser())
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *_args):
+                pass
+
+        fake_playwright = SimpleNamespace(sync_playwright=PlaywrightManager)
+
+        with mock.patch.dict(sys.modules, {"playwright.sync_api": fake_playwright}):
+            result = ss.crawl_pages(
+                ["example.com"], depth=1, max_pages=1,
+                target_guard=lambda _host: None,
+            )
+
+        self.assertEqual(len(result.failures), 1)
+        self.assertEqual(result.blocked_requests.total, 1)
+        self.assertEqual(result.blocked_requests.sample, ["169.254.169.254"])
+
     def test_merges_findings_with_provenance(self):
         urls = [
             "https://example.com/",
@@ -238,6 +336,38 @@ class ScanSiteTests(unittest.TestCase):
         self.assertTrue(coverage_is_incomplete(report.extra["coverage"]))
         self.assertEqual(report.extra["coverage"]["failed"], 1)
         self.assertIn("DNS rebinding", report.extra["coverage_limitations"][0])
+
+    def test_site_coverage_includes_crawl_and_page_egress_blocks(self):
+        crawl_blocked = ss.BlockedRequestSummary()
+        crawl_blocked.record("https://example.com/private?token=crawl-secret")
+        crawl = ss.CrawlResult(
+            pages=["https://example.com/"],
+            blocked_requests=crawl_blocked,
+        )
+
+        def fake_scan(url, **kwargs):
+            report = ScanReport(target=url, scan_mode="browser", findings=[])
+            report.extra["coverage"] = build_coverage(
+                "browser page", 1, 1,
+                reasons=("Blocked 2 unsafe network request(s).",),
+            )
+            report.extra["egress_blocked_requests"] = {
+                "total": 2,
+                "sample": ["https://example.com/blocked?token=[redacted]"],
+            }
+            return report
+
+        with mock.patch.object(ss, "discover_subdomains", lambda d, **k: ["example.com"]), \
+             mock.patch.object(ss, "crawl_pages", lambda hosts, **k: crawl), \
+             mock.patch.object(ss, "run_browser_scan", fake_scan):
+            report = ss.scan_site("example.com", offline=True)
+
+        self.assertTrue(coverage_is_incomplete(report.extra["coverage"]))
+        self.assertIn("1 crawl request(s) were blocked", " ".join(report.extra["coverage"]["reasons"]))
+        self.assertIn("2 page request(s) were blocked", " ".join(report.extra["coverage"]["reasons"]))
+        self.assertIn("Blocked 2 unsafe network request(s).", report.extra["coverage"]["reasons"])
+        self.assertEqual(report.extra["egress_blocked_requests"]["total"], 3)
+        self.assertNotIn("crawl-secret", str(report.extra["egress_blocked_requests"]))
 
     def test_proxy_threaded_to_crawl_and_browser_scan(self):
         seen = {}

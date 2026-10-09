@@ -344,7 +344,7 @@ poetry run keyleak local . --launch-profile full --markdown
 poetry run keyleak local . --launch-profile ci --fail-on high
 ```
 
-Exit codes are designed for automation: `0` means the selected threshold passed, `1` means the command failed, and `2` means findings met `--fail-on`.
+Exit codes are designed for automation: `0` means the selected threshold passed with complete coverage, `1` means the command failed, and `2` means findings met `--fail-on` or scan coverage was incomplete or malformed.
 
 ### 4. Scan A Running Web App From The CLI
 

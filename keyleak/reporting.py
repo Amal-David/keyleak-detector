@@ -171,15 +171,16 @@ def format_markdown(report: ScanReport) -> str:
 def _remediation_details(item: Dict[str, Any]) -> Dict[str, Any]:
     """Normalize structured remediation once for the report formatters."""
     remediation_v2 = item.get("remediation_v2")
-    if not remediation_v2:
-        return {"structured": False, "legacy": str(item.get("remediation") or "")}
+    legacy = str(item.get("remediation") or "")
+    if not isinstance(remediation_v2, dict) or not remediation_v2:
+        return {"structured": False, "legacy": legacy}
 
     fix_steps = remediation_v2.get("fix_steps")
     if not isinstance(fix_steps, (list, tuple)):
-        fix_steps = []
+        return {"structured": False, "legacy": legacy}
     return {
         "structured": True,
-        "legacy": str(item.get("remediation") or ""),
+        "legacy": legacy,
         "what_leaked": str(remediation_v2.get("what_leaked") or ""),
         "why_it_matters": str(remediation_v2.get("why_it_matters") or item["risk_reason"]),
         "fix_steps": [str(step) for step in fix_steps],
@@ -417,36 +418,24 @@ def format_sarif(report: ScanReport) -> str:
         item = finding.to_dict()
         detector_id = item["detector_id"]
         remediation = _remediation_details(item)
-        if remediation["structured"]:
-            help_text = "\n".join(
-                [
-                    f"What leaked: {remediation['what_leaked']}",
-                    f"Why it matters: {remediation['why_it_matters']}",
-                    "Fix steps:",
-                    *(f"- {step}" for step in remediation["fix_steps"]),
-                    *([f"Verify: {remediation['verify_command']}"] if remediation["verify_command"] else []),
-                ]
-            )
-            sarif_remediation = {
+        sarif_remediation = (
+            {
                 "what_leaked": remediation["what_leaked"],
                 "why_it_matters": remediation["why_it_matters"],
                 "fix_steps": remediation["fix_steps"],
                 "verify_command": remediation["verify_command"],
             }
-        else:
-            help_text = remediation["legacy"]
-            sarif_remediation = None
-        rules[detector_id] = {
+            if remediation["structured"]
+            else None
+        )
+        rules.setdefault(detector_id, {
             "id": detector_id,
             "name": item["type"],
             "shortDescription": {"text": item["type"]},
             "fullDescription": {"text": item["risk_reason"]},
-            "help": {"text": help_text},
-            "properties": {
-                "category": item.get("category") or "",
-                **({"remediation_v2": sarif_remediation} if sarif_remediation is not None else {}),
-            },
-        }
+            "help": {"text": str(item["remediation"])},
+            "properties": {"category": item.get("category") or ""},
+        })
         results.append(
             {
                 "ruleId": detector_id,
@@ -464,7 +453,10 @@ def format_sarif(report: ScanReport) -> str:
                     "findingId": item["id"],
                     **({"findingFingerprint": item["fingerprint"]} if item.get("fingerprint") else {}),
                 },
-                "properties": {"category": item.get("category") or ""},
+                "properties": {
+                    "category": item.get("category") or "",
+                    **({"remediation_v2": sarif_remediation} if sarif_remediation is not None else {}),
+                },
             }
         )
 

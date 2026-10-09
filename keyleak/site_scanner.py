@@ -27,6 +27,8 @@ import requests
 import tldextract
 
 from .browser_scanner import (
+    BLOCKED_REQUEST_SAMPLE_LIMIT,
+    BlockedRequestSummary,
     browser_request_block_reason,
     install_browser_egress_guards,
     run_browser_scan,
@@ -76,7 +78,7 @@ ProgressFn = Optional[Callable[[Dict[str, Any]], None]]
 class CrawlResult:
     pages: List[str]
     failures: List[Dict[str, str]] = field(default_factory=list)
-    blocked_requests: List[str] = field(default_factory=list)
+    blocked_requests: BlockedRequestSummary = field(default_factory=BlockedRequestSummary)
     skipped: int = 0
 
 
@@ -415,7 +417,7 @@ def crawl_pages(
 
     results: List[str] = []
     crawl_failures: List[Dict[str, str]] = []
-    crawl_blocked_requests: List[str] = []
+    crawl_blocked_requests = BlockedRequestSummary()
     queue: deque = deque((r, 0) for r in roots)
 
     with sync_playwright() as p:
@@ -427,18 +429,8 @@ def crawl_pages(
                 if level >= depth:
                     continue
                 context = None
-                blocked_requests: List[str] = []
-                checked_hosts: Dict[str, Optional[str]] = {}
-
-                def page_target_guard(host: str) -> Optional[str]:
-                    if host not in checked_hosts:
-                        try:
-                            checked_hosts[host] = target_guard(host) if target_guard else None
-                        except Exception:
-                            checked_hosts[host] = "Browser request target validation failed."
-                    return checked_hosts[host]
-
-                link_guard = page_target_guard if target_guard is not None else None
+                blocked_requests = BlockedRequestSummary()
+                link_guard = None
                 try:
                     context_kwargs = {
                         "viewport": {"width": 1280, "height": 1024},
@@ -448,7 +440,9 @@ def crawl_pages(
                     if browser_proxy:
                         context_kwargs["proxy"] = browser_proxy
                     context = browser.new_context(**context_kwargs)
-                    install_browser_egress_guards(context, target_guard, blocked_requests)
+                    link_guard = install_browser_egress_guards(
+                        context, target_guard, blocked_requests
+                    )
                     page = context.new_page()
                     page.set_default_timeout(15000)
                     page.goto(url, wait_until="domcontentloaded")
@@ -463,6 +457,7 @@ def crawl_pages(
                     })
                     continue
                 finally:
+                    crawl_blocked_requests.merge(blocked_requests)
                     # Always release the context, even when goto/evaluate raised,
                     # so failed hosts don't leak browser contexts during a crawl.
                     if context is not None:
@@ -470,7 +465,6 @@ def crawl_pages(
                             context.close()
                         except Exception:
                             pass
-                crawl_blocked_requests.extend(blocked_requests)
                 registrable = registrable_domain(urlparse(url).netloc)
                 if collect_raw is not None:
                     for link in links:
@@ -690,6 +684,8 @@ def scan_site(
     scan_skipped: List[str] = []
     crawl_result = CrawlResult(pages=[])
     scan_failures: List[Dict[str, str]] = []
+    page_egress_blocked = BlockedRequestSummary()
+    page_coverage_reasons: List[str] = []
     # Everything from the crawl through the takeover join runs inside a
     # try/finally so the background takeover pool is always shut down — even if
     # crawl_pages or the per-host scan raises.
@@ -722,6 +718,32 @@ def scan_site(
                     proxy=proxy,
                     target_guard=target_guard,
                 )
+                page_coverage = report.extra.get("coverage")
+                if page_coverage is not None and coverage_is_incomplete(page_coverage):
+                    reasons = page_coverage.get("reasons") if isinstance(page_coverage, dict) else None
+                    valid_reasons = []
+                    if isinstance(reasons, list):
+                        valid_reasons = [
+                            reason for reason in reasons
+                            if isinstance(reason, str)
+                        ]
+                    for reason in valid_reasons:
+                        if len(page_coverage_reasons) >= 20:
+                            break
+                        page_coverage_reasons.append(reason)
+                    if not valid_reasons and len(page_coverage_reasons) < 20:
+                        page_coverage_reasons.append("A page scan was incomplete.")
+                blocked = report.extra.get("egress_blocked_requests")
+                if isinstance(blocked, dict) and type(blocked.get("total")) is int:
+                    sample = blocked.get("sample")
+                    if not isinstance(sample, list):
+                        sample = []
+                    page_egress_blocked.merge(BlockedRequestSummary(
+                        total=max(blocked["total"], 0),
+                        sample=[
+                            value[:253] for value in sample if isinstance(value, str)
+                        ][:BLOCKED_REQUEST_SAMPLE_LIMIT],
+                    ))
                 for f in report.findings:
                     pairs.append((f, url))
             except Exception as exc:
@@ -767,20 +789,31 @@ def scan_site(
         crawl_result.skipped + skipped_hosts
         + len(set(scan_skipped) - failed_urls)
     )
+    coverage_reasons = [
+        reason for reason in (
+            f"{len(crawl_failures)} crawl navigation(s) failed." if crawl_failures else "",
+            f"{len(scan_failures)} page scan(s) failed." if scan_failures else "",
+            f"{len(scan_skipped)} page(s) were blocked by the target guard." if scan_skipped else "",
+            f"{crawl_result.blocked_requests.total} crawl request(s) were blocked by policy."
+            if crawl_result.blocked_requests.total else "",
+            f"{page_egress_blocked.total} page request(s) were blocked by policy."
+            if page_egress_blocked.total else "",
+        ) if reason
+    ]
+    for reason in page_coverage_reasons:
+        if reason not in coverage_reasons and len(coverage_reasons) < 20:
+            coverage_reasons.append(reason)
     coverage = build_coverage(
         "site crawl and page scans",
         attempted=attempted_pages,
         completed=max(attempted_pages - len(failed_urls) - skipped_pages, 0),
         skipped=skipped_pages,
         failed=len(failed_urls),
-        reasons=tuple(
-            reason for reason in (
-                f"{len(crawl_failures)} crawl navigation(s) failed." if crawl_failures else "",
-                f"{len(scan_failures)} page scan(s) failed." if scan_failures else "",
-                f"{len(scan_skipped)} page(s) were blocked by the target guard." if scan_skipped else "",
-            ) if reason
-        ),
+        reasons=coverage_reasons,
     )
+    egress_blocked_requests = BlockedRequestSummary()
+    egress_blocked_requests.merge(crawl_result.blocked_requests)
+    egress_blocked_requests.merge(page_egress_blocked)
     report.extra.update({
         "subdomains": subdomains,
         "hosts_scanned": len(subdomains),
@@ -788,7 +821,7 @@ def scan_site(
         "pages_failed": len(scan_failures),
         "scan_failures": scan_failures,
         "crawl_failures": crawl_failures,
-        "egress_blocked_requests": crawl_result.blocked_requests,
+        "egress_blocked_requests": egress_blocked_requests.to_dict(),
         "scan_skipped": scan_skipped,
         "scanned_urls": urls,
         "provenance": provenance,

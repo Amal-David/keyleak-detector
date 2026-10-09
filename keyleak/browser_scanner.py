@@ -26,6 +26,7 @@ import json
 import logging
 import os
 from pathlib import Path
+from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, List, Optional
 from urllib.parse import urljoin, urlparse, urlunparse
 
@@ -33,7 +34,7 @@ from .detectors import detectors_for_packs, normalize_packs
 from .extension_bundle import extension_pattern_payload
 from .local_scanner import scan_text
 from .models import Evidence, Finding, ScanReport, build_coverage, coverage_is_incomplete
-from .net_guard import SSRFBlocked, url_block_reason
+from .net_guard import SSRFBlocked, scan_target_block_reason, url_block_reason
 from .proxy import playwright_proxy
 from .redaction import new_run_salt, redact_url, redact_value, stable_id
 from .fingerprints import finding_fingerprint
@@ -41,6 +42,62 @@ from .reporting import build_report
 
 
 _LOG = logging.getLogger(__name__)
+BLOCKED_REQUEST_SAMPLE_LIMIT = 20
+MAX_BROWSER_GUARD_CHECKS = 10_000
+
+
+@dataclass
+class BlockedRequestSummary:
+    total: int = 0
+    sample: List[str] = field(default_factory=list)
+
+    @staticmethod
+    def _host_sample(value: str) -> str:
+        try:
+            parsed = urlparse(value if "://" in value else f"//{value}")
+        except Exception:
+            return "unknown"
+        return (parsed.hostname or "unknown")[:253]
+
+    def add_sample(self, url: str) -> None:
+        if len(self.sample) < BLOCKED_REQUEST_SAMPLE_LIMIT:
+            self.sample.append(self._host_sample(url))
+
+    def record(self, url: str) -> None:
+        self.total += 1
+        self.add_sample(url)
+
+    def merge(self, other: "BlockedRequestSummary") -> None:
+        self.total += other.total
+        sample_room = BLOCKED_REQUEST_SAMPLE_LIMIT - len(self.sample)
+        if sample_room > 0:
+            self.sample.extend(host[:253] for host in other.sample[:sample_room])
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {"total": self.total, "sample": list(self.sample)}
+
+
+def bounded_browser_target_guard(
+    target_guard: Optional[Callable[[str], Optional[str]]] = None,
+) -> Callable[[str], Optional[str]]:
+    """Bound DNS preflight work while rechecking every request host."""
+    checks = 0
+
+    def check(hostname: str) -> Optional[str]:
+        nonlocal checks
+        if checks >= MAX_BROWSER_GUARD_CHECKS:
+            return "Browser request target validation limit reached."
+        checks += 1
+        try:
+            return (
+                target_guard(hostname)
+                if target_guard is not None
+                else scan_target_block_reason(hostname)
+            )
+        except Exception:
+            return "Browser request target validation failed."
+
+    return check
 
 
 def browser_request_block_reason(
@@ -74,9 +131,10 @@ def browser_request_block_reason(
 def install_browser_egress_guards(
     context: Any,
     target_guard: Optional[Callable[[str], Optional[str]]] = None,
-    blocked_requests: Optional[List[str]] = None,
-) -> None:
+    blocked_requests: Optional[BlockedRequestSummary] = None,
+) -> Callable[[str], Optional[str]]:
     """Guard HTTP requests, redirect hops, and WebSocket handshakes before egress."""
+    target_guard = bounded_browser_target_guard(target_guard)
 
     def handle_request(route: Any) -> None:
         request = route.request
@@ -89,7 +147,7 @@ def install_browser_egress_guards(
                 reason = browser_request_block_reason(current_url, target_guard)
                 if reason:
                     if blocked_requests is not None:
-                        blocked_requests.append(redact_url(current_url))
+                        blocked_requests.record(current_url)
                     route.abort()
                     return
                 response = route.fetch(
@@ -122,11 +180,13 @@ def install_browser_egress_guards(
                     current_method = "GET"
                     current_body = None
                 current_url = next_url
+            if blocked_requests is not None:
+                blocked_requests.record(current_url)
             route.abort()
         except Exception as exc:
             _LOG.debug("Browser request interception failed closed: %s", exc, exc_info=True)
             if blocked_requests is not None:
-                blocked_requests.append(redact_url(current_url))
+                blocked_requests.record(current_url)
             try:
                 route.abort()
             except Exception:
@@ -140,11 +200,12 @@ def install_browser_egress_guards(
     def handle(websocket_route: Any) -> None:
         if browser_request_block_reason(websocket_route.url, target_guard):
             if blocked_requests is not None:
-                blocked_requests.append(redact_url(websocket_route.url))
+                blocked_requests.record(websocket_route.url)
             return
         websocket_route.connect_to_server()
 
     context.route_web_socket("**/*", handle)
+    return target_guard
 
 SCAN_BUDGET_DEFAULT_SECONDS = 30
 DEFAULT_VIEWPORT = {"width": 1280, "height": 1024}
@@ -814,6 +875,7 @@ def run_browser_scan(
             "Install with `pip install playwright && python -m playwright install chromium`."
         ) from exc
 
+    target_guard = bounded_browser_target_guard(target_guard)
     initial_block_reason = browser_request_block_reason(url, target_guard)
     if initial_block_reason:
         raise SSRFBlocked(initial_block_reason)
@@ -835,7 +897,7 @@ def run_browser_scan(
             context_kwargs["storage_state"] = auth_state_path
         context = browser.new_context(**context_kwargs)
         context.add_init_script(init_script)
-        egress_blocked: List[str] = []
+        egress_blocked = BlockedRequestSummary()
         install_browser_egress_guards(context, target_guard, egress_blocked)
 
         page = context.new_page()
@@ -898,10 +960,11 @@ def run_browser_scan(
         "browser page",
         attempted=1,
         completed=1,
-        reasons=(f"Blocked {len(egress_blocked)} unsafe network request(s).",)
-        if egress_blocked else (),
+        reasons=(f"Blocked {egress_blocked.total} unsafe network request(s).",)
+        if egress_blocked.total else (),
     )
     report.extra["coverage_incomplete"] = coverage_is_incomplete(report.extra["coverage"])
+    report.extra["egress_blocked_requests"] = egress_blocked.to_dict()
     report.extra["coverage_limitations"] = [
         "DNS checks are preflight only and do not pin connection IPs; DNS rebinding between resolution and connect remains possible."
     ]

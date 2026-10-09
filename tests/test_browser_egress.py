@@ -9,6 +9,7 @@ import threading
 from unittest import mock
 
 from keyleak.browser_scanner import (
+    BlockedRequestSummary,
     install_browser_egress_guards,
 )
 from keyleak.models import coverage_is_incomplete
@@ -140,16 +141,58 @@ class BrowserEgressTests(unittest.TestCase):
         self.assertIsNotNone(route.fulfilled)
         self.assertEqual(checked_hosts, ["93.184.216.34", "8.8.8.8"])
 
+    def test_redirect_limit_is_counted_before_abort(self):
+        context = _Context()
+        blocked = BlockedRequestSummary()
+        install_browser_egress_guards(
+            context,
+            target_guard=lambda _host: None,
+            blocked_requests=blocked,
+        )
+        responses = [
+            _Response(302, {"location": f"/redirect-{index}"})
+            for index in range(1, 22)
+        ]
+        route = _Route("https://example.test/start", responses)
+
+        context.request_route[1](route)
+
+        self.assertEqual(len(route.fetches), 21)
+        self.assertTrue(route.aborted)
+        self.assertEqual(blocked.total, 1)
+        self.assertEqual(blocked.sample, ["example.test"])
+
+    def test_blocked_request_summary_bounds_redacted_samples(self):
+        blocked = BlockedRequestSummary()
+
+        for index in range(25):
+            blocked.record(f"https://example.test/{index}?token=secret-value")
+
+        self.assertEqual(blocked.total, 25)
+        self.assertEqual(len(blocked.sample), 20)
+        self.assertEqual(set(blocked.sample), {"example.test"})
+
+    def test_merging_blocked_ipv6_samples_preserves_the_host(self):
+        original = BlockedRequestSummary()
+        original.record("http://[::1]:8080/private?token=secret")
+        merged = BlockedRequestSummary()
+
+        merged.merge(original)
+
+        self.assertEqual(merged.total, 1)
+        self.assertEqual(merged.sample, ["::1"])
+
     def test_blocks_unsafe_websocket_before_connecting(self):
         context = _Context()
-        blocked_requests = []
+        blocked_requests = BlockedRequestSummary()
         install_browser_egress_guards(context, blocked_requests=blocked_requests)
         socket = mock.Mock(url="ws://127.0.0.1:8080/socket")
 
         context.websocket_route[1](socket)
 
         socket.connect_to_server.assert_not_called()
-        self.assertEqual(blocked_requests, ["ws://127.0.0.1:8080/socket"])
+        self.assertEqual(blocked_requests.total, 1)
+        self.assertEqual(blocked_requests.sample, ["127.0.0.1"])
 
     def test_allows_safe_cross_origin_websocket(self):
         context = _Context()
