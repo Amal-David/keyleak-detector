@@ -38,7 +38,12 @@ class BinaryScannerTests(unittest.TestCase):
         ):
             with self.subTest(start=start, payload=encoded[:8]):
                 findings = scan_binary_bytes(encoded, "artifact.bin", detectors)
-                finding = next(item for item in findings if item.detector_id == "leak.aws_access_key")
+                matches = [
+                    item for item in findings
+                    if item.detector_id == "leak.aws_access_key"
+                ]
+                self.assertEqual(len(matches), 1)
+                finding = matches[0]
                 self.assertEqual(finding.evidence.byte_offset, start)
                 self.assertEqual(finding.evidence.line, 2)
                 self.assertEqual(encoded[start:start + len(token_bytes)], token_bytes)
