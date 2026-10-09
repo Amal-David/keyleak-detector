@@ -5,6 +5,7 @@ from __future__ import annotations
 import math
 import os
 import re
+import stat
 from pathlib import Path
 from typing import Iterable, List, Optional, Sequence, Tuple
 
@@ -13,11 +14,13 @@ from .detectors_ast import detect_worm_shape, is_worm_shape_target
 from .detectors_fuzzy import FingerprintHit, load_corpus, match_fingerprints
 from .detectors_splittoken import SplitTokenMatch, collect_fragments, find_split_tokens
 from .fingerprints import finding_fingerprint
-from .models import Evidence, Finding, confidence_for_severity
+from .models import Evidence, Finding, build_coverage, confidence_for_severity
 from .privacy_filter import scrub_snippet as pii_scrub_snippet
 from .redaction import new_run_salt, redact_snippet, redact_url, redact_value
 from .reporting import build_report
-from .sourcemaps import SourceMapError, reconstruct_originals
+from .sourcemaps import (
+    reconstruct_originals,
+)
 
 
 # Lazy: cache the loaded fingerprint corpus across scans within one process.
@@ -36,6 +39,9 @@ def _get_fingerprint_corpus():
 
 DEFAULT_INCLUDES = ("env", "mcp", "ci", "docker", "sourcemaps", "logs")
 MAX_FILE_BYTES = 5 * 1024 * 1024
+MAX_OPT_IN_FILES = 1000
+MAX_OPT_IN_BYTES = 50 * 1024 * 1024
+MAX_OPT_IN_DIRECTORIES = 5000
 SKIP_DIRS = {
     ".git",
     ".hg",
@@ -60,6 +66,8 @@ def scan_path(
     packs: Optional[Iterable[str]] = None,
     *,
     run_salt: Optional[bytes] = None,
+    scan_node_modules: bool = False,
+    scan_dist: bool = False,
 ):
     target = Path(path).expanduser().resolve()
     findings: List[Finding] = []
@@ -68,10 +76,30 @@ def scan_path(
     if run_salt is None:
         run_salt = new_run_salt()
 
+    coverage_state = {"attempted": 0, "completed": 0, "skipped": 0, "failed": 0, "reasons": []}
+    try:
+        root_mode = target.stat().st_mode
+    except OSError:
+        coverage_state["attempted"] = 1
+        _record_coverage(coverage_state, "failed", "scan root is missing or not a regular file or directory")
+        target_is_file = False
+    else:
+        target_is_file = stat.S_ISREG(root_mode)
+        if not target_is_file and not stat.S_ISDIR(root_mode):
+            coverage_state["attempted"] = 1
+            _record_coverage(coverage_state, "failed", "scan root is missing or not a regular file or directory")
+
     code_files: List[Path] = []
-    for file_path, categories in _iter_candidate_files(target, active_includes):
+    for file_path, categories in _iter_candidate_files(
+        target, active_includes, scan_node_modules=scan_node_modules,
+        scan_dist=scan_dist, coverage=coverage_state, target_is_file=target_is_file,
+    ):
+        coverage_state["attempted"] += 1
         findings.extend(
-            scan_file(file_path, detectors_for_categories(categories, active_packs), run_salt=run_salt)
+            scan_file(
+                file_path, detectors_for_categories(categories, active_packs),
+                run_salt=run_salt, coverage=coverage_state, scan_root=target,
+            )
         )
         if file_path.suffix.lower() in {".js", ".mjs", ".cjs", ".ts", ".tsx", ".jsx", ".py"}:
             code_files.append(file_path)
@@ -98,7 +126,16 @@ def scan_path(
         from .lifecycle_audit import audit_node_dependencies
         findings.extend(audit_node_dependencies(str(target)))
 
-    return build_report(str(target), findings, scan_mode="local", profile=profile, packs=active_packs)
+    report = build_report(str(target), findings, scan_mode="local", profile=profile, packs=active_packs)
+    scopes = ["local files"]
+    if scan_node_modules:
+        scopes.append("node_modules sources")
+    if scan_dist:
+        scopes.append("root dist artifacts")
+    report.extra["coverage"] = build_coverage(
+        ", ".join(scopes), **coverage_state,
+    )
+    return report
 
 
 def _split_token_finding(match) -> Finding:
@@ -138,12 +175,18 @@ def scan_file(
     detectors: Iterable[Detector],
     *,
     run_salt: Optional[bytes] = None,
+    coverage: Optional[dict] = None,
+    scan_root: Optional[Path] = None,
 ) -> List[Finding]:
     try:
         if file_path.stat().st_size > MAX_FILE_BYTES:
+            if coverage is not None:
+                _record_coverage(coverage, "skipped", "file exceeds per-file size limit")
             return []
         content = file_path.read_text(encoding="utf-8", errors="ignore")
     except OSError:
+        if coverage is not None:
+            _record_coverage(coverage, "failed", "file could not be read")
         return []
 
     detectors_list = list(detectors)
@@ -153,10 +196,15 @@ def scan_file(
     # comment surfaces src/components/Auth.tsx:42 instead of a minified
     # one-line bundle. Skip the deobfuscation step for non-JS files.
     if file_path.suffix.lower() in {".js", ".mjs", ".cjs", ".html", ".htm"}:
-        try:
-            originals = reconstruct_originals(content, bundle_path=file_path)
-        except SourceMapError:
-            originals = []
+        def record_map_gap(reason: str) -> None:
+            if coverage is not None:
+                coverage["attempted"] += 1
+                _record_coverage(coverage, "skipped", reason)
+
+        originals = reconstruct_originals(
+            content, bundle_path=file_path, root=scan_root,
+            on_incomplete=record_map_gap if coverage is not None else None,
+        )
         for entry in originals:
             # Tag the reconstructed source with both the original logical name
             # (so the developer can find the line) and the bundle path (so
@@ -174,6 +222,8 @@ def scan_file(
         if corpus:
             for hit in match_fingerprints(content, corpus):
                 findings.append(_fingerprint_finding(str(file_path), hit))
+    if coverage is not None:
+        coverage["completed"] += 1
     return findings
 
 
@@ -340,23 +390,138 @@ def scan_text(
     return findings
 
 
-def _iter_candidate_files(target: Path, includes: Sequence[str]):
-    if target.is_file():
+def _iter_candidate_files(
+    target: Path,
+    includes: Sequence[str],
+    *,
+    scan_node_modules: bool = False,
+    scan_dist: bool = False,
+    coverage: Optional[dict] = None,
+    target_is_file: bool = False,
+):
+    if target_is_file:
         categories = _categories_for_file(target, includes)
         if categories:
             yield target, categories
         return
 
-    for root, dirs, files in os.walk(target):
-        dirs[:] = [directory for directory in dirs if directory not in SKIP_DIRS]
+    budgets = {
+        "node_modules": {"files": 0, "bytes": 0},
+        "dist": {"files": 0, "bytes": 0},
+    }
+    capped = set()
+    traversed_dirs = {"node_modules": 0, "dist": 0}
+
+    def walk_error(_error):
+        if coverage is not None:
+            coverage["attempted"] += 1
+            _record_coverage(coverage, "failed", "directory could not be read")
+
+    for root, dirs, files in os.walk(target, followlinks=False, onerror=walk_error):
         root_path = Path(root)
+        in_node_modules = "node_modules" in root_path.relative_to(target).parts
+        in_root_dist = root_path == target / "dist" or (target / "dist") in root_path.parents
+        active_scope = "node_modules" if in_node_modules else "dist" if in_root_dist else None
+        if active_scope:
+            if active_scope in capped:
+                dirs[:] = []
+                continue
+            traversed_dirs[active_scope] += 1
+            if traversed_dirs[active_scope] > MAX_OPT_IN_DIRECTORIES and active_scope not in capped:
+                capped.add(active_scope)
+                dirs[:] = []
+                if coverage is not None:
+                    coverage["attempted"] += 1
+                    _record_coverage(coverage, "skipped", f"bounded {active_scope} directory limit reached")
+                continue
+        kept_dirs = []
+        for directory in dirs:
+            directory_path = root_path / directory
+            rel_parts = directory_path.relative_to(target).parts
+            is_root_dist = len(rel_parts) == 1 and directory == "dist"
+            selected_scope = (
+                (directory == "node_modules" and scan_node_modules)
+                or (is_root_dist and scan_dist)
+                or (in_node_modules and directory == "dist")
+            )
+            if directory in SKIP_DIRS and not selected_scope:
+                continue
+            if directory_path.is_symlink():
+                if coverage is not None:
+                    coverage["attempted"] += 1
+                    _record_coverage(coverage, "skipped", "directory symlink was not traversed")
+                continue
+            kept_dirs.append(directory)
+        dirs[:] = kept_dirs
         for filename in files:
             file_path = root_path / filename
-            if _is_generated_file(file_path):
-                continue
-            categories = _categories_for_file(file_path, includes)
-            if categories:
-                yield file_path, categories
+            candidate = _candidate_for_local_scan(
+                file_path, target, includes, scan_node_modules, scan_dist,
+                budgets, capped, coverage,
+            )
+            if candidate is not None:
+                yield candidate
+
+
+def _candidate_for_local_scan(
+    file_path: Path,
+    target: Path,
+    includes: Sequence[str],
+    scan_node_modules: bool,
+    scan_dist: bool,
+    budgets: dict,
+    capped: set,
+    coverage: Optional[dict],
+) -> Optional[Tuple[Path, List[str]]]:
+    rel_parts = file_path.relative_to(target).parts
+    in_node_modules = "node_modules" in rel_parts
+    in_root_dist = (target / "dist") in file_path.parents
+    suffix = file_path.suffix.lower()
+    if in_node_modules and (
+        not scan_node_modules
+        or suffix not in {".js", ".mjs", ".cjs", ".ts", ".tsx", ".jsx"}
+    ):
+        return None
+    if in_root_dist and (
+        not scan_dist
+        or suffix not in {".js", ".mjs", ".cjs", ".ts", ".tsx", ".jsx", ".map"}
+    ):
+        return None
+    if _is_generated_file(file_path):
+        return None
+    try:
+        resolved_file = file_path.resolve(strict=True)
+        resolved_file.relative_to(target)
+    except (OSError, ValueError):
+        if coverage is not None:
+            coverage["attempted"] += 1
+            _record_coverage(coverage, "skipped", "file symlink escaped scan root or could not be resolved")
+        return None
+    scope = "node_modules" if in_node_modules else "dist" if in_root_dist else None
+    if scope:
+        if scope in capped:
+            return None
+        budget = budgets[scope]
+        try:
+            size = resolved_file.stat().st_size
+        except OSError:
+            size = MAX_FILE_BYTES + 1
+        if budget["files"] >= MAX_OPT_IN_FILES or budget["bytes"] + size > MAX_OPT_IN_BYTES:
+            capped.add(scope)
+            if coverage is not None:
+                coverage["attempted"] += 1
+                _record_coverage(coverage, "skipped", f"bounded {scope} file or byte limit reached")
+            return None
+        budget["files"] += 1
+        budget["bytes"] += size
+    categories = [] if in_node_modules else _categories_for_file(file_path, includes)
+    return (file_path, categories) if categories or in_node_modules else None
+
+
+def _record_coverage(coverage: dict, field: str, reason: str) -> None:
+    coverage[field] += 1
+    if len(coverage["reasons"]) < 20:
+        coverage["reasons"].append(reason)
 
 
 def _is_generated_file(path: Path) -> bool:

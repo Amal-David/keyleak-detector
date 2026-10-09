@@ -6,6 +6,55 @@
  */
 
 const MSG_TYPE = '__keyleak_intercepted__';
+const CONTROL_TYPE = '__keyleak_monitoring_control__';
+let ownerPaused = true;
+let topLevelPaused = true;
+let monitoringEnabled = false;
+let observer = null;
+
+function updateMonitoringState() {
+  const enabled = !ownerPaused && !topLevelPaused;
+  if (enabled === monitoringEnabled) return;
+  monitoringEnabled = enabled;
+  const message = { type: CONTROL_TYPE, enabled };
+  window.postMessage(message, '*');
+  for (let index = 0; index < window.frames.length; index += 1) {
+    window.frames[index].postMessage(message, '*');
+  }
+  if (enabled && document.readyState !== 'loading') scanPageContent();
+  setObserverEnabled(enabled);
+}
+
+function setObserverEnabled(enabled) {
+  if (!observer) return;
+  if (enabled && document.documentElement) {
+    observer.observe(document.documentElement, { childList: true, subtree: true });
+  } else {
+    observer.disconnect();
+  }
+}
+
+chrome.runtime.sendMessage({ action: 'get_origin_state', pageUrl: window.location.href }, (state) => {
+  if (chrome.runtime.lastError || !state?.ok) return;
+  ownerPaused = state.ownerPaused;
+  topLevelPaused = state.topPaused;
+  updateMonitoringState();
+});
+
+chrome.runtime.onMessage.addListener((message) => {
+  if (message.action !== 'origin_pause_changed') return;
+  if (message.origin === window.location.origin) {
+    ownerPaused = message.paused;
+    topLevelPaused = message.paused;
+  }
+  updateMonitoringState();
+});
+
+window.addEventListener('message', (event) => {
+  if (event.source !== window.parent || event.data?.type !== CONTROL_TYPE) return;
+  topLevelPaused = event.data.enabled !== true;
+  updateMonitoringState();
+});
 
 function safeSendMessage(payload) {
   try {
@@ -47,6 +96,7 @@ function sendRemoteUrl(url, source, captureType) {
 // Forward intercepted network data to service worker
 window.addEventListener('message', (event) => {
   if (event.source !== window || !event.data || event.data.type !== MSG_TYPE) return;
+  if (ownerPaused || topLevelPaused) return;
 
   if (event.data.captureType === 'worker-script') {
     sendRemoteUrl(event.data.url, `Worker Script: ${event.data.url}`, 'external-script');
@@ -82,6 +132,8 @@ window.addEventListener('message', (event) => {
 
 // Scan inline scripts and data attributes after page loads
 function scanPageContent() {
+  if (ownerPaused || topLevelPaused) return;
+  setObserverEnabled(monitoringEnabled);
   // Collect inline script contents
   const scripts = document.querySelectorAll('script:not([src])');
   scripts.forEach((script, idx) => {
@@ -171,7 +223,8 @@ if (document.readyState === 'loading') {
 }
 
 // Also observe for dynamically added scripts
-const observer = new MutationObserver((mutations) => {
+observer = new MutationObserver((mutations) => {
+  if (ownerPaused || topLevelPaused) return;
   for (const mutation of mutations) {
     for (const node of mutation.addedNodes) {
       if (node.nodeName === 'SCRIPT' && !node.src && node.textContent?.trim().length > 20) {
@@ -188,5 +241,3 @@ const observer = new MutationObserver((mutations) => {
     }
   }
 });
-
-observer.observe(document.documentElement, { childList: true, subtree: true });

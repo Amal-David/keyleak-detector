@@ -471,6 +471,53 @@ class HtmlReportTests(unittest.TestCase):
         self.assertIn("&lt;script&gt;alert", output)
         self.assertIn("&lt;script&gt;evil", output)
 
+    def test_structured_remediation_renders_escaped_html_and_sarif_with_legacy_fallback(self):
+        structured = Finding(
+            type="structured_fix",
+            severity="high",
+            confidence=0.9,
+            detector_id="test:structured_fix",
+            source="fixture",
+            evidence=Evidence(source="fixture", redacted_value="[redacted]"),
+            risk_reason="Review the exposure.",
+            remediation="Legacy fix text.",
+            remediation_v2={
+                "what_leaked": "Token <script>",
+                "why_it_matters": "Attacker's access & data.",
+                "fix_steps": ["Rotate <key> & revoke it."],
+                "verify_command": "keyleak verify --target <prod>",
+            },
+        )
+        legacy = Finding(
+            type="legacy_fix",
+            severity="medium",
+            confidence=0.7,
+            detector_id="test:legacy_fix",
+            source="fixture",
+            evidence=Evidence(source="fixture", redacted_value="[redacted]"),
+            risk_reason="Review the finding.",
+            remediation="Keep <input> safe.",
+        )
+        report = build_report("fixture", [structured, legacy])
+
+        html_output = format_html(report)
+        self.assertIn("What leaked: Token &lt;script&gt;", html_output)
+        self.assertIn("Attacker&#x27;s access &amp; data.", html_output)
+        self.assertIn("Rotate &lt;key&gt; &amp; revoke it.", html_output)
+        self.assertIn("keyleak verify --target &lt;prod&gt;", html_output)
+        self.assertIn("Fix: <code>Keep &lt;input&gt; safe.</code>", html_output)
+        self.assertNotIn("<script>", html_output)
+
+        sarif = json.loads(format_sarif(report))
+        rules = {rule["id"]: rule for rule in sarif["runs"][0]["tool"]["driver"]["rules"]}
+        structured_rule = rules["test:structured_fix"]
+        self.assertIn("What leaked: Token <script>", structured_rule["help"]["text"])
+        self.assertEqual(
+            structured_rule["properties"]["remediation_v2"]["fix_steps"],
+            ["Rotate <key> & revoke it."],
+        )
+        self.assertEqual(rules["test:legacy_fix"]["help"]["text"], "Keep <input> safe.")
+
     def test_html_safe_verdict(self):
         report = build_report("https://safe.example.com", [], scan_mode="local")
         output = format_html(report)

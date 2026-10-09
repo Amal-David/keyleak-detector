@@ -241,6 +241,33 @@ export function normalizeFinding(raw) {
   };
 }
 
+export function persistentSnapshot(data) {
+  const safe = JSON.parse(JSON.stringify(data));
+  const stripRawValues = value => {
+    if (!value || typeof value !== 'object') return;
+    if (Array.isArray(value)) {
+      value.forEach(stripRawValues);
+      return;
+    }
+    delete value.raw_value;
+    delete value.raw_sample_rows;
+    delete value.rawSampleRows;
+    for (const nested of Object.values(value)) stripRawValues(nested);
+  };
+  stripRawValues(safe);
+  return safe;
+}
+
+export function sanitizeStoredTabData(entries, storagePrefix) {
+  const updates = {};
+  for (const [key, value] of Object.entries(entries || {})) {
+    if (!key.startsWith(storagePrefix)) continue;
+    const safe = persistentSnapshot(value);
+    if (JSON.stringify(safe) !== JSON.stringify(value)) updates[key] = safe;
+  }
+  return updates;
+}
+
 export function summarizeFindings(findings) {
   const summary = {
     total_findings: findings.length,

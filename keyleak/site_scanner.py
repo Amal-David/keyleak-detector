@@ -19,14 +19,26 @@ import socket
 import subprocess
 import sys
 from collections import deque
+from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, List, Optional, Set, Tuple
 from urllib.parse import parse_qs, urlparse, urlsplit
 
 import requests
 import tldextract
 
-from .browser_scanner import run_browser_scan
-from .models import Evidence, Finding, ScanReport, confidence_for_severity
+from .browser_scanner import (
+    browser_request_block_reason,
+    install_browser_egress_guards,
+    run_browser_scan,
+)
+from .models import (
+    Evidence,
+    Finding,
+    ScanReport,
+    build_coverage,
+    confidence_for_severity,
+    coverage_is_incomplete,
+)
 from .proxy import playwright_proxy, requests_proxies
 from .redaction import redact_url
 from .reporting import build_report
@@ -58,6 +70,14 @@ MAX_SUBDOMAINS_DEFAULT = 50
 MAX_PAGES_DEFAULT = 100
 
 ProgressFn = Optional[Callable[[Dict[str, Any]], None]]
+
+
+@dataclass
+class CrawlResult:
+    pages: List[str]
+    failures: List[Dict[str, str]] = field(default_factory=list)
+    blocked_requests: List[str] = field(default_factory=list)
+    skipped: int = 0
 
 
 def _emit(on_progress: ProgressFn, phase: str, message: str,
@@ -338,7 +358,7 @@ def _filter_links(
             continue
         if registrable_domain(p.netloc) != registrable:
             continue
-        if target_guard is not None and target_guard(p.hostname) is not None:
+        if target_guard is not None and browser_request_block_reason(link, target_guard) is not None:
             continue
         normalized = _normalize_url(link)
         if normalized in seen:
@@ -358,7 +378,7 @@ def crawl_pages(
     collect_raw: Optional[Set[str]] = None,
     target_guard: Optional[Callable[[str], Optional[str]]] = None,
     on_progress: ProgressFn = None,
-) -> List[str]:
+) -> CrawlResult:
     """Breadth-first crawl across ``hosts`` up to ``depth`` link levels.
 
     Same-registrable-domain scope, normalized dedup, global ``max_pages`` cap.
@@ -369,8 +389,10 @@ def crawl_pages(
     """
     seen: Set[str] = set()
     roots = []
+    skipped_roots = 0
     for h in hosts:
-        if target_guard is not None and target_guard(h) is not None:
+        if browser_request_block_reason(f"https://{h}", target_guard) is not None:
+            skipped_roots += 1
             continue
         root = _normalize_url(f"https://{h}")
         if root not in seen:
@@ -380,13 +402,24 @@ def crawl_pages(
     try:
         from playwright.sync_api import sync_playwright
     except ImportError:
-        return roots[:max_pages]
+        fallback_roots = roots[:max_pages]
+        failures = [{
+                "url": redact_url(root),
+                "error": "Playwright unavailable; page-link discovery was skipped",
+            } for root in fallback_roots]
+        return CrawlResult(
+            pages=fallback_roots,
+            failures=failures,
+            skipped=skipped_roots + len(roots) - len(fallback_roots),
+        )
 
     results: List[str] = []
+    crawl_failures: List[Dict[str, str]] = []
+    crawl_blocked_requests: List[str] = []
     queue: deque = deque((r, 0) for r in roots)
 
     with sync_playwright() as p:
-        browser = p.chromium.launch(headless=headless, proxy=playwright_proxy(proxy))
+        browser = p.chromium.launch(headless=headless)
         try:
             while queue and len(results) < max_pages:
                 url, level = queue.popleft()
@@ -394,8 +427,28 @@ def crawl_pages(
                 if level >= depth:
                     continue
                 context = None
+                blocked_requests: List[str] = []
+                checked_hosts: Dict[str, Optional[str]] = {}
+
+                def page_target_guard(host: str) -> Optional[str]:
+                    if host not in checked_hosts:
+                        try:
+                            checked_hosts[host] = target_guard(host) if target_guard else None
+                        except Exception:
+                            checked_hosts[host] = "Browser request target validation failed."
+                    return checked_hosts[host]
+
+                link_guard = page_target_guard if target_guard is not None else None
                 try:
-                    context = browser.new_context(viewport={"width": 1280, "height": 1024})
+                    context_kwargs = {
+                        "viewport": {"width": 1280, "height": 1024},
+                        "service_workers": "block",
+                    }
+                    browser_proxy = playwright_proxy(proxy)
+                    if browser_proxy:
+                        context_kwargs["proxy"] = browser_proxy
+                    context = browser.new_context(**context_kwargs)
+                    install_browser_egress_guards(context, target_guard, blocked_requests)
                     page = context.new_page()
                     page.set_default_timeout(15000)
                     page.goto(url, wait_until="domcontentloaded")
@@ -404,6 +457,10 @@ def crawl_pages(
                         ".map(a => a.href).filter(h => h.startsWith('http'))"
                     )
                 except Exception:
+                    crawl_failures.append({
+                        "url": redact_url(url),
+                        "error": "Navigation or link extraction failed",
+                    })
                     continue
                 finally:
                     # Always release the context, even when goto/evaluate raised,
@@ -413,6 +470,7 @@ def crawl_pages(
                             context.close()
                         except Exception:
                             pass
+                crawl_blocked_requests.extend(blocked_requests)
                 registrable = registrable_domain(urlparse(url).netloc)
                 if collect_raw is not None:
                     for link in links:
@@ -421,17 +479,23 @@ def crawl_pages(
                         lp = urlparse(link)
                         if lp.scheme in ("http", "https") and lp.netloc \
                                 and registrable_domain(lp.netloc) == registrable \
-                                and not (target_guard is not None and target_guard(lp.hostname) is not None):
+                                and (link_guard is None
+                                     or browser_request_block_reason(link, link_guard) is None):
                             collect_raw.add(link)
                 remaining = max_pages - (len(results) + len(queue))
-                for nu in _filter_links(links, registrable, seen, remaining, target_guard):
+                for nu in _filter_links(links, registrable, seen, remaining, link_guard):
                     queue.append((nu, level + 1))
         finally:
             browser.close()
 
     _emit(on_progress, "crawl", f"Found {len(results)} page(s) to scan",
           len(results), len(results))
-    return results
+    return CrawlResult(
+        pages=results,
+        failures=crawl_failures,
+        blocked_requests=crawl_blocked_requests,
+        skipped=skipped_roots + len(queue),
+    )
 
 
 def _merge_findings(
@@ -582,6 +646,7 @@ def scan_site(
 
     # SSRF guard: drop any discovered subdomain that resolves to a blocked
     # (internal/metadata) address before it is ever probed or crawled.
+    skipped_hosts = 0
     if target_guard is not None:
         safe_hosts: List[str] = []
         for host in subdomains:
@@ -589,6 +654,7 @@ def scan_site(
             if reason is None:
                 safe_hosts.append(host)
             else:
+                skipped_hosts += 1
                 _emit(on_progress, "subdomains", f"Skipping {host}: {reason}")
         # Only fall back to the apex if it isn't itself blocked — never re-add a
         # host target_guard just rejected (it would still be probed for takeover).
@@ -621,23 +687,27 @@ def scan_site(
     takeover_count = 0
     total = 0
     urls: List[str] = []
+    scan_skipped: List[str] = []
+    crawl_result = CrawlResult(pages=[])
     scan_failures: List[Dict[str, str]] = []
     # Everything from the crawl through the takeover join runs inside a
     # try/finally so the background takeover pool is always shut down — even if
     # crawl_pages or the per-host scan raises.
     try:
-        urls = crawl_pages(
+        crawl_result = crawl_pages(
             subdomains, depth=depth, max_pages=max_pages,
             headless=headless, proxy=proxy, collect_raw=raw_query_urls,
             target_guard=target_guard, on_progress=on_progress,
         )
+        urls = crawl_result.pages
 
         for finding in _dangerous_param_findings(raw_query_urls):
             pairs.append((finding, finding.evidence.request_url))
         total = len(urls)
         for i, url in enumerate(urls):
             # SSRF guard: a crawled link may resolve to an internal address.
-            if target_guard is not None and target_guard(urlparse(url).hostname) is not None:
+            if target_guard is not None and browser_request_block_reason(url, target_guard) is not None:
+                scan_skipped.append(redact_url(url))
                 continue
             safe_url = redact_url(url)
             _emit(on_progress, "scan", f"Scanning [{i + 1}/{total}] {safe_url}", i + 1, total)
@@ -650,6 +720,7 @@ def scan_site(
                     baas_tables=baas_tables,
                     scan_budget_seconds=scan_budget_seconds,
                     proxy=proxy,
+                    target_guard=target_guard,
                 )
                 for f in report.findings:
                     pairs.append((f, url))
@@ -689,15 +760,44 @@ def scan_site(
         packs=["leak", "appsec", "access-control", "baas"],
         provenance=provenance,
     )
+    crawl_failures = crawl_result.failures
+    failed_urls = {failure["url"] for failure in crawl_failures + scan_failures}
+    attempted_pages = len(urls) + crawl_result.skipped + skipped_hosts
+    skipped_pages = (
+        crawl_result.skipped + skipped_hosts
+        + len(set(scan_skipped) - failed_urls)
+    )
+    coverage = build_coverage(
+        "site crawl and page scans",
+        attempted=attempted_pages,
+        completed=max(attempted_pages - len(failed_urls) - skipped_pages, 0),
+        skipped=skipped_pages,
+        failed=len(failed_urls),
+        reasons=tuple(
+            reason for reason in (
+                f"{len(crawl_failures)} crawl navigation(s) failed." if crawl_failures else "",
+                f"{len(scan_failures)} page scan(s) failed." if scan_failures else "",
+                f"{len(scan_skipped)} page(s) were blocked by the target guard." if scan_skipped else "",
+            ) if reason
+        ),
+    )
     report.extra.update({
         "subdomains": subdomains,
         "hosts_scanned": len(subdomains),
         "pages_scanned": total,
         "pages_failed": len(scan_failures),
         "scan_failures": scan_failures,
+        "crawl_failures": crawl_failures,
+        "egress_blocked_requests": crawl_result.blocked_requests,
+        "scan_skipped": scan_skipped,
         "scanned_urls": urls,
         "provenance": provenance,
         "subdomain_takeovers": takeover_count,
         "discovery_sources": discovery_sources,
+        "coverage": coverage,
+        "coverage_incomplete": coverage_is_incomplete(coverage),
+        "coverage_limitations": [
+            "DNS checks are preflight only and do not pin connection IPs; DNS rebinding between resolution and connect remains possible."
+        ],
     })
     return report

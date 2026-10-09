@@ -27,12 +27,13 @@ import logging
 import os
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
-from urllib.parse import urlparse
+from urllib.parse import urljoin, urlparse, urlunparse
 
 from .detectors import detectors_for_packs, normalize_packs
 from .extension_bundle import extension_pattern_payload
 from .local_scanner import scan_text
-from .models import Evidence, Finding, ScanReport
+from .models import Evidence, Finding, ScanReport, build_coverage, coverage_is_incomplete
+from .net_guard import SSRFBlocked, url_block_reason
 from .proxy import playwright_proxy
 from .redaction import new_run_salt, redact_url, redact_value, stable_id
 from .fingerprints import finding_fingerprint
@@ -40,6 +41,110 @@ from .reporting import build_report
 
 
 _LOG = logging.getLogger(__name__)
+
+
+def browser_request_block_reason(
+    url: str,
+    target_guard: Optional[Callable[[str], Optional[str]]] = None,
+) -> Optional[str]:
+    """Apply the scanner's HTTP and WebSocket target policy before egress."""
+    try:
+        parsed = urlparse(url)
+    except Exception:
+        return "Unparseable browser request URL."
+    scheme = parsed.scheme.lower()
+    if scheme in {"data", "blob", "about"}:
+        return None
+    if scheme in {"ws", "wss"}:
+        parsed = parsed._replace(scheme="https" if scheme == "wss" else "http")
+        url = urlunparse(parsed)
+    elif scheme not in {"http", "https"}:
+        return f"Refusing browser request scheme {scheme!r}."
+
+    if target_guard is None:
+        return url_block_reason(url)
+    if not parsed.hostname:
+        return "Browser request URL has no host."
+    try:
+        return target_guard(parsed.hostname)
+    except Exception:
+        return "Browser request target validation failed."
+
+
+def install_browser_egress_guards(
+    context: Any,
+    target_guard: Optional[Callable[[str], Optional[str]]] = None,
+    blocked_requests: Optional[List[str]] = None,
+) -> None:
+    """Guard HTTP requests, redirect hops, and WebSocket handshakes before egress."""
+
+    def handle_request(route: Any) -> None:
+        request = route.request
+        current_url = request.url
+        current_method = request.method
+        current_body = request.post_data_buffer
+        headers = dict(request.headers)
+        try:
+            for _ in range(21):
+                reason = browser_request_block_reason(current_url, target_guard)
+                if reason:
+                    if blocked_requests is not None:
+                        blocked_requests.append(redact_url(current_url))
+                    route.abort()
+                    return
+                response = route.fetch(
+                    max_redirects=0,
+                    **({
+                        "url": current_url,
+                        "method": current_method,
+                        "post_data": current_body,
+                        "headers": headers,
+                    } if current_url != request.url else {}),
+                )
+                location = response.headers.get("location")
+                if response.status not in (301, 302, 303, 307, 308) or not location:
+                    route.fulfill(response=response)
+                    return
+                next_url = urljoin(current_url, location)
+                next_host = (urlparse(next_url).hostname or "").lower()
+                current_host = (urlparse(current_url).hostname or "").lower()
+                if next_host != current_host:
+                    headers = {
+                        key: value for key, value in headers.items()
+                        if key.lower() not in {
+                            "authorization", "cookie", "proxy-authorization",
+                            "apikey", "x-api-key",
+                        }
+                    }
+                if response.status == 303 and current_method != "HEAD" or (
+                    response.status in (301, 302) and current_method == "POST"
+                ):
+                    current_method = "GET"
+                    current_body = None
+                current_url = next_url
+            route.abort()
+        except Exception as exc:
+            _LOG.debug("Browser request interception failed closed: %s", exc, exc_info=True)
+            if blocked_requests is not None:
+                blocked_requests.append(redact_url(current_url))
+            try:
+                route.abort()
+            except Exception:
+                pass
+
+    context.route("**/*", handle_request)
+
+    if not hasattr(context, "route_web_socket"):
+        raise RuntimeError("Playwright WebSocket request routing is unavailable")
+
+    def handle(websocket_route: Any) -> None:
+        if browser_request_block_reason(websocket_route.url, target_guard):
+            if blocked_requests is not None:
+                blocked_requests.append(redact_url(websocket_route.url))
+            return
+        websocket_route.connect_to_server()
+
+    context.route_web_socket("**/*", handle)
 
 SCAN_BUDGET_DEFAULT_SECONDS = 30
 DEFAULT_VIEWPORT = {"width": 1280, "height": 1024}
@@ -693,6 +798,7 @@ def run_browser_scan(
     baas_prober: Optional[Any] = None,
     baas_tables: Optional[List[str]] = None,
     proxy: Optional[str] = None,
+    target_guard: Optional[Callable[[str], Optional[str]]] = None,
 ) -> ScanReport:
     """Drive Playwright Chromium, inject the analyzer, return a ScanReport.
 
@@ -708,17 +814,29 @@ def run_browser_scan(
             "Install with `pip install playwright && python -m playwright install chromium`."
         ) from exc
 
+    initial_block_reason = browser_request_block_reason(url, target_guard)
+    if initial_block_reason:
+        raise SSRFBlocked(initial_block_reason)
+
     init_script = _build_init_script()
     run_salt = new_run_salt()
     cdp_capture: Optional[_CdpNetworkCapture] = None
 
     with sync_playwright() as p:
-        browser = p.chromium.launch(headless=headless, proxy=playwright_proxy(proxy))
-        context_kwargs: Dict[str, Any] = {"viewport": DEFAULT_VIEWPORT}
+        browser = p.chromium.launch(headless=headless)
+        context_kwargs: Dict[str, Any] = {
+            "viewport": DEFAULT_VIEWPORT,
+            "service_workers": "block",
+        }
+        browser_proxy = playwright_proxy(proxy)
+        if browser_proxy:
+            context_kwargs["proxy"] = browser_proxy
         if auth_state_path:
             context_kwargs["storage_state"] = auth_state_path
         context = browser.new_context(**context_kwargs)
         context.add_init_script(init_script)
+        egress_blocked: List[str] = []
+        install_browser_egress_guards(context, target_guard, egress_blocked)
 
         page = context.new_page()
         page.set_default_timeout(scan_budget_seconds * 1000)
@@ -769,13 +887,25 @@ def run_browser_scan(
     from .js_library_cves import _library_cve_findings
     findings.extend(_library_cve_findings(libraries or [], url))
 
-    return build_report(
+    report = build_report(
         url,
         findings,
         scan_mode="browser",
         profile="launch-gate",
         packs=["leak", "appsec", "access-control", "baas"],
     )
+    report.extra["coverage"] = build_coverage(
+        "browser page",
+        attempted=1,
+        completed=1,
+        reasons=(f"Blocked {len(egress_blocked)} unsafe network request(s).",)
+        if egress_blocked else (),
+    )
+    report.extra["coverage_incomplete"] = coverage_is_incomplete(report.extra["coverage"])
+    report.extra["coverage_limitations"] = [
+        "DNS checks are preflight only and do not pin connection IPs; DNS rebinding between resolution and connect remains possible."
+    ]
+    return report
 
 
 def _run_baas_validation(

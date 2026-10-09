@@ -1664,6 +1664,8 @@ async def _run_full_site_scan(url, parsed_url, scan_id):
             'scan_timestamp': datetime.now().isoformat(),
         },
     }
+    if 'coverage' in report.extra:
+        response_data['coverage'] = report.extra['coverage']
     if scan_id and scan_id in _scan_queues:
         _scan_queues[scan_id].put({'type': 'result', 'data': response_data})
     return jsonify(response_data)
@@ -1996,6 +1998,8 @@ async def scan():
                 'scan_timestamp': datetime.now().isoformat(),
             }
         }
+        if 'coverage' in report.extra:
+            response_data['coverage'] = report.extra['coverage']
         raw_findings = findings + [
             finding
             for host in attack_vectors.get('subdomains', []) or []

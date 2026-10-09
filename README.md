@@ -314,6 +314,21 @@ poetry run keyleak local . --sarif --fail-on high
 ```
 
 By default, local mode includes `env,mcp,ci,docker,sourcemaps,logs`.
+The scanner excludes `node_modules` and root `dist/` output by default. Use the
+bounded opt-in flags when you want those sources included:
+
+```bash
+poetry run keyleak local . --scan-node-modules
+poetry run keyleak local . --scan-dist --json
+poetry run keyleak local . --scan-node-modules --scan-dist --json
+```
+
+`--scan-node-modules` checks JavaScript and TypeScript sources with the existing
+worm-shape and fingerprint detectors. `--scan-dist` includes JavaScript build
+artifacts and source maps from the root `dist/` directory. Both scopes have file,
+byte, and directory limits. Local reports include a coverage summary; missing
+declared local source maps, escaped symlinks, and limit or read failures mark
+coverage incomplete, which makes the CLI return the failing exit code.
 
 Limit the scan to specific file families:
 

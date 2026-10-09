@@ -249,7 +249,9 @@ class BrowserCdpIntegrationTests(unittest.TestCase):
         try:
             url = f"http://127.0.0.1:{server.server_port}/"
             try:
-                report = run_browser_scan(url, scan_budget_seconds=5)
+                report = run_browser_scan(
+                    url, scan_budget_seconds=5, target_guard=lambda _host: None,
+                )
             except Exception as exc:
                 message = str(exc)
                 if "playwright install" in message or "Executable doesn't exist" in message:

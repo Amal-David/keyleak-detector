@@ -10,7 +10,7 @@ import unittest
 from unittest import mock
 
 import keyleak.site_scanner as ss
-from keyleak.models import Evidence, Finding, ScanReport
+from keyleak.models import Evidence, Finding, ScanReport, coverage_is_incomplete
 
 
 def _finding(value: str, type_: str = "openai_api_key", sev: str = "critical") -> Finding:
@@ -176,7 +176,7 @@ class ScanSiteTests(unittest.TestCase):
 
         with mock.patch.object(ss, "discover_subdomains",
                                lambda d, **k: ["example.com", "api.example.com"]), \
-             mock.patch.object(ss, "crawl_pages", lambda hosts, **k: urls), \
+             mock.patch.object(ss, "crawl_pages", lambda hosts, **k: ss.CrawlResult(pages=urls)), \
              mock.patch.object(ss, "run_browser_scan", fake_scan):
             report = ss.scan_site("https://example.com")
 
@@ -184,6 +184,7 @@ class ScanSiteTests(unittest.TestCase):
         self.assertEqual(report.scan_mode, "full-site")
         self.assertEqual(report.extra["pages_scanned"], 3)
         self.assertEqual(report.extra["subdomains"], ["example.com", "api.example.com"])
+        self.assertFalse(coverage_is_incomplete(report.extra["coverage"]))
 
         prov = report.extra["provenance"]
         shared = next(f for f in report.findings if f.evidence.redacted_value == "sk-AAA")
@@ -198,7 +199,7 @@ class ScanSiteTests(unittest.TestCase):
              mock.patch.object(
                  ss,
                  "crawl_pages",
-                 lambda hosts, **k: ["https://example.com/?token=supersecretvalue-long"],
+                 lambda hosts, **k: ss.CrawlResult(pages=["https://example.com/?token=supersecretvalue-long"]),
              ), \
              mock.patch.object(ss, "run_browser_scan", boom):
             report = ss.scan_site("example.com")   # must not raise
@@ -210,12 +211,40 @@ class ScanSiteTests(unittest.TestCase):
         self.assertNotIn("supersecretvalue", report.extra["scan_failures"][0]["url"])
         self.assertNotIn("jane.doe@example.com", report.extra["scan_failures"][0]["error"])
 
+    def test_crawl_failure_is_reported_without_dropping_successful_findings(self):
+        urls = ["https://example.com/", "https://www.example.com/"]
+
+        def fake_crawl(hosts, **kwargs):
+            return ss.CrawlResult(
+                pages=urls,
+                failures=[{
+                    "url": "https://example.com/",
+                    "error": "Navigation or link extraction failed",
+                }],
+            )
+
+        def fake_scan(url, **kwargs):
+            findings = [_finding("sk-SUCCESS")] if "www." in url else []
+            return ScanReport(target=url, scan_mode="browser", findings=findings)
+
+        with mock.patch.object(ss, "discover_subdomains", lambda d, **k: ["example.com"]), \
+             mock.patch.object(ss, "crawl_pages", fake_crawl), \
+             mock.patch.object(ss, "run_browser_scan", fake_scan):
+            report = ss.scan_site("example.com")
+
+        self.assertEqual(len(report.findings), 1)
+        self.assertEqual(report.extra["crawl_failures"][0]["url"], urls[0])
+        self.assertEqual(report.extra["scan_failures"], [])
+        self.assertTrue(coverage_is_incomplete(report.extra["coverage"]))
+        self.assertEqual(report.extra["coverage"]["failed"], 1)
+        self.assertIn("DNS rebinding", report.extra["coverage_limitations"][0])
+
     def test_proxy_threaded_to_crawl_and_browser_scan(self):
         seen = {}
 
         def fake_crawl(hosts, **k):
             seen["crawl_proxy"] = k.get("proxy")
-            return ["https://example.com/"]
+            return ss.CrawlResult(pages=["https://example.com/"])
 
         def fake_scan(url, **k):
             seen["scan_proxy"] = k.get("proxy")
@@ -237,7 +266,7 @@ class ScanSiteTests(unittest.TestCase):
             return [domain]
 
         with mock.patch.object(ss, "discover_subdomains", fake_discover), \
-             mock.patch.object(ss, "crawl_pages", lambda hosts, **k: []), \
+             mock.patch.object(ss, "crawl_pages", lambda hosts, **k: ss.CrawlResult(pages=[])), \
              mock.patch.object(ss, "run_browser_scan",
                                lambda url, **k: ScanReport(target=url, scan_mode="browser", findings=[])):
             report = ss.scan_site("https://user:pass@app.example.com:8443/dashboard")

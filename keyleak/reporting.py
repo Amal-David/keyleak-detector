@@ -149,23 +149,42 @@ def format_markdown(report: ScanReport) -> str:
                 f"- Evidence: `{item['evidence']['redacted_value']}`",
             ]
         )
-        rem_v2 = item.get("remediation_v2")
-        if rem_v2:
+        remediation = _remediation_details(item)
+        if remediation["structured"]:
             lines.extend(
                 [
-                    f"- What leaked: {rem_v2.get('what_leaked') or ''}",
-                    f"- Why it matters: {rem_v2.get('why_it_matters') or item['risk_reason']}",
+                    f"- What leaked: {remediation['what_leaked']}",
+                    f"- Why it matters: {remediation['why_it_matters']}",
                     "- Fix steps:",
                 ]
             )
-            for index, step in enumerate(rem_v2.get("fix_steps") or [], start=1):
+            for index, step in enumerate(remediation["fix_steps"], start=1):
                 lines.append(f"    {index}. {step}")
-            if rem_v2.get("verify_command"):
-                lines.append(f"- Verify: `{rem_v2['verify_command']}`")
+            if remediation["verify_command"]:
+                lines.append(f"- Verify: `{remediation['verify_command']}`")
         else:
             lines.append(f"- Why it matters: {item['risk_reason']}")
-            lines.append(f"- Fix: {item['remediation']}")
+            lines.append(f"- Fix: {remediation['legacy']}")
     return "\n".join(lines)
+
+
+def _remediation_details(item: Dict[str, Any]) -> Dict[str, Any]:
+    """Normalize structured remediation once for the report formatters."""
+    remediation_v2 = item.get("remediation_v2")
+    if not remediation_v2:
+        return {"structured": False, "legacy": str(item.get("remediation") or "")}
+
+    fix_steps = remediation_v2.get("fix_steps")
+    if not isinstance(fix_steps, (list, tuple)):
+        fix_steps = []
+    return {
+        "structured": True,
+        "legacy": str(item.get("remediation") or ""),
+        "what_leaked": str(remediation_v2.get("what_leaked") or ""),
+        "why_it_matters": str(remediation_v2.get("why_it_matters") or item["risk_reason"]),
+        "fix_steps": [str(step) for step in fix_steps],
+        "verify_command": str(remediation_v2.get("verify_command") or ""),
+    }
 
 
 def format_html(report: ScanReport) -> str:
@@ -198,7 +217,20 @@ def format_html(report: ScanReport) -> str:
         finding_type = e(item["type"])
         risk = e(item["risk_reason"])
         evidence_text = e(item["evidence"]["redacted_value"])
-        remediation_text = e(item["remediation"])
+        remediation = _remediation_details(item)
+        if remediation["structured"]:
+            remediation_html = (
+                f'<div>What leaked: {e(remediation["what_leaked"])}</div>'
+                f'<div>Why it matters: {e(remediation["why_it_matters"])}</div>'
+                '<div>Fix steps:</div>'
+                "<ol>" + "".join(f"<li>{e(step)}</li>" for step in remediation["fix_steps"]) + "</ol>"
+            )
+            if remediation["verify_command"]:
+                remediation_html += (
+                    f'<div>Verify: <code>{e(remediation["verify_command"])}</code></div>'
+                )
+        else:
+            remediation_html = f"Fix: <code>{e(remediation['legacy'])}</code>"
         validation = item.get("validation_status", "")
 
         validation_badge = ""
@@ -215,7 +247,7 @@ def format_html(report: ScanReport) -> str:
       </div>
       <div class="finding-detail">{risk}</div>
       <div class="finding-evidence">{evidence_text}</div>
-      <div class="finding-fix">Fix: <code>{remediation_text}</code></div>
+      <div class="finding-fix">{remediation_html}</div>
     </div>"""
         finding_cards.append(card)
 
@@ -384,13 +416,36 @@ def format_sarif(report: ScanReport) -> str:
     for finding in report.findings:
         item = finding.to_dict()
         detector_id = item["detector_id"]
+        remediation = _remediation_details(item)
+        if remediation["structured"]:
+            help_text = "\n".join(
+                [
+                    f"What leaked: {remediation['what_leaked']}",
+                    f"Why it matters: {remediation['why_it_matters']}",
+                    "Fix steps:",
+                    *(f"- {step}" for step in remediation["fix_steps"]),
+                    *([f"Verify: {remediation['verify_command']}"] if remediation["verify_command"] else []),
+                ]
+            )
+            sarif_remediation = {
+                "what_leaked": remediation["what_leaked"],
+                "why_it_matters": remediation["why_it_matters"],
+                "fix_steps": remediation["fix_steps"],
+                "verify_command": remediation["verify_command"],
+            }
+        else:
+            help_text = remediation["legacy"]
+            sarif_remediation = None
         rules[detector_id] = {
             "id": detector_id,
             "name": item["type"],
             "shortDescription": {"text": item["type"]},
             "fullDescription": {"text": item["risk_reason"]},
-            "help": {"text": item["remediation"]},
-            "properties": {"category": item.get("category") or ""},
+            "help": {"text": help_text},
+            "properties": {
+                "category": item.get("category") or "",
+                **({"remediation_v2": sarif_remediation} if sarif_remediation is not None else {}),
+            },
         }
         results.append(
             {
