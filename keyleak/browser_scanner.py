@@ -43,6 +43,16 @@ _LOG = logging.getLogger(__name__)
 
 SCAN_BUDGET_DEFAULT_SECONDS = 30
 DEFAULT_VIEWPORT = {"width": 1280, "height": 1024}
+_RUN_ANALYZER_SCRIPT = """async () => {
+  if (typeof window.__keyleak_run !== 'function') {
+    throw new Error('KeyLeak analyzer did not initialize; scan is incomplete.');
+  }
+  const findings = await window.__keyleak_run();
+  if (!Array.isArray(findings)) {
+    throw new Error('KeyLeak analyzer returned invalid findings; scan is incomplete.');
+  }
+  return findings;
+}"""
 CDP_MAX_BODY_BYTES = 2 * 1024 * 1024
 CDP_MAX_TOTAL_BUFFER_BYTES = 10 * 1024 * 1024
 CDP_TEXT_HINTS = (
@@ -714,7 +724,9 @@ def run_browser_scan(
         page.set_default_timeout(scan_budget_seconds * 1000)
         cdp_capture = _start_cdp_capture(context, page, url, run_salt)
         page.goto(url, wait_until="networkidle")
-        raw = page.evaluate("() => window.__keyleak_run ? window.__keyleak_run() : []")
+        raw = page.evaluate(_RUN_ANALYZER_SCRIPT)
+        if not isinstance(raw, list):
+            raise RuntimeError("KeyLeak analyzer returned invalid findings; scan is incomplete.")
 
         # Always extract BaaS config (tables, RPCs, buckets) for pattern-based
         # detection.  Active validation probes are gated by baas_validate.

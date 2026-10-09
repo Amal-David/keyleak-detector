@@ -16,7 +16,8 @@ import tempfile
 from urllib.parse import urlparse, parse_qs
 
 from keyleak.extension_runtime import ActiveScanCounter, proof_matches
-from keyleak.net_guard import scan_target_block_reason as _scan_target_is_blocked
+from keyleak.net_guard import scan_target_block_reason as _scan_target_is_blocked, url_block_reason
+from keyleak.redaction import redact_url, redact_snippet
 from datetime import datetime
 from functools import wraps
 from typing import Dict, List, Optional, Tuple, Union, Any
@@ -68,6 +69,9 @@ logger = logging.getLogger(__name__)
 app = Flask(__name__)
 load_dotenv()
 _active_scans = ActiveScanCounter()
+# The proxy and legacy findings collector are process-global. Only one
+# basic/extensive scan may use them at a time; full-site scans are independent.
+_legacy_scan_lock = threading.Lock()
 
 # Global state for mitmproxy
 mitm_thread = None
@@ -1152,11 +1156,88 @@ def get_recommendation(finding_type: str, value: str, source: str) -> str:
     
     return recommendations.get(finding_type, default_rec)
 
+_SCAN_SCOPE_HEADER = 'X-KeyLeak-Scan-Scope'
+
+
+def _http_origin(url: str) -> Tuple[str, str, int]:
+    """Compare credentials by scheme, hostname, and effective port."""
+    parsed = urlparse(url)
+    if parsed.scheme not in {'http', 'https'} or not parsed.hostname:
+        raise ValueError('An HTTP(S) URL with a host is required.')
+    if parsed.username is not None or parsed.password is not None:
+        raise ValueError('Use authenticated scan options instead of URL credentials.')
+    port = parsed.port if parsed.port is not None else (443 if parsed.scheme == 'https' else 80)
+    return parsed.scheme, parsed.hostname.lower(), port
+
+
 class RequestHandler:
     """Handler for HTTP requests and responses."""
     
     def __init__(self):
         self.findings = []
+        self._auth_scopes = {}
+        self._auth_lock = threading.Lock()
+
+    def register_auth_scope(self, url: str, headers: Dict[str, str]) -> str:
+        """Bind a browser's supplied credentials to one origin, independently
+        of overlapping scans that happen to use the same credential values."""
+        scope = _uuid.uuid4().hex
+        registration = (_http_origin(url), {name.lower(): value for name, value in headers.items()})
+        with self._auth_lock:
+            self._auth_scopes[scope] = registration
+        return scope
+
+    def release_auth_scope(self, scope: Optional[str]) -> None:
+        with self._auth_lock:
+            self._auth_scopes.pop(scope, None)
+
+    def server_connect(self, data: Any) -> None:
+        """Refuse unsafe upstream connections, including HTTPS CONNECT and
+        connections caused by a redirect or a page subresource. The shared
+        resolver guard still has the documented DNS-rebinding limitation."""
+        try:
+            address = data.server.address
+            reason = _scan_target_is_blocked(address[0] if address else None)
+        except Exception:
+            reason = 'Could not validate upstream host.'
+        if reason:
+            data.server.error = 'KeyLeak refused unsafe upstream target.'
+
+    def requestheaders(self, flow: Any) -> None:
+        """Enforce egress before sending headers, not just at page.goto.
+
+        Browser header overrides also survive redirects. A private per-scan
+        marker selects the exact credential scope and is removed before either
+        forwarding or analysis; it is never sent to the scanned website.
+        """
+        headers = flow.request.headers
+        scope = headers.pop(_SCAN_SCOPE_HEADER, None)
+        try:
+            origin = _http_origin(flow.request.pretty_url)
+            reason = url_block_reason(flow.request.pretty_url)
+        except Exception:
+            origin, reason = None, 'Could not validate request target.'
+        with self._auth_lock:
+            registration = self._auth_scopes.get(scope)
+            active_scopes = tuple(self._auth_scopes.values())
+        if reason or (scope and registration is None):
+            flow.response = http.Response.make(
+                403, b'KeyLeak refused unsafe or expired scan request.',
+                {'Content-Type': 'text/plain'},
+            )
+            return
+        if registration:
+            allowed_origin, supplied_headers = registration
+            if origin != allowed_origin:
+                for name in list(headers):
+                    if name.lower() in supplied_headers:
+                        del headers[name]
+        else:
+            # A request that lost its marker must not acquire the union of
+            # active scans' permissions. Remove recognized supplied values.
+            for name, value in list(headers.items()):
+                if any(supplied.get(name.lower()) == value for _, supplied in active_scopes):
+                    del headers[name]
     
     def request(self, flow: http.HTTPFlow) -> None:
         """Handle HTTP request."""
@@ -1301,6 +1382,7 @@ def start_proxy(port: int = 8080):
         
         # Configure mitmproxy options
         options = Options(
+            listen_host='127.0.0.1',
             listen_port=port,
             ssl_insecure=True,
             showhost=True,
@@ -1374,6 +1456,76 @@ def parse_cookie_header(cookie_header: str) -> Dict[str, str]:
             cookies[key] = value
 
     return cookies
+
+
+def _safe_scan_error(error: Any, auth_config: Dict[str, Any], scope: Optional[str] = None) -> str:
+    """Keep browser exceptions useful without logging supplied credentials."""
+    message = str(error)
+    secrets = [scope, *(auth_config.get(key) for key in ('bearer_token', 'cookie', 'claimed_user_id'))]
+    cookie = auth_config.get('cookie')
+    if isinstance(cookie, str):
+        secrets.extend(parse_cookie_header(cookie).values())
+    normalized_values = set()
+    for value in secrets:
+        if value is not None:
+            text = str(value)
+            if text.strip():
+                normalized_values.update((text, text.strip()))
+    for value in sorted(normalized_values, key=len, reverse=True):
+        message = message.replace(value, '[redacted]')
+    return redact_url(message)
+
+
+def _public_attack_vectors(attack_vectors: Dict[str, Any]) -> Dict[str, Any]:
+    """Keep the web UI's host grouping without exporting legacy raw values."""
+    result = dict(attack_vectors)
+    result['subdomains'] = []
+    for host in attack_vectors.get('subdomains', []) or []:
+        public_host = dict(host)
+        public_host['url'] = redact_url(host.get('url', ''))
+        host_report = build_report(
+            target=host.get('url') or host.get('host') or '',
+            findings=[],
+            attack_vectors={'subdomains': [host]},
+        )
+        public_host['findings'] = host_report.to_dict()['findings']
+        for finding in public_host['findings']:
+            # Compatibility fields used by the separate attack-surface panel.
+            finding['details'] = finding['evidence']['snippet']
+            finding['url'] = finding['evidence']['request_url']
+            finding['recommendation'] = finding['remediation']
+        result['subdomains'].append(public_host)
+    return result
+
+
+def _scrub_legacy_response(payload: Any, raw_findings: List[Dict[str, Any]]) -> Any:
+    """Remove matched values from adjacent snippets and other display text.
+
+    Normalization masks each finding's own value; an adjacent finding can
+    otherwise survive in its context, or in a legacy `details`/risk reason.
+    Classification, IDs and numeric summary fields retain their semantics.
+    """
+    values = sorted({str(raw.get('value') if raw.get('value') is not None else raw.get('match', ''))
+                     for raw in raw_findings}, key=len, reverse=True)
+    text_fields = {
+        'source', 'snippet', 'request_url', 'risk_reason', 'remediation',
+        'url', 'target', 'retest_command', 'details', 'context_lines',
+        'context', 'recommendation', 'error',
+    }
+
+    def scrub(value, field=''):
+        if isinstance(value, dict):
+            return {key: scrub(item, key) for key, item in value.items()}
+        if isinstance(value, list):
+            return [scrub(item, field) for item in value]
+        if isinstance(value, str) and field in text_fields:
+            for raw_value in values:
+                if raw_value:
+                    value = redact_snippet(value, raw_value)
+            return redact_url(value)
+        return value
+
+    return scrub(payload)
 
 # SSE progress tracking for scans
 _scan_queues: Dict[str, Queue] = {}
@@ -1494,7 +1646,7 @@ async def _run_full_site_scan(url, parsed_url, scan_id):
 
     findings = [f.to_dict() for f in report.findings]
     response_data = {
-        'url': url,
+        'url': redact_url(url),
         'status': 'completed',
         'scan_mode': 'full-site',
         'verdict': report.verdict,
@@ -1558,10 +1710,9 @@ async def scan():
     # Parse and validate URL
     try:
         parsed_url = urlparse(url)
-        if not parsed_url.netloc:
-            return jsonify({'error': 'Invalid URL format'}), 400
-    except Exception as e:
-        return jsonify({'error': f'Invalid URL: {str(e)}'}), 400
+        _http_origin(url)
+    except (TypeError, ValueError):
+        return jsonify({'error': 'Invalid URL. Use an HTTP(S) URL without embedded credentials.'}), 400
 
     # SSRF guard: never let a scan request reach internal/metadata addresses.
     block_reason = _scan_target_is_blocked(parsed_url.hostname)
@@ -1580,7 +1731,10 @@ async def scan():
 
     if scan_mode not in {'basic', 'extensive'}:
         return jsonify({'error': 'Invalid scan mode. Use basic, extensive, or full-site.'}), 400
+    if not _legacy_scan_lock.acquire(blocking=False):
+        return jsonify({'error': 'A browser scan is already running. Wait for it to finish and retry.'}), 409
     
+    auth_scope = None
     try:
         # Reset findings
         request_handler.findings = []
@@ -1598,7 +1752,9 @@ async def scan():
         # Configure browser to use our proxy
         proxy = {
             'server': 'http://localhost:8080',
-            'bypass': 'localhost,127.0.0.1',
+            # Remove Chromium's implicit loopback/link-local bypass so the
+            # proxy guard also sees local targets and cloud metadata requests.
+            'bypass': '<-loopback>',
         }
         
         # Launch browser with Playwright
@@ -1618,12 +1774,20 @@ async def scan():
 
             context_kwargs = {
                 'ignore_https_errors': True,
+                'service_workers': 'block',
                 'viewport': {'width': 1280, 'height': 1024},
                 'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
             }
 
-            if extra_headers:
-                context_kwargs['extra_http_headers'] = extra_headers
+            scoped_headers = dict(extra_headers)
+            if scan_mode == 'extensive' and auth_mode in {'cookie', 'both'} and cookie_header:
+                scoped_headers['Cookie'] = cookie_header
+            if scoped_headers:
+                auth_scope = request_handler.register_auth_scope(url, scoped_headers)
+                context_kwargs['extra_http_headers'] = {
+                    **extra_headers,
+                    _SCAN_SCOPE_HEADER: auth_scope,
+                }
 
             context = await browser.new_context(**context_kwargs)
 
@@ -1637,6 +1801,7 @@ async def scan():
                             'value': cookie_value,
                             'domain': parsed_url.hostname,
                             'path': '/',
+                            'secure': parsed_url.scheme == 'https',
                         })
                     await context.add_cookies(cookie_payload)
 
@@ -1644,13 +1809,13 @@ async def scan():
             
             try:
                 # Navigate to the URL with a more reliable wait strategy
-                logger.info(f"Navigating to {url}")
+                logger.info("Navigating to %s", _safe_scan_error(url, auth_config, auth_scope))
                 _emit_progress(scan_id, f"Loading {parsed_url.hostname}...")
                 try:
                     response = await page.goto(url, wait_until='domcontentloaded', timeout=30000)
                     logger.info(f"Page loaded, status: {response.status if response else 'unknown'}")
                 except Exception as e:
-                    logger.warning(f"Page navigation warning: {e}")
+                    logger.warning("Page navigation warning: %s", _safe_scan_error(e, auth_config, auth_scope))
                     # Try to continue anyway if the page partially loaded
                     response = None
                 
@@ -1664,7 +1829,7 @@ async def scan():
                     await page.wait_for_load_state('networkidle', timeout=10000)
                     logger.info("Network idle detected")
                 except Exception as e:
-                    logger.warning(f"Network idle timeout (continuing anyway): {e}")
+                    logger.warning("Network idle timeout (continuing anyway): %s", _safe_scan_error(e, auth_config, auth_scope))
                 
                 # Quick scroll to trigger lazy-loaded content
                 logger.info("Scrolling page...")
@@ -1672,7 +1837,7 @@ async def scan():
                     await page.evaluate('window.scrollTo(0, document.body.scrollHeight)')
                     await asyncio.sleep(1)
                 except Exception as e:
-                    logger.warning(f"Error scrolling: {e}")
+                    logger.warning("Error scrolling: %s", _safe_scan_error(e, auth_config, auth_scope))
                 
                 # Get the final page content and analyze it properly
                 logger.info("Extracting page content...")
@@ -1704,19 +1869,20 @@ async def scan():
                     
                     logger.info(f"Analysis complete. Total findings: {len(request_handler.findings)}")
                 except Exception as e:
-                    logger.error(f"Error parsing page content: {e}", exc_info=True)
+                    logger.error("Error parsing page content: %s", _safe_scan_error(e, auth_config, auth_scope))
                 
             except Exception as e:
-                logger.error(f"Error during page interaction: {e}", exc_info=True)
+                safe_error = _safe_scan_error(e, auth_config, auth_scope)
+                logger.error("Error during page interaction: %s", safe_error)
                 return jsonify({
-                    'error': f'Failed to load page: {str(e)}. The website may be unreachable or blocking automated access.'
+                    'error': f'Failed to load page: {safe_error}. The website may be unreachable or blocking automated access.'
                 }), 500
                 
             finally:
                 try:
                     await browser.close()
                 except Exception as e:
-                    logger.warning(f"Error closing browser: {e}")
+                    logger.warning("Error closing browser: %s", _safe_scan_error(e, auth_config, auth_scope))
         
         # Process all findings - merge duplicates based on value and location
         findings = []
@@ -1787,10 +1953,11 @@ async def scan():
                 proxy=os.getenv("SUBDOMAIN_PROXY"),
             )
         except Exception as e:
-            logger.warning(f"Attack vector scan failed: {e}")
+            safe_error = _safe_scan_error(e, auth_config, auth_scope)
+            logger.warning("Attack vector scan failed: %s", safe_error)
             attack_vectors = {
                 "status": "error",
-                "error": str(e),
+                "error": safe_error,
                 "summary": {
                     "total_findings": 0,
                     "critical_severity": 0,
@@ -1808,19 +1975,20 @@ async def scan():
             attack_vectors=attack_vectors,
         )
         report_summary = report.summary
+        report_payload = report.to_dict()
 
         # Prepare the response
         response_data = {
-            'url': url,
+            'url': report_payload['target'],
             'status': 'completed',
             'scan_mode': scan_mode,
             'auth_context_used': scan_mode == 'extensive' and bool(auth_config),
             'verdict': report.verdict,
             'retest_command': report.retest_command,
-            'report': report.to_dict(),
-            'findings': findings,
+            'report': report_payload,
+            'findings': report_payload['findings'],
             'scan_summary': report_summary,
-            'attack_vectors': attack_vectors,
+            'attack_vectors': _public_attack_vectors(attack_vectors),
             'details': {
                 'requests_analyzed': len(request_handler.findings),
                 'unique_findings': len(findings),
@@ -1828,6 +1996,12 @@ async def scan():
                 'scan_timestamp': datetime.now().isoformat(),
             }
         }
+        raw_findings = findings + [
+            finding
+            for host in attack_vectors.get('subdomains', []) or []
+            for finding in host.get('findings', []) or []
+        ]
+        response_data = _scrub_legacy_response(response_data, raw_findings)
         
         # Push final result to SSE stream if streaming
         if scan_id and scan_id in _scan_queues:
@@ -1842,15 +2016,15 @@ async def scan():
         }), 408
         
     except requests.exceptions.RequestException as e:
-        logger.error(f"Network error during scan: {e}")
+        logger.error("Network error during scan: %s", _safe_scan_error(e, auth_config, auth_scope))
         return jsonify({
-            'error': f'Network error: Unable to reach {url}. Please check the URL and try again.',
+            'error': f'Network error: Unable to reach {_safe_scan_error(url, auth_config, auth_scope)}. Please check the URL and try again.',
             'status': 'error'
         }), 400
         
     except Exception as e:
-        logger.exception("Unexpected error during scan")
-        error_message = str(e)
+        error_message = _safe_scan_error(e, auth_config, auth_scope)
+        logger.error("Unexpected error during scan (%s): %s", type(e).__name__, error_message)
         
         # Provide more helpful error messages for common issues
         if 'playwright' in error_message.lower():
@@ -1866,6 +2040,11 @@ async def scan():
             'error': error_message,
             'status': 'error'
         }), 500
+    finally:
+        try:
+            request_handler.release_auth_scope(auth_scope)
+        finally:
+            _legacy_scan_lock.release()
 
 
 @app.route('/extension/scan', methods=['POST'])

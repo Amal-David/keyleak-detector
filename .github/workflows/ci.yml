@@ -25,20 +25,32 @@ jobs:
       - uses: actions/setup-python@0b93645e9fea7318ecaed2b359559ac225c90a2b # v5.3.0
         with:
           python-version: "3.12"
-      - name: Install dependencies
+      - name: Install pinned Poetry
         run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
-          python -m playwright install chromium --with-deps
-      - name: Run unit tests (fails on collection errors)
+          python -m pip install "poetry==2.5.1"
+      - name: Validate and install locked dependencies
         run: |
-          # `unittest discover` exits non-zero on any error OR collection
-          # (import) failure, so a missing dep can no longer silently disable a
-          # whole suite the way it did pre-audit.
-          PYTHONPATH=. python -m unittest discover -s tests -v
+          poetry check --lock
+          poetry install --no-interaction
+          poetry run python -m pip check
+          poetry run python -m playwright install chromium --with-deps
+      - name: Run tests (requires browser integration; no skips)
+        run: |
+          PYTHONPATH=. poetry run python - <<'PY'
+          import sys
+          import unittest
+
+          suite = unittest.defaultTestLoader.discover("tests")
+          result = unittest.TextTestRunner(verbosity=2).run(suite)
+          if result.skipped:
+              print("CI requires every test, including Chromium/CDP integration, to run.", file=sys.stderr)
+          raise SystemExit(not result.wasSuccessful() or bool(result.skipped) or result.testsRun == 0)
+          PY
+      - name: Build package
+        run: poetry build
       - name: Launch-gate self-scan
         run: |
-          PYTHONPATH=. python -m keyleak.cli local . --launch-profile launch-gate --fail-on high
+          PYTHONPATH=. poetry run python -m keyleak.cli local . --launch-profile launch-gate --fail-on high
 
   extension:
     name: Extension tests
