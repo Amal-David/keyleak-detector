@@ -8,6 +8,7 @@ on:
       - "keyleak/local_scanner.py"
       - "scripts/evaluate_binary_rea.py"
       - "tests/rea-evaluation/**"
+      - "tests/test_rea_evaluation.py"
       - "tests/test_binary_scanner.py"
 
 permissions:
