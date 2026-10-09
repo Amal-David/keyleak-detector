@@ -1,0 +1,67 @@
+name: Local REA binary evaluation
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/rea-binary-evaluation.yml"
+      - "keyleak/binary_scanner.py"
+      - "keyleak/local_scanner.py"
+      - "scripts/evaluate_binary_rea.py"
+      - "tests/rea-evaluation/**"
+      - "tests/test_binary_scanner.py"
+
+permissions:
+  contents: read
+
+jobs:
+  reevaluate:
+    name: Synthetic binary and REA comparison
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-python@0b93645e9fea7318ecaed2b359559ac225c90a2b # v5.3.0
+        with:
+          python-version: "3.12"
+
+      - uses: actions/setup-node@39370e3970a6d050c480ffad4ff0ed4d3fdee5af # v4.1.0
+        with:
+          node-version: "22.22.3"
+
+      - name: Install locked KeyLeak and REA dependencies
+        run: |
+          python -m pip install "poetry==2.5.1"
+          poetry check --lock
+          poetry install --no-interaction --only main
+          poetry run python -m pip check
+          npm ci --ignore-scripts --no-audit --no-fund --prefix tests/rea-evaluation
+
+      - name: Install checksum-pinned local JDK and Ghidra
+        env:
+          REA_TOOLCHAIN_ROOT: ${{ runner.temp }}/rea-toolchain
+        run: |
+          set -euo pipefail
+          mkdir -p "$REA_TOOLCHAIN_ROOT/jdk"
+          curl --fail --location --retry 2 --silent --show-error \
+            'https://github.com/adoptium/temurin21-binaries/releases/download/jdk-21.0.12.1%2B1/OpenJDK21U-jdk_x64_linux_hotspot_21.0.12.1_1.tar.gz' \
+            -o "$REA_TOOLCHAIN_ROOT/temurin-jdk21.tar.gz"
+          echo 'ce79869e1307ed8ee1e2baa86a412b1eb5b75d10a01006d788a6f968bcfaee94  '"$REA_TOOLCHAIN_ROOT/temurin-jdk21.tar.gz" | sha256sum --check
+          tar -xzf "$REA_TOOLCHAIN_ROOT/temurin-jdk21.tar.gz" \
+            --strip-components=1 -C "$REA_TOOLCHAIN_ROOT/jdk"
+          curl --fail --location --retry 2 --silent --show-error \
+            'https://github.com/NationalSecurityAgency/ghidra/releases/download/Ghidra_12.1.2_build/ghidra_12.1.2_PUBLIC_20260605.zip' \
+            -o "$REA_TOOLCHAIN_ROOT/ghidra.zip"
+          echo 'b62e81a0390618466c019c60d8c2f796ced2509c4c1aea4a37644a77272cf99d  '"$REA_TOOLCHAIN_ROOT/ghidra.zip" | sha256sum --check
+          unzip -q "$REA_TOOLCHAIN_ROOT/ghidra.zip" -d "$REA_TOOLCHAIN_ROOT"
+          echo "JAVA_HOME=$REA_TOOLCHAIN_ROOT/jdk" >> "$GITHUB_ENV"
+          echo "$REA_TOOLCHAIN_ROOT/jdk/bin" >> "$GITHUB_PATH"
+          echo "GHIDRA_INSTALL_DIR=$REA_TOOLCHAIN_ROOT/ghidra_12.1.2_PUBLIC" >> "$GITHUB_ENV"
+          echo "REA_GHIDRA_STARTUP_TIMEOUT_MS=120000" >> "$GITHUB_ENV"
+
+      - name: Compare deterministic scanning with local REA/Ghidra
+        run: |
+          poetry run python scripts/evaluate_binary_rea.py \
+            --rea tests/rea-evaluation/node_modules/.bin/rea
