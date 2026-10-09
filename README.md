@@ -305,6 +305,8 @@ python app.py
 ### 3. Scan Local Files And Configs
 
 Use `keyleak local` before pushing or shipping. It scans local files without starting the web app.
+For a beginner walkthrough of bounded dependency/build scans, coverage, owned-site scans,
+extension privacy, and report triage, see [Scanner workflows](docs/SCANNER_WORKFLOWS.md).
 
 ```bash
 poetry install
