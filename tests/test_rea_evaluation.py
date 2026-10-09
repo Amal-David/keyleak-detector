@@ -1,6 +1,6 @@
 import unittest
 
-from scripts.evaluate_binary_rea import _procedure_address, _pseudocode_text
+from scripts.evaluate_binary_rea import CANARY, _procedure_address, _pseudocode_text, _sanitized_excerpt
 
 
 class ReaEvaluationOutputTests(unittest.TestCase):
@@ -34,6 +34,16 @@ class ReaEvaluationOutputTests(unittest.TestCase):
         }
 
         self.assertEqual(_procedure_address(response, "reveal_token"), "0x1010")
+
+    def test_sanitizes_pseudocode_text_extracted_from_evidence_envelope(self):
+        response = {
+            "data": {"normalized_result": f"decoded = '{CANARY}';"}
+        }
+
+        excerpt = _sanitized_excerpt(_pseudocode_text(response))
+
+        self.assertNotIn(CANARY, excerpt)
+        self.assertIn("<SYNTHETIC_CANARY>", excerpt)
 
 
 if __name__ == "__main__":
