@@ -90,13 +90,14 @@ def scan_binary_bytes(
     findings = []
     detectors = list(detectors)
     runs = 0
+    findings_by_location = {}
+    finding_run_lengths = []
     try:
         for text, offset, width in extract_printable_runs(data):
             runs += 1
             if runs > MAX_BINARY_RUNS:
                 raise BinaryScanLimitError("binary printable-run limit reached")
-            findings.extend(
-                scan_text(
+            run_findings = scan_text(
                     text,
                     source,
                     detectors,
@@ -104,7 +105,36 @@ def scan_binary_bytes(
                     byte_offset_base=offset,
                     byte_offset_width=width,
                 )
-            )
+            for finding in run_findings:
+                if width == 1:
+                    findings.append(finding)
+                    finding_run_lengths.append(len(text))
+                    continue
+
+                identity = (
+                    finding.detector_id,
+                    finding.source,
+                    finding.fingerprint or finding.evidence.redacted_value,
+                    finding.evidence.line,
+                )
+                byte_offset = finding.evidence.byte_offset
+                locations = findings_by_location.setdefault(identity, {})
+                overlapping = next(
+                    (locations[offset] for offset in (byte_offset - 1, byte_offset, byte_offset + 1)
+                     if offset in locations),
+                    None,
+                )
+                if overlapping is None:
+                    index = len(findings)
+                    findings.append(finding)
+                    finding_run_lengths.append(len(text))
+                    locations[byte_offset] = index
+                elif len(text) > finding_run_lengths[overlapping]:
+                    previous_offset = findings[overlapping].evidence.byte_offset
+                    del locations[previous_offset]
+                    locations[byte_offset] = overlapping
+                    findings[overlapping] = finding
+                    finding_run_lengths[overlapping] = len(text)
     except BinaryScanLimitError as exc:
         raise BinaryScanLimitError(str(exc), findings + exc.findings) from exc
     return findings
