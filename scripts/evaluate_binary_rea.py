@@ -172,7 +172,7 @@ def _pseudocode_text(value: Any) -> str:
 
     def visit(item: Any) -> None:
         if isinstance(item, dict):
-            for key in ("pseudocode", "pseudo_code", "result", "text"):
+            for key in ("pseudocode", "pseudo_code", "result", "data", "text"):
                 if isinstance(item.get(key), str):
                     candidates.append(item[key])
             for child in item.values():
