@@ -86,7 +86,7 @@ On the example above, the result was `BLOCK_SHIP` with three findings: one criti
 
 For a clean follow-up, replace the fake key, remove the scan-only comment fixture, and either provide the declared map or remove its stale `sourceMappingURL` comment. Rerunning the same command returned `SAFE_TO_SHIP`, zero findings, complete 2/2 coverage, and exit `0`. That result only describes the synthetic files; it does not verify a real release.
 
-`node_modules` and root `dist/` are excluded unless their opt-in flags are set. Both opt-in scopes have file, directory, and byte budgets. File symlinks that leave the scan root are skipped and make coverage incomplete. Local source-map declarations are followed: if a declared map is absent and no usable sibling map exists, KeyLeak preserves any findings and marks coverage incomplete instead of reporting an unqualified clean result.
+Dependency source files in `node_modules` and root `dist/` build files are excluded unless their opt-in flags are set. When the `leak` pack is active, the separate lifecycle-hook audit may still read package manifests and install scripts under `node_modules`; it does not execute them. Both opt-in source scopes have file, directory, and byte budgets. File symlinks that leave the scan root are skipped and make coverage incomplete. Local source-map declarations are followed: if a declared map is absent and no usable sibling map exists, KeyLeak preserves any findings and marks coverage incomplete instead of reporting an unqualified clean result.
 
 ## Check one local browser page
 

@@ -316,8 +316,11 @@ poetry run keyleak local . --sarif --fail-on high
 ```
 
 By default, local mode includes `env,mcp,ci,docker,sourcemaps,logs`.
-The scanner excludes `node_modules` and root `dist/` output by default. Use the
-bounded opt-in flags when you want those sources included:
+Dependency source files in `node_modules` and root `dist/` build output are
+excluded from source scanning by default. With the `leak` pack active, the
+separate read-only lifecycle-hook audit may still inspect manifests and install
+scripts under `node_modules`; it never runs them. Use the bounded opt-in flags
+to add dependency source and root build-output scanning:
 
 ```bash
 poetry run keyleak local . --scan-node-modules

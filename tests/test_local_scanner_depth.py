@@ -85,6 +85,49 @@ fs.writeFileSync('~/.ssh/authorized_keys', token);
         ))
         self.assertEqual(report.extra["coverage"]["status"], "complete")
 
+    def test_single_file_scan_resolves_nested_map_without_following_symlink_escape(self):
+        with tempfile.TemporaryDirectory() as directory, tempfile.TemporaryDirectory() as outside:
+            root = Path(directory)
+            maps = root / "maps"
+            maps.mkdir()
+            fake_key = "sk-proj-" + "abcdefghijklmnopqrstuvwxyz"
+            bundle = root / "bundle.js"
+            bundle.write_text(
+                "const app = true;\n//# sourceMappingURL=maps/custom.map\n", encoding="utf-8"
+            )
+            (maps / "custom.map").write_text(json.dumps({
+                "version": 3,
+                "sources": ["src/Auth.ts"],
+                "sourcesContent": [f"const apiKey = '{fake_key}';"],
+            }), encoding="utf-8")
+
+            outside_map = Path(outside) / "outside.map"
+            outside_map.write_text(json.dumps({
+                "version": 3,
+                "sources": ["src/Outside.ts"],
+                "sourcesContent": [f"const apiKey = '{fake_key}';"],
+            }), encoding="utf-8")
+            try:
+                (maps / "external.map").symlink_to(outside_map)
+            except OSError:
+                self.skipTest("symlinks are unavailable")
+            escaping_bundle = root / "escaping.js"
+            escaping_bundle.write_text(
+                "const app = true;\n//# sourceMappingURL=maps/external.map\n", encoding="utf-8"
+            )
+
+            valid_report = scan_path(str(bundle))
+            escaped_report = scan_path(str(escaping_bundle))
+
+        self.assertTrue(any(
+            finding.type == "openai_api_key" and finding.source.endswith("#src/Auth.ts")
+            for finding in valid_report.findings
+        ))
+        self.assertEqual(valid_report.extra["coverage"]["status"], "complete")
+        self.assertFalse(any(finding.type == "openai_api_key" for finding in escaped_report.findings))
+        self.assertEqual(escaped_report.extra["coverage"]["status"], "incomplete")
+        self.assertIn("missing", escaped_report.extra["coverage"]["reasons"][0])
+
     def test_missing_declared_map_uses_usable_sibling_before_marking_gap(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

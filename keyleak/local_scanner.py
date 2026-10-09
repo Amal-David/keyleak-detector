@@ -89,6 +89,7 @@ def scan_path(
             coverage_state["attempted"] = 1
             _record_coverage(coverage_state, "failed", "scan root is missing or not a regular file or directory")
 
+    scan_root = target.parent if target_is_file else target
     code_files: List[Path] = []
     for file_path, categories in _iter_candidate_files(
         target, active_includes, scan_node_modules=scan_node_modules,
@@ -98,7 +99,7 @@ def scan_path(
         findings.extend(
             scan_file(
                 file_path, detectors_for_categories(categories, active_packs),
-                run_salt=run_salt, coverage=coverage_state, scan_root=target,
+                run_salt=run_salt, coverage=coverage_state, scan_root=scan_root,
             )
         )
         if file_path.suffix.lower() in {".js", ".mjs", ".cjs", ".ts", ".tsx", ".jsx", ".py"}:

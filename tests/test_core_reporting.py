@@ -498,20 +498,25 @@ class HtmlReportTests(unittest.TestCase):
             risk_reason="Review the finding.",
             remediation="Keep <input> safe.",
         )
-        malformed = Finding(
-            type="malformed_fix",
-            severity="medium",
-            confidence=0.7,
-            detector_id="test:malformed_fix",
-            source="fixture",
-            evidence=Evidence(source="fixture", redacted_value="[redacted]"),
-            risk_reason="Review the malformed remediation.",
-            remediation="Use the legacy fallback.",
-            remediation_v2={
-                "what_leaked": "Ignored structured value.",
-                "fix_steps": "not a list",
-            },
-        )
+        malformed = ScanReport.from_dict({
+            "target": "fixture",
+            "scan_mode": "local",
+            "findings": [{
+                "type": "malformed_fix",
+                "severity": "medium",
+                "confidence": 0.7,
+                "detector_id": "test:malformed_fix",
+                "source": "fixture",
+                "evidence": {"source": "fixture", "redacted_value": "[redacted]"},
+                "risk_reason": "Review the malformed remediation.",
+                "remediation": "Use the legacy fallback.",
+                "remediation_v2": {
+                    "what_leaked": "Ignored structured value.",
+                    "why_it_matters": "This context is valid, but the steps are not.",
+                    "fix_steps": "Rotate the token.",
+                },
+            }],
+        }).findings[0]
         structured_same_rule = Finding(
             type="structured_fix_other",
             severity="high",
@@ -536,11 +541,15 @@ class HtmlReportTests(unittest.TestCase):
         self.assertIn("keyleak verify --target &lt;prod&gt;", html_output)
         self.assertIn("Fix: <code>Keep &lt;input&gt; safe.</code>", html_output)
         self.assertIn("Fix: <code>Use the legacy fallback.</code>", html_output)
+        self.assertNotIn("This context is valid, but the steps are not.", html_output)
+        self.assertNotIn("Rotate the token.", html_output)
         self.assertNotIn("<script>", html_output)
 
         markdown_output = format_markdown(report)
         self.assertIn("- Fix: Use the legacy fallback.", markdown_output)
         self.assertNotIn("Ignored structured value.", markdown_output)
+        self.assertNotIn("This context is valid, but the steps are not.", markdown_output)
+        self.assertNotIn("Rotate the token.", markdown_output)
 
         sarif = json.loads(format_sarif(report))
         rules = {rule["id"]: rule for rule in sarif["runs"][0]["tool"]["driver"]["rules"]}
