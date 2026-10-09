@@ -88,6 +88,7 @@ def main(argv: Optional[List[str]] = None) -> int:
         report = scan_path(
             args.path, includes=_split_includes(args.include), profile=args.launch_profile,
             packs=packs, scan_node_modules=args.scan_node_modules, scan_dist=args.scan_dist,
+            scan_binaries=args.scan_binaries,
         )
         return _emit_report(report, args)
 
@@ -188,6 +189,7 @@ def main(argv: Optional[List[str]] = None) -> int:
                 profile=args.launch_profile,
                 signer=args.signer,
                 prev_hash=args.prev_hash,
+                scan_binaries=args.scan_binaries,
             )
         except ArchiveScanError as exc:
             print(f"archive scan failed: {exc}", file=sys.stderr)
@@ -200,7 +202,10 @@ def main(argv: Optional[List[str]] = None) -> int:
         from .reporting import fail_threshold_met
         from .models import ScanReport as _ScanReport
         report = _ScanReport.from_dict(envelope.get("report") or {})
-        return 2 if fail_threshold_met(report, args.fail_on) else 0
+        return 2 if (
+            coverage_is_incomplete(report.extra.get("coverage"))
+            or fail_threshold_met(report, args.fail_on)
+        ) else 0
 
     if args.command == "watch":
         from .watch import cli_main as watch_main
@@ -360,6 +365,7 @@ def build_parser() -> argparse.ArgumentParser:
     local.add_argument("--include", default=",".join(DEFAULT_INCLUDES))
     local.add_argument("--scan-node-modules", action="store_true", help="Boundedly scan JavaScript/TypeScript sources inside node_modules for worm behavior and known fingerprints.")
     local.add_argument("--scan-dist", action="store_true", help="Include the root dist/ build output in the bounded local scan.")
+    local.add_argument("--scan-binaries", action="store_true", help="Opt in to bounded printable-string scanning of recognized binary artifacts.")
     local.add_argument("--launch-profile", default="launch-gate", choices=["launch-gate", "local-dev", "bug-bounty", "ci", "full"])
     local.add_argument("--packs", default="", help=f"Comma-separated detector packs. Available: {', '.join(DETECTOR_PACKS)}")
     local.add_argument("--bundle", default="", help="Scan bundle (named group of packs). Run `keyleak bundles` to list. Selects the bundle's packs; overrides --packs.")
@@ -414,6 +420,7 @@ def build_parser() -> argparse.ArgumentParser:
     archive.add_argument("--launch-profile", default="ci", choices=["launch-gate", "local-dev", "bug-bounty", "ci", "full"])
     archive.add_argument("--signer", default="anonymous")
     archive.add_argument("--prev-hash", default="", help="self_hash of the previous envelope in the chain.")
+    archive.add_argument("--scan-binaries", action="store_true", help="Also scan recognized binary artifacts in the archive.")
     archive.add_argument("--out", default="", help="Write the envelope to this file instead of stdout.")
     archive.add_argument("--fail-on", default="high", choices=["low", "medium", "high", "critical"])
 
