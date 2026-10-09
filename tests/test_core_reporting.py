@@ -17,7 +17,7 @@ from keyleak.detectors import DETECTORS, DETECTOR_PACKS, HEATMAP_ROWS, detectors
 from keyleak.local_scanner import _is_placeholder
 from keyleak.models import Finding, Evidence, ScanReport, finding_from_legacy
 from keyleak.redaction import redact_value
-from keyleak.reporting import build_report, fail_threshold_met, format_html, format_sarif
+from keyleak.reporting import build_report, fail_threshold_met, format_html, format_markdown, format_sarif
 from keyleak.suppressions import apply_suppressions, load_suppressions
 
 
@@ -470,6 +470,111 @@ class HtmlReportTests(unittest.TestCase):
         self.assertNotIn("<script>evil", output)
         self.assertIn("&lt;script&gt;alert", output)
         self.assertIn("&lt;script&gt;evil", output)
+
+    def test_structured_remediation_renders_escaped_html_and_sarif_with_legacy_fallback(self):
+        structured = Finding(
+            type="structured_fix",
+            severity="high",
+            confidence=0.9,
+            detector_id="test:structured_fix",
+            source="fixture",
+            evidence=Evidence(source="fixture", redacted_value="[redacted]"),
+            risk_reason="Review the exposure.",
+            remediation="Legacy fix text.",
+            remediation_v2={
+                "what_leaked": "Token <script>",
+                "why_it_matters": "Attacker's access & data.",
+                "fix_steps": ["Rotate <key> & revoke it."],
+                "verify_command": "keyleak verify --target <prod>",
+            },
+        )
+        legacy = Finding(
+            type="legacy_fix",
+            severity="medium",
+            confidence=0.7,
+            detector_id="test:legacy_fix",
+            source="fixture",
+            evidence=Evidence(source="fixture", redacted_value="[redacted]"),
+            risk_reason="Review the finding.",
+            remediation="Keep <input> safe.",
+        )
+        malformed = ScanReport.from_dict({
+            "target": "fixture",
+            "scan_mode": "local",
+            "findings": [{
+                "type": "malformed_fix",
+                "severity": "medium",
+                "confidence": 0.7,
+                "detector_id": "test:malformed_fix",
+                "source": "fixture",
+                "evidence": {"source": "fixture", "redacted_value": "[redacted]"},
+                "risk_reason": "Review the malformed remediation.",
+                "remediation": "Use the legacy fallback.",
+                "remediation_v2": {
+                    "what_leaked": "Ignored structured value.",
+                    "why_it_matters": "This context is valid, but the steps are not.",
+                    "fix_steps": "Rotate the token.",
+                },
+            }],
+        }).findings[0]
+        structured_same_rule = Finding(
+            type="structured_fix_other",
+            severity="high",
+            confidence=0.9,
+            detector_id="test:structured_fix",
+            source="other.js",
+            evidence=Evidence(source="other.js", redacted_value="[redacted]"),
+            risk_reason="Second finding with shared rule.",
+            remediation="Second finding legacy text.",
+            remediation_v2={
+                "what_leaked": "Different leaked value.",
+                "why_it_matters": "Different impact.",
+                "fix_steps": ["Different fix."],
+            },
+        )
+        report = build_report("fixture", [structured, structured_same_rule, legacy, malformed])
+
+        html_output = format_html(report)
+        self.assertIn("What leaked: Token &lt;script&gt;", html_output)
+        self.assertIn("Attacker&#x27;s access &amp; data.", html_output)
+        self.assertIn("Rotate &lt;key&gt; &amp; revoke it.", html_output)
+        self.assertIn("keyleak verify --target &lt;prod&gt;", html_output)
+        self.assertIn("Fix: <code>Keep &lt;input&gt; safe.</code>", html_output)
+        self.assertIn("Fix: <code>Use the legacy fallback.</code>", html_output)
+        self.assertNotIn("This context is valid, but the steps are not.", html_output)
+        self.assertNotIn("Rotate the token.", html_output)
+        self.assertNotIn("<script>", html_output)
+
+        markdown_output = format_markdown(report)
+        self.assertIn("- Fix: Use the legacy fallback.", markdown_output)
+        self.assertNotIn("Ignored structured value.", markdown_output)
+        self.assertNotIn("This context is valid, but the steps are not.", markdown_output)
+        self.assertNotIn("Rotate the token.", markdown_output)
+
+        sarif = json.loads(format_sarif(report))
+        rules = {rule["id"]: rule for rule in sarif["runs"][0]["tool"]["driver"]["rules"]}
+        structured_rule = rules["test:structured_fix"]
+        self.assertEqual(structured_rule["help"]["text"], "Legacy fix text.")
+        self.assertNotIn("remediation_v2", structured_rule["properties"])
+        results = {result["message"]["text"]: result for result in sarif["runs"][0]["results"]}
+        self.assertEqual(
+            results["Review the exposure."]["properties"]["remediation_v2"]["what_leaked"],
+            "Token <script>",
+        )
+        self.assertEqual(
+            results["Second finding with shared rule."]["properties"]["remediation_v2"]["what_leaked"],
+            "Different leaked value.",
+        )
+        self.assertEqual(
+            results["Review the malformed remediation."]["properties"],
+            {"category": ""},
+        )
+        self.assertEqual(
+            results["Review the exposure."]["properties"]["remediation_v2"]["fix_steps"],
+            ["Rotate <key> & revoke it."],
+        )
+        self.assertEqual(rules["test:legacy_fix"]["help"]["text"], "Keep <input> safe.")
+        self.assertEqual(rules["test:malformed_fix"]["help"]["text"], "Use the legacy fallback.")
 
     def test_html_safe_verdict(self):
         report = build_report("https://safe.example.com", [], scan_mode="local")

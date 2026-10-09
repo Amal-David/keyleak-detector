@@ -10,7 +10,14 @@
   'use strict';
 
   const MSG_TYPE = '__keyleak_intercepted__';
+  const CONTROL_TYPE = '__keyleak_monitoring_control__';
   const MAX_BODY_SIZE = 2 * 1024 * 1024; // 2MB limit
+  let monitoringEnabled = false;
+
+  window.addEventListener('message', (event) => {
+    if ((event.source !== window && event.source !== window.parent) || event.data?.type !== CONTROL_TYPE) return;
+    monitoringEnabled = event.data.enabled === true;
+  });
 
   // Skip non-text content types
   function isTextContent(contentType) {
@@ -39,6 +46,7 @@
   }
 
   function sendToContentScript(data) {
+    if (!monitoringEnabled) return;
     try {
       window.postMessage({ type: MSG_TYPE, ...data }, '*');
     } catch (e) {
@@ -69,6 +77,7 @@
     const response = await originalFetch.apply(this, args);
 
     try {
+      if (!monitoringEnabled) return response;
       const url = (typeof args[0] === 'string') ? args[0] : args[0]?.url || '';
       const contentType = response.headers.get('content-type') || '';
 
@@ -108,6 +117,7 @@
   XMLHttpRequest.prototype.send = function (...args) {
     this.addEventListener('load', function () {
       try {
+        if (!monitoringEnabled) return;
         const contentType = this.getResponseHeader('content-type') || '';
         if (isTextContent(contentType) && this.status < 400) {
           const body = this.responseText;
@@ -145,6 +155,7 @@
       let convexAuthenticated = false;
       const originalSend = socket.send;
       socket.send = function (data) {
+        if (!monitoringEnabled) return originalSend.call(this, data);
         if (isConvex && typeof data === 'string' && data.length < MAX_BODY_SIZE) {
           try {
             const message = JSON.parse(data);
@@ -206,6 +217,7 @@
       };
       socket.addEventListener('message', function (event) {
         try {
+          if (!monitoringEnabled) return;
           scanMessageBody(
             'websocket',
             socketUrl,

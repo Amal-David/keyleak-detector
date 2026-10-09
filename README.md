@@ -305,6 +305,8 @@ python app.py
 ### 3. Scan Local Files And Configs
 
 Use `keyleak local` before pushing or shipping. It scans local files without starting the web app.
+For a beginner walkthrough of bounded dependency/build scans, coverage, owned-site scans,
+extension privacy, and report triage, see [Scanner workflows](docs/SCANNER_WORKFLOWS.md).
 
 ```bash
 poetry install
@@ -314,6 +316,24 @@ poetry run keyleak local . --sarif --fail-on high
 ```
 
 By default, local mode includes `env,mcp,ci,docker,sourcemaps,logs`.
+Dependency source files in `node_modules` and root `dist/` build output are
+excluded from source scanning by default. With the `leak` pack active, the
+separate read-only lifecycle-hook audit may still inspect manifests and install
+scripts under `node_modules`; it never runs them. Use the bounded opt-in flags
+to add dependency source and root build-output scanning:
+
+```bash
+poetry run keyleak local . --scan-node-modules
+poetry run keyleak local . --scan-dist --json
+poetry run keyleak local . --scan-node-modules --scan-dist --json
+```
+
+`--scan-node-modules` checks JavaScript and TypeScript sources with the existing
+worm-shape and fingerprint detectors. `--scan-dist` includes JavaScript build
+artifacts and source maps from the root `dist/` directory. Both scopes have file,
+byte, and directory limits. Local reports include a coverage summary; missing
+declared local source maps, escaped symlinks, and limit or read failures mark
+coverage incomplete, which makes the CLI return the failing exit code.
 
 Limit the scan to specific file families:
 
@@ -329,7 +349,7 @@ poetry run keyleak local . --launch-profile full --markdown
 poetry run keyleak local . --launch-profile ci --fail-on high
 ```
 
-Exit codes are designed for automation: `0` means the selected threshold passed, `1` means the command failed, and `2` means findings met `--fail-on`.
+Exit codes are designed for automation: `0` means the selected threshold passed with complete coverage, `1` means the command failed, and `2` means findings met `--fail-on` or scan coverage was incomplete or malformed.
 
 ### 4. Scan A Running Web App From The CLI
 

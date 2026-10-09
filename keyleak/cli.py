@@ -13,7 +13,7 @@ from pathlib import Path
 
 from .detectors import DETECTOR_PACKS, normalize_packs
 from .local_scanner import DEFAULT_INCLUDES, scan_path
-from .models import ScanReport
+from .models import ScanReport, coverage_is_incomplete
 from .reporting import (
     build_report,
     fail_threshold_met,
@@ -85,7 +85,10 @@ def main(argv: Optional[List[str]] = None) -> int:
         except ValueError as exc:
             print(str(exc), file=sys.stderr)
             return 1
-        report = scan_path(args.path, includes=_split_includes(args.include), profile=args.launch_profile, packs=packs)
+        report = scan_path(
+            args.path, includes=_split_includes(args.include), profile=args.launch_profile,
+            packs=packs, scan_node_modules=args.scan_node_modules, scan_dist=args.scan_dist,
+        )
         return _emit_report(report, args)
 
     if args.command == "scan":
@@ -355,6 +358,8 @@ def build_parser() -> argparse.ArgumentParser:
     local = subparsers.add_parser("local", help="Scan local files for secrets, MCP configs, source maps, and CI leaks.")
     local.add_argument("path")
     local.add_argument("--include", default=",".join(DEFAULT_INCLUDES))
+    local.add_argument("--scan-node-modules", action="store_true", help="Boundedly scan JavaScript/TypeScript sources inside node_modules for worm behavior and known fingerprints.")
+    local.add_argument("--scan-dist", action="store_true", help="Include the root dist/ build output in the bounded local scan.")
     local.add_argument("--launch-profile", default="launch-gate", choices=["launch-gate", "local-dev", "bug-bounty", "ci", "full"])
     local.add_argument("--packs", default="", help=f"Comma-separated detector packs. Available: {', '.join(DETECTOR_PACKS)}")
     local.add_argument("--bundle", default="", help="Scan bundle (named group of packs). Run `keyleak bundles` to list. Selects the bundle's packs; overrides --packs.")
@@ -578,7 +583,10 @@ def _emit_report(report, args: argparse.Namespace) -> int:
     else:
         print(report_to_text(report))
 
-    return 2 if fail_threshold_met(report, args.fail_on) else 0
+    coverage_incomplete = "coverage" in report.extra and coverage_is_incomplete(report.extra["coverage"])
+    if coverage_incomplete or fail_threshold_met(report, args.fail_on):
+        return 2
+    return 0
 
 
 def _add_format_flags(parser: argparse.ArgumentParser) -> None:

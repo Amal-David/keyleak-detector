@@ -30,7 +30,7 @@ class BrowserLibraryScanTests(unittest.TestCase):
         cm.__enter__.return_value = p
 
         with mock.patch("playwright.sync_api.sync_playwright", return_value=cm):
-            return run_browser_scan("https://app.example.test/")
+            return run_browser_scan("https://app.example.test/", target_guard=lambda _host: None)
 
     def test_old_jquery_produces_vulnerable_library_finding(self):
         report = self._run_with_evaluate_results([

@@ -46,6 +46,7 @@ tmp/
 !DOCKER.md
 !DISCLAIMER.md
 !LICENSE.md
+!docs/SCANNER_WORKFLOWS.md
 !docs/audit/maintenance/*.md
 
 # Pattern cache

@@ -20,7 +20,7 @@ class SiteScannerSSRFTests(unittest.TestCase):
 
         def fake_crawl(hosts, **kwargs):
             seen["crawl_hosts"] = list(hosts)
-            return []
+            return ss.CrawlResult(pages=[])
 
         def fake_takeover(hosts, **kwargs):
             seen["takeover_hosts"] = list(hosts)
@@ -54,9 +54,12 @@ class SiteScannerSSRFTests(unittest.TestCase):
 
     def test_blocked_apex_is_not_reinserted(self):
         seen = {}
+
+        def fake_crawl(hosts, **kwargs):
+            seen["hosts"] = list(hosts)
+            return ss.CrawlResult(pages=[])
         with mock.patch.object(ss, "discover_subdomains", lambda d, **k: ["x.example.test"]), \
-             mock.patch.object(ss, "crawl_pages",
-                               lambda hosts, **k: seen.setdefault("hosts", list(hosts)) or []), \
+             mock.patch.object(ss, "crawl_pages", fake_crawl), \
              mock.patch.object(ss, "run_browser_scan",
                                lambda u, **k: ScanReport(target=u, scan_mode="browser", findings=[])), \
              mock.patch("keyleak.subdomain_takeover.check_subdomain_takeovers",
@@ -68,10 +71,13 @@ class SiteScannerSSRFTests(unittest.TestCase):
 
     def test_no_guard_keeps_all_hosts(self):
         seen = {}
+
+        def fake_crawl(hosts, **kwargs):
+            seen["hosts"] = list(hosts)
+            return ss.CrawlResult(pages=[])
         with mock.patch.object(ss, "discover_subdomains",
                                lambda d, **k: ["a.example.test", "b.example.test"]), \
-             mock.patch.object(ss, "crawl_pages",
-                               lambda hosts, **k: seen.setdefault("hosts", list(hosts)) or []), \
+             mock.patch.object(ss, "crawl_pages", fake_crawl), \
              mock.patch.object(ss, "run_browser_scan",
                                lambda u, **k: ScanReport(target=u, scan_mode="browser", findings=[])), \
              mock.patch("keyleak.subdomain_takeover.check_subdomain_takeovers", lambda *a, **k: []):

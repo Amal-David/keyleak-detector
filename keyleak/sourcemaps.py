@@ -25,8 +25,8 @@ import json
 import re
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterable, List, Optional, Tuple
-from urllib.parse import urljoin, urlparse
+from typing import Callable, Iterable, List, Optional, Tuple
+from urllib.parse import unquote, urljoin, urlparse
 
 
 MAX_SOURCEMAP_BYTES = 8 * 1024 * 1024  # 8 MiB
@@ -91,23 +91,60 @@ def parse_sourcemap_payload(text: str) -> List[SourceMapEntry]:
     return entries
 
 
-def load_sourcemap_from_disk(bundle_path: Path) -> List[SourceMapEntry]:
-    """For ``keyleak local`` — locate the sibling ``.map`` file next to ``bundle_path``.
+def resolve_declared_sourcemap_path(bundle_path: Path, map_url: str, root: Path) -> Optional[Path]:
+    """Resolve a local source-map reference without allowing root escape."""
+    try:
+        parsed = urlparse(map_url)
+    except ValueError:
+        return None
+    if parsed.scheme or parsed.netloc or map_url.startswith("//"):
+        return None
+    declared_path = Path(unquote(parsed.path))
+    candidate = declared_path if declared_path.is_absolute() else bundle_path.parent / declared_path
+    try:
+        resolved_root = root.resolve()
+        resolved = candidate.resolve(strict=False)
+        resolved.relative_to(resolved_root)
+    except (OSError, ValueError):
+        return None
+    return resolved
+
+
+def load_sourcemap_from_disk(
+    bundle_path: Path,
+    map_url: Optional[str] = None,
+    root: Optional[Path] = None,
+    on_incomplete: Optional[Callable[[str], None]] = None,
+) -> List[SourceMapEntry]:
+    """Load a declared local map or locate a conventional sibling ``.map``.
 
     A bundle file ``dist/app.js`` is typically accompanied by
-    ``dist/app.js.map``. Returns an empty list if no sibling map exists.
+    ``dist/app.js.map``. Declared relative paths are resolved within ``root``;
+    remote references are never fetched. Returns an empty list if no map exists.
     """
 
-    map_path = bundle_path.with_suffix(bundle_path.suffix + ".map")
+    map_path = None
+    if map_url:
+        map_path = resolve_declared_sourcemap_path(bundle_path, map_url, root or bundle_path.parent)
+        if map_path is not None and not map_path.is_file():
+            map_path = None
+    if map_path is None:
+        map_path = bundle_path.with_suffix(bundle_path.suffix + ".map")
     if not map_path.is_file():
         # Some bundlers emit "app.js.map" alongside "app.js" — that's the
         # default; some emit "app.map" — check that too.
         alt = bundle_path.with_suffix(".map")
         if not alt.is_file():
+            if map_url and on_incomplete is not None:
+                on_incomplete("declared source map is missing or no usable sibling map exists")
             return []
         map_path = alt
 
-    if map_path.stat().st_size > MAX_SOURCEMAP_BYTES:
+    try:
+        size = map_path.stat().st_size
+    except OSError as exc:
+        raise SourceMapError(f"could not stat {map_path}: {exc}") from exc
+    if size > MAX_SOURCEMAP_BYTES:
         raise SourceMapError(f"source map exceeds {MAX_SOURCEMAP_BYTES} bytes: {map_path}")
 
     try:
@@ -167,6 +204,8 @@ def extract_inline_sourcemap(map_url: str) -> Optional[List[SourceMapEntry]]:
 def reconstruct_originals(
     bundle_text: str,
     bundle_path: Optional[Path] = None,
+    root: Optional[Path] = None,
+    on_incomplete: Optional[Callable[[str], None]] = None,
 ) -> List[SourceMapEntry]:
     """Best-effort: return original sources reconstructed from ``bundle_text``.
 
@@ -178,12 +217,26 @@ def reconstruct_originals(
 
     url = find_sourcemap_url(bundle_text)
     if url:
-        inline = extract_inline_sourcemap(url)
+        try:
+            inline = extract_inline_sourcemap(url)
+        except SourceMapError:
+            if on_incomplete is not None:
+                on_incomplete("declared inline source map is invalid")
+            return []
         if inline is not None:
             return inline
+        if url.startswith("data:"):
+            if on_incomplete is not None:
+                on_incomplete("declared inline source map is invalid")
+            return []
     if bundle_path is not None:
         try:
-            return load_sourcemap_from_disk(bundle_path)
+            return load_sourcemap_from_disk(
+                bundle_path, map_url=url if url and not url.startswith("data:") else None,
+                root=root, on_incomplete=on_incomplete,
+            )
         except SourceMapError:
+            if url and on_incomplete is not None:
+                on_incomplete("declared source map could not be read")
             return []
     return []
