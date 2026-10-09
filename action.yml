@@ -156,13 +156,15 @@ runs:
           ALLOWLIST_ARGS=(--allowlist "$KL_ALLOWLIST")
         fi
 
+        # Execute the installed scanner in isolated Python, so inherited
+        # PYTHONPATH/PYTHONHOME cannot import code from the target checkout.
         # Local scan
         if [ "$KL_MODE" = "local" ] || [ "$KL_MODE" = "both" ]; then
           run_scan "$REPORT_DIR/keyleak-self-audit-report.json" \
-            keyleak self-audit . "${ALLOWLIST_ARGS[@]}" \
+            python -I -m keyleak.cli self-audit . "${ALLOWLIST_ARGS[@]}" \
             --json --fail-on "$KL_FAILON"
 
-          run_scan "$REPORT_DIR/keyleak-report.json" keyleak local . \
+          run_scan "$REPORT_DIR/keyleak-report.json" python -I -m keyleak.cli local . \
             --launch-profile "$KL_PROFILE" \
             "${ALLOWLIST_ARGS[@]}" \
             --json \
@@ -177,7 +179,7 @@ runs:
           fi
 
           REPORT="$REPORT_DIR/keyleak-browser-report.$KL_FORMAT"
-          run_scan "$REPORT_DIR/keyleak-browser-report.json" keyleak browser-scan "$KL_URL" \
+          run_scan "$REPORT_DIR/keyleak-browser-report.json" python -I -m keyleak.cli browser-scan "$KL_URL" \
             "${BAAS_ARGS[@]}" \
             "${ALLOWLIST_ARGS[@]}" \
             --json \

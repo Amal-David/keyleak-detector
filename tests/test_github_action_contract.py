@@ -53,6 +53,8 @@ class GitHubActionContractTests(unittest.TestCase):
             import json
             import os
             import sys
+            if not sys.flags.isolated:
+                raise RuntimeError("Scanner must use isolated Python imports")
             with open(os.environ["SCAN_TRACE"], "a", encoding="utf-8") as trace:
                 trace.write(json.dumps(sys.argv[1:]) + "\\n")
             scan = json.loads(os.environ["SCAN_BEHAVIOR"]).get(sys.argv[1], {})
@@ -63,10 +65,26 @@ class GitHubActionContractTests(unittest.TestCase):
             sys.exit(scan.get("exit", 0))
             """), encoding="utf-8")
         scanner.chmod(0o755)
-        # Ensure the script's Python uses the same isolated interpreter as the
-        # test suite, without installing or executing any third-party scanner.
+        # Substitute only the scanner module with the offline CLI fixture.
+        # Run it under the same real -I interpreter as production, preserving
+        # inherited Python import environment variables for the regression.
+        # Report conversion still runs the installed package without stubbing.
         python_launcher = executable_dir / "python"
-        python_launcher.write_text(f'#!/usr/bin/env bash\nexec {shlex.quote(sys.executable)} "$@"\n', encoding="utf-8")
+        python_launcher.write_text(textwrap.dedent(f"""\
+            #!/usr/bin/env bash
+            if [[ "${{1-}}" == "-I" && "${{2-}}" == "-m" && "${{3-}}" == "keyleak.cli" ]]; then
+              shift 3
+              exec {shlex.quote(sys.executable)} -I {shlex.quote(str(scanner))} "$@"
+            fi
+            # A regression must fail offline instead of invoking a real scan.
+            for arg in "$@"; do
+              if [[ "$arg" == "keyleak.cli" ]]; then
+                echo "Refusing unexpected scanner invocation" >&2
+                exit 97
+              fi
+            done
+            exec {shlex.quote(sys.executable)} "$@"
+            """), encoding="utf-8")
         python_launcher.chmod(0o755)
         if allowlist is not None:
             (workdir / allowlist).write_text("# test policy\n", encoding="utf-8")
@@ -238,7 +256,9 @@ class GitHubActionContractTests(unittest.TestCase):
                 self.assertEqual(outputs["verdict"], "BLOCK_SHIP")
 
     def test_untrusted_checkout_modules_and_report_symlinks_are_not_used(self):
-        result, outputs, _, workdir = self.run_action(inputs={"KL_FORMAT": "html"}, hostile_checkout=True)
+        result, outputs, _, workdir = self.run_action(
+            inputs={"KL_FORMAT": "html", "PYTHONPATH": "."}, hostile_checkout=True,
+        )
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual((workdir / "sentinel").read_text(encoding="utf-8"), "must not be overwritten")
         reports = outputs["report_paths"].splitlines()
