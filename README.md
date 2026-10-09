@@ -351,6 +351,8 @@ scans cap extraction at 10,000 entries, 100 MiB per member, 500 MiB total, and a
 200:1 expansion ratio; ZIP64 archives are not supported by this opt-in path. If
 an archive limit stops extraction, findings from earlier members are retained
 and coverage is marked incomplete.
+For a copyable synthetic release walkthrough, ZIP/archive example, byte-offset
+interpretation, and cleanup steps, see the [binary artifact scanning guide](docs/BINARY_ARTIFACT_SCANNING.md).
 
 Limit the scan to specific file families:
 
