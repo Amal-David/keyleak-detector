@@ -326,6 +326,7 @@ to add dependency source and root build-output scanning:
 poetry run keyleak local . --scan-node-modules
 poetry run keyleak local . --scan-dist --json
 poetry run keyleak local . --scan-node-modules --scan-dist --json
+poetry run keyleak local . --scan-binaries --sarif
 ```
 
 `--scan-node-modules` checks JavaScript and TypeScript sources with the existing
@@ -334,6 +335,24 @@ artifacts and source maps from the root `dist/` directory. Both scopes have file
 byte, and directory limits. Local reports include a coverage summary; missing
 declared local source maps, escaped symlinks, and limit or read failures mark
 coverage incomplete, which makes the CLI return the failing exit code.
+
+`--scan-binaries` opts into bounded printable-string scanning for recognized
+PE, ELF, Mach-O, and WASM files, plus common binary suffixes such as `.dll`,
+`.exe`, `.so`, `.dylib`, `.wasm`, `.bin`, `.elf`, and `.macho`. It extracts
+ASCII and UTF-16LE/BE strings and checks them with the existing detectors; files
+are read only and never executed. Binary findings include a zero-based byte
+offset into the file payload. The scan is capped at 10 MiB per file, 1,000
+files, and 100 MiB total; skipped files appear in coverage. Archive scans also
+accept `--scan-binaries`. String extraction is also bounded by a per-file
+work limit and a 100,000-run limit per artifact.
+This pass only detects secrets present as printable strings; secrets assembled
+at runtime, including XOR-obfuscated values, are outside its coverage. Archive
+scans cap extraction at 10,000 entries, 100 MiB per member, 500 MiB total, and a
+200:1 expansion ratio; ZIP64 archives are not supported by this opt-in path. If
+an archive limit stops extraction, findings from earlier members are retained
+and coverage is marked incomplete.
+For a copyable synthetic release walkthrough, ZIP/archive example, byte-offset
+interpretation, and cleanup steps, see the [binary artifact scanning guide](docs/BINARY_ARTIFACT_SCANNING.md).
 
 Limit the scan to specific file families:
 

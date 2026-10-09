@@ -445,7 +445,14 @@ def format_sarif(report: ScanReport) -> str:
                     {
                         "physicalLocation": {
                             "artifactLocation": {"uri": item["source"]},
-                            "region": {"startLine": item["evidence"].get("line") or 1},
+                            "region": {
+                                "startLine": item["evidence"].get("line") or 1,
+                                **(
+                                    {"byteOffset": item["evidence"]["byte_offset"]}
+                                    if item["evidence"].get("byte_offset") is not None
+                                    else {}
+                                ),
+                            },
                         }
                     }
                 ],
