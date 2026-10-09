@@ -167,22 +167,19 @@ def _procedure_address(value: Any, procedure_name: str) -> str | None:
     return None
 
 
+def _all_text(value: Any) -> Iterable[str]:
+    if isinstance(value, str):
+        yield value
+    elif isinstance(value, dict):
+        for item in value.values():
+            yield from _all_text(item)
+    elif isinstance(value, list):
+        for item in value:
+            yield from _all_text(item)
+
+
 def _pseudocode_text(value: Any) -> str:
-    candidates = []
-
-    def visit(item: Any) -> None:
-        if isinstance(item, dict):
-            for key in ("pseudocode", "pseudo_code", "result", "data", "text"):
-                if isinstance(item.get(key), str):
-                    candidates.append(item[key])
-            for child in item.values():
-                visit(child)
-        elif isinstance(item, list):
-            for child in item:
-                visit(child)
-
-    visit(value)
-    return max(candidates, key=len, default="")
+    return max(_all_text(value), key=len, default="")
 
 
 def _sanitized_excerpt(text: str) -> str:
