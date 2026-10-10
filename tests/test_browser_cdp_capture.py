@@ -8,12 +8,15 @@ import json
 import threading
 import unittest
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from unittest import mock
 
 from keyleak.browser_scanner import (
     CDP_MAX_BODY_BYTES,
     _CdpNetworkCapture,
     _decode_cdp_body,
     _is_text_mime,
+    _route_browser_request,
+    _route_browser_websocket,
 )
 from keyleak.redaction import stable_id
 
@@ -25,6 +28,49 @@ def _fake_openai_key(*chunks):
 SECRET = _fake_openai_key("ABCDEF123456", "7890SECRET", "VALUE0987654321")
 FETCH_ONLY_SECRET = _fake_openai_key("XT9mQ2vL7pR4", "sN8wY3cH6zD1", "aF5uG0kJbE9tM2qV7")
 HAS_PLAYWRIGHT = importlib.util.find_spec("playwright") is not None
+
+
+class BrowserRequestContainmentTests(unittest.TestCase):
+    @staticmethod
+    def _guard(url):
+        return "internal target" if "127.0.0.1" in url else None
+
+    def test_http_requests_are_guarded_before_they_continue(self):
+        blocked = mock.Mock()
+        blocked.request.url = "http://127.0.0.1/private"
+        _route_browser_request(blocked, self._guard)
+
+        blocked.abort.assert_called_once_with("blockedbyclient")
+        blocked.continue_.assert_not_called()
+
+        public = mock.Mock()
+        public.request.url = "https://example.com/app.js"
+        _route_browser_request(public, self._guard)
+
+        public.continue_.assert_called_once_with()
+        public.abort.assert_not_called()
+
+        unsupported = mock.Mock()
+        unsupported.request.url = "file:///etc/passwd"
+        _route_browser_request(unsupported, self._guard)
+
+        unsupported.abort.assert_called_once_with("blockedbyclient")
+        unsupported.continue_.assert_not_called()
+
+    def test_websocket_requests_use_the_same_containment_guard(self):
+        blocked = mock.Mock()
+        blocked.url = "ws://127.0.0.1/socket"
+        _route_browser_websocket(blocked, self._guard)
+
+        blocked.close.assert_called_once_with()
+        blocked.connect_to_server.assert_not_called()
+
+        public = mock.Mock()
+        public.url = "wss://example.com/socket"
+        _route_browser_websocket(public, self._guard)
+
+        public.connect_to_server.assert_called_once_with()
+        public.close.assert_not_called()
 
 
 class FakeCdpSession:
@@ -249,7 +295,11 @@ class BrowserCdpIntegrationTests(unittest.TestCase):
         try:
             url = f"http://127.0.0.1:{server.server_port}/"
             try:
-                report = run_browser_scan(url, scan_budget_seconds=5)
+                report = run_browser_scan(
+                    url,
+                    scan_budget_seconds=5,
+                    target_guard=lambda _url: None,
+                )
             except Exception as exc:
                 message = str(exc)
                 if "playwright install" in message or "Executable doesn't exist" in message:
