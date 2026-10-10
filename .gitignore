@@ -48,6 +48,7 @@ tmp/
 !LICENSE.md
 !.claude/skills/**/SKILL.md
 !.codex/skills/**/SKILL.md
+!docs/audit/maintenance/*.md
 
 # Pattern cache
 patterns_cache.json

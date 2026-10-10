@@ -59,6 +59,12 @@ class BrowserLibraryScanTests(unittest.TestCase):
         ])
         self.assertNotIn("vulnerable_js_library", [f.type for f in report.findings])
 
+    def test_invalid_analyzer_result_cannot_produce_a_clean_report(self):
+        for result in (None, {}, "", False):
+            with self.subTest(result=result):
+                with self.assertRaisesRegex(RuntimeError, "scan is incomplete"):
+                    self._run_with_evaluate_results([result])
+
 
 if __name__ == "__main__":
     unittest.main()

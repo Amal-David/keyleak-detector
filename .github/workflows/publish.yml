@@ -22,11 +22,11 @@ permissions:
   contents: read
 
 jobs:
-  pypi-publish:
-    name: Build and publish to PyPI
+  build:
+    name: Build release distributions
     runs-on: ubuntu-latest
     permissions:
-      id-token: write   # required for OIDC trusted publishing
+      contents: read
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
@@ -36,8 +36,9 @@ jobs:
           python-version: "3.12"
       - name: Build sdist + wheel
         run: |
-          python -m pip install --upgrade pip build
-          python -m build
+          python -m pip install "poetry==2.5.1"
+          poetry check --lock
+          poetry build
       - name: Verify package version matches the release tag
         run: |
           # Guards against the 0.5.4-vs-0.6.0 mismatch class: refuse to publish
@@ -48,5 +49,26 @@ jobs:
           if [ "$PKG_VER" != "$TAG_VER" ]; then
             echo "::error::pyproject version ($PKG_VER) != release tag ($TAG_VER)"; exit 1
           fi
+      - name: Store release distributions
+        uses: actions/upload-artifact@65c4c4a1ddee5b72f698fdd19549f0f0fb45cf08 # v4.6.0
+        with:
+          name: python-distributions
+          path: |
+            dist/*.whl
+            dist/*.tar.gz
+          if-no-files-found: error
+
+  pypi-publish:
+    name: Publish to PyPI
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write   # OIDC is available only after all build code has finished
+    steps:
+      - name: Download release distributions
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: python-distributions
+          path: dist/
       - name: Publish to PyPI
         uses: pypa/gh-action-pypi-publish@cef221092ed1bacb1cc03d23a2d87d1d172e277b # v1.14.0

@@ -92,8 +92,33 @@ jobs:
 | Output | Description |
 |---|---|
 | `verdict` | `SAFE_TO_SHIP`, `REVIEW`, or `BLOCK_SHIP` |
-| `findings-count` | Total number of findings |
-| `report-path` | Path to the generated report file |
+| `findings-count` | Total findings across the requested scans, including the self-audit in local mode; available for every output format when report processing succeeds |
+| `report-path` | Absolute path to the local or browser report; in `both` mode this is the browser report. Use this output instead of assuming a file in the checkout |
+
+## Failure behavior and reports
+
+The action fails if a scanner returns an error or finds an issue at or above
+`fail-on`. A failure in the self-audit, local scan, or browser scan remains a
+failure even if a later scan succeeds. The requested scans still run so their
+reports can help diagnose the problem. Empty reports and invalid JSON report
+metadata also fail the action.
+
+Invalid inputs fail before any scan runs. The `browser` and `both` modes require
+an HTTP(S) `url`; an absent URL is a configuration error.
+
+Generated reports are retained in the `keyleak-report` artifact even when a scan
+fails. They are stored in a private, temporary directory outside the checkout.
+Local mode includes the self-audit report and `keyleak-report.<format>`; browser
+mode includes `keyleak-browser-report.<format>`; `both` includes all three.
+Each scan runs once and produces JSON; other formats are rendered from that
+same report, and the original JSON is retained alongside them. If rendering
+fails, `report-path` points to the original JSON for diagnosis. No report
+artifact is uploaded for a configuration error that prevents scanning.
+
+For every output format, `verdict` reflects the most severe report verdict, and
+a scanner or report-processing error sets it to `BLOCK_SHIP`. The action's exit
+status honors `fail-on`, so choosing `critical` can permit a successful check
+whose report still identifies high-severity findings as `BLOCK_SHIP`.
 
 ## SARIF Integration
 
@@ -101,6 +126,7 @@ Upload findings to GitHub Security tab:
 
 ```yaml
 - uses: Amal-David/keyleak-detector@v0.5.0
+  id: keyleak
   with:
     mode: local
     output-format: sarif
@@ -109,5 +135,5 @@ Upload findings to GitHub Security tab:
 - uses: github/codeql-action/upload-sarif@v3
   if: always()
   with:
-    sarif_file: keyleak-report.sarif
+    sarif_file: ${{ steps.keyleak.outputs.report-path }}
 ```

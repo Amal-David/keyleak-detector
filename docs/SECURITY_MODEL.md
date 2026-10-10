@@ -31,6 +31,24 @@ reuse browser cookies automatically. The agentic `keyleak audit` command never
 accepts raw credentials on the command line and does not currently offer this
 comparison.
 
+For proxy-backed `basic` and `extensive` web scans, supplied bearer tokens,
+cookies, and user-ID headers are scoped to the initial URL's scheme, hostname,
+and effective port. The local proxy removes those headers from cross-origin
+requests, including redirected requests; concurrent scans retain separate
+credential scopes even when they use the same token. Private per-scan routing
+markers are removed before a request reaches the scanned website.
+The legacy proxy and findings collector support one `basic`/`extensive` scan at
+a time. Overlapping requests return HTTP 409 before accessing that shared scan
+state; full-site scans use their separate engine.
+
+The proxy checks each upstream connection and HTTP request against the shared
+target policy. Loopback and private targets still require
+`KEYLEAK_ALLOW_PRIVATE_TARGETS=1`; cloud-metadata and link-local targets remain
+blocked. These checks are DNS prechecks, not connection-time IP pinning: DNS
+rebinding remains a limitation. This does not provide a general network sandbox
+for Chromium or cover every separate attack-surface/recon transport. Keep the
+scanner local and use network isolation for sensitive environments.
+
 ## Private Scans Through a Proxy
 
 The global `--proxy` flag (off by default) routes a scan's outbound traffic
@@ -58,7 +76,11 @@ Appsec and correctness checks are intentionally labeled as leads unless KeyLeak 
 
 ## Redaction
 
-Normalized reports redact detected values by default. The web scanner API returns normalized findings by default; set `KEYLEAK_INCLUDE_LEGACY_FINDINGS=1` only for local debugging when raw legacy findings are needed. Treat local logs, screenshots, and any deliberate reveal action as sensitive.
+Normalized reports redact detected values by default. The web scanner's JSON
+and SSE responses expose normalized findings, including the grouped
+attack-surface panel, and exclude legacy raw-value records. Matched values are
+also masked when they occur in adjacent finding context or display text. Treat
+local logs, screenshots, and any deliberate reveal action as sensitive.
 
 ## Chrome Extension
 
