@@ -11,13 +11,14 @@ from unittest.mock import patch
 from keyleak.detectors import detectors_for_packs
 from keyleak.local_scanner import scan_path
 from keyleak.models import Evidence, Finding, ScanReport, coverage_is_incomplete
-from keyleak.reporting import format_sarif
+from keyleak.reporting import format_html, format_json, format_markdown, format_sarif
 from keyleak.binary_scanner import extract_printable_runs, scan_binary_bytes
 from keyleak.cli import main
 
 
 FIXTURE = Path(__file__).parent / "fixtures" / "binary_canary.macho"
 CANARY = b"AKIA1234567890ABCDEF"
+SECOND_CANARY = b"ghp_" + b"Ab3dEf8Gk2Lm5Pq9Rs1Tu4Vx6Yz0B3cD7EfG"
 
 
 class BinaryScannerTests(unittest.TestCase):
@@ -110,18 +111,34 @@ class BinaryScannerTests(unittest.TestCase):
                 list(extract_printable_runs(b"12345"))
 
     def test_same_line_binary_occurrences_keep_distinct_byte_offsets(self):
-        payload = CANARY + b"\x00" + CANARY
+        payload = CANARY + b" " + SECOND_CANARY + b"\x00" + CANARY
         with patch.dict("os.environ", {"KEYLEAK_FINDING_FINGERPRINT_KEY": "binary-id-test"}):
             findings = scan_binary_bytes(payload, "same-line.bin", detectors_for_packs(["leak"]))
         aws_findings = [
             item for item in findings if item.detector_id == "leak.aws_access_key"
         ]
+        github_findings = [
+            item for item in findings if item.detector_id == "leak.github_pat"
+        ]
 
         self.assertEqual([item.evidence.line for item in aws_findings], [1, 1])
         offsets = [item.evidence.byte_offset for item in aws_findings]
-        self.assertEqual(offsets, [0, len(CANARY) + 1])
+        self.assertEqual(offsets, [0, len(CANARY) + len(SECOND_CANARY) + 2])
         self.assertEqual(len({item.id for item in aws_findings}), 2)
         self.assertEqual(len({item.fingerprint for item in aws_findings}), 2)
+        self.assertEqual(len(github_findings), 1)
+        self.assertTrue(all(not item.evidence.snippet for item in findings))
+        report = ScanReport("same-line.bin", "local", findings)
+        outputs = (
+            json.dumps([item.to_dict() for item in findings]),
+            format_json(report),
+            format_markdown(report),
+            format_html(report),
+            format_sarif(report),
+        )
+        for output in outputs:
+            self.assertNotIn(CANARY.decode(), output)
+            self.assertNotIn(SECOND_CANARY.decode(), output)
         for offset in offsets:
             self.assertEqual(payload[offset:offset + len(CANARY)], CANARY)
         round_tripped = [Finding.from_dict(item.to_dict()) for item in aws_findings]
@@ -156,6 +173,25 @@ class BinaryScannerTests(unittest.TestCase):
         self.assertEqual(len(matches), 1)
         self.assertNotIn(CANARY.decode(), json.dumps(report.to_dict()))
         self.assertTrue(coverage_is_incomplete(report.extra["coverage"]))
+
+    def test_finding_limit_keeps_partial_results_and_exits_incomplete(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "many-matches.bin"
+            path.write_bytes(CANARY + b"\x00" + CANARY)
+            output = io.StringIO()
+            with patch("keyleak.binary_scanner.MAX_BINARY_FINDINGS", 1), \
+                    contextlib.redirect_stdout(output):
+                status = main([
+                    "local", str(path), "--scan-binaries", "--json",
+                    "--launch-profile", "launch-gate", "--fail-on", "critical",
+                ])
+
+        payload = json.loads(output.getvalue())
+        self.assertEqual(status, 2)
+        self.assertEqual(len(payload["findings"]), 1)
+        self.assertTrue(coverage_is_incomplete(payload["coverage"]))
+        self.assertEqual(payload["findings"][0]["evidence"]["snippet"], "")
+        self.assertNotIn(CANARY.decode(), json.dumps(payload))
 
     def test_compiled_program_is_scanned_as_bytes_and_never_executed(self):
         compiler = shutil.which("cc") or shutil.which("clang")

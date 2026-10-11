@@ -99,7 +99,7 @@ def scan_path(
 
     scan_root = target.parent if target_is_file else target
     code_files: List[Path] = []
-    binary_budget = {"files": 0, "bytes": 0, "work_bytes": 0}
+    binary_budget = {"files": 0, "bytes": 0, "work_bytes": 0, "findings": 0}
     for file_path, categories in _iter_candidate_files(
         target, active_includes, scan_node_modules=scan_node_modules,
         scan_dist=scan_dist, scan_binaries=scan_binaries,
@@ -110,6 +110,7 @@ def scan_path(
             from .binary_scanner import (
                 BinaryScanLimitError,
                 MAX_BINARY_FILE_BYTES,
+                MAX_BINARY_FINDINGS,
                 is_binary_candidate,
                 scan_binary_file,
             )
@@ -132,18 +133,25 @@ def scan_path(
                 binary_budget["files"] += 1
                 binary_budget["bytes"] += size
                 binary_budget["work_bytes"] += size * 5
+                if binary_budget["findings"] >= MAX_BINARY_FINDINGS:
+                    _record_coverage(coverage_state, "skipped", "bounded binary finding limit reached")
+                    continue
                 if binary_source_prefix is not None:
                     relative = file_path.name if target_is_file else file_path.relative_to(target).as_posix()
                     source = f"{binary_source_prefix.rstrip('/!')}!/{relative}"
                 else:
                     source = str(file_path)
                 try:
-                    findings.extend(scan_binary_file(
+                    binary_findings = scan_binary_file(
                         file_path, detectors_for_categories(categories, active_packs),
                         source=source, run_salt=run_salt,
-                    ))
+                        max_findings=MAX_BINARY_FINDINGS - binary_budget["findings"],
+                    )
+                    findings.extend(binary_findings)
+                    binary_budget["findings"] += len(binary_findings)
                 except BinaryScanLimitError as exc:
                     findings.extend(exc.findings)
+                    binary_budget["findings"] += len(exc.findings)
                     _record_coverage(coverage_state, "skipped", str(exc))
                     continue
                 except ValueError as exc:
@@ -360,15 +368,20 @@ def scan_text(
     request_url: str = "",
     byte_offset_base: Optional[int] = None,
     byte_offset_width: int = 1,
+    max_findings: Optional[int] = None,
 ) -> List[Finding]:
     findings: List[Finding] = []
     seen = set()
     safe_request_url = redact_url(request_url) if request_url else ""
     for detector in detectors:
+        if max_findings is not None and len(findings) >= max_findings:
+            break
         regex = detector.compile()
         line = 1
         line_offset = 0
         for match in regex.finditer(content):
+            if max_findings is not None and len(findings) >= max_findings:
+                break
             raw_value = match.group(detector.capture_group) if detector.capture_group and match.groups() else match.group(1) if match.groups() else match.group(0)
             token_start = (
                 match.start(detector.capture_group)
@@ -426,11 +439,11 @@ def scan_text(
             if key in seen:
                 continue
             seen.add(key)
-            # 1. Replace the raw secret with its redacted form in the snippet,
-            #    then 2. mask any *adjacent* PII so the report can't carry
-            #    third-party emails/phones/cards into auditor hands.
-            redacted_snippet = redact_snippet(snippet, raw_value, run_salt=run_salt)
-            redacted_snippet = pii_scrub_snippet(redacted_snippet, redacted_value)
+            if byte_offset_base is None:
+                redacted_snippet = redact_snippet(snippet, raw_value, run_salt=run_salt)
+                redacted_snippet = pii_scrub_snippet(redacted_snippet, redacted_value)
+            else:
+                redacted_snippet = ""
             evidence = Evidence(
                 source=source,
                 snippet=redacted_snippet,

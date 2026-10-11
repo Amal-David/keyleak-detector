@@ -95,7 +95,16 @@ scan_exit=$?
 
 The archive output is a chain-of-custody envelope. Its `report.findings` retain member paths and redacted evidence; `report.coverage` describes extraction and scan completeness. The synthetic ZIP example returned three findings and exit `2`; its coverage was complete, and the envelope contained no raw test string.
 
-Work is bounded: at most 10 MiB per binary file, 1,000 files and 100 MiB of binary input per scan; each artifact also has a 50 MiB string-extraction-work limit, a 1 billion detector-input-unit limit (printable characters multiplied by active detectors), and a 100,000-run limit. Archive extraction stops at 10,000 entries, 100 MiB per member, 500 MiB total, or a 200:1 expansion ratio. ZIP64 archives are not supported by this opt-in path. If a budget is reached, findings already collected are retained, coverage becomes incomplete, and the CLI returns exit `2`; do not treat that report as a complete clean scan.
+Work is bounded: at most 10 MiB per binary file, 1,000 files and 100 MiB of
+binary input per scan, and 10,000 findings across binary artifacts per scan.
+Each artifact also has a 50 MiB string-extraction-work limit, a 1 billion
+detector-input-unit limit (printable characters multiplied by active detectors),
+and a 100,000-run limit. Binary findings omit surrounding string snippets to
+avoid exposing neighboring credentials. Archive extraction stops at 10,000
+entries, 100 MiB per member, 500 MiB total, or a 200:1 expansion ratio. ZIP64
+archives are not supported by this opt-in path. If a budget is reached, findings
+already collected are retained, coverage becomes incomplete, and the CLI
+returns exit `2`; do not treat that report as a complete clean scan.
 
 ## Fix and verify
 

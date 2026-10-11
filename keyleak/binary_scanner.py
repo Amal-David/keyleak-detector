@@ -10,6 +10,7 @@ from .local_scanner import scan_text
 
 
 MAX_BINARY_FILE_BYTES = 10 * 1024 * 1024
+MAX_BINARY_FINDINGS = 10_000
 MAX_BINARY_RUNS = 100_000
 MAX_BINARY_SCAN_WORK_UNITS = 50 * 1024 * 1024
 MAX_BINARY_REGEX_WORK_UNITS = 1_000_000_000
@@ -83,6 +84,7 @@ def scan_binary_bytes(
     detectors: Iterable[Detector],
     *,
     run_salt: Optional[bytes] = None,
+    max_findings: int = MAX_BINARY_FINDINGS,
 ) -> list:
     """Scan printable strings in bytes without loading or executing the artifact."""
     if len(data) > MAX_BINARY_FILE_BYTES:
@@ -98,6 +100,9 @@ def scan_binary_bytes(
             runs += 1
             if runs > MAX_BINARY_RUNS:
                 raise BinaryScanLimitError("binary printable-run limit reached")
+            remaining_findings = max_findings - len(findings)
+            if remaining_findings <= 0:
+                raise BinaryScanLimitError("binary finding limit reached", findings)
             regex_work_units += len(text) * len(detectors)
             if regex_work_units > MAX_BINARY_REGEX_WORK_UNITS:
                 raise BinaryScanLimitError("binary detector work limit reached", findings)
@@ -108,6 +113,7 @@ def scan_binary_bytes(
                     run_salt=run_salt,
                     byte_offset_base=offset,
                     byte_offset_width=width,
+                    max_findings=remaining_findings,
                 )
             for finding in run_findings:
                 if width == 1:
@@ -139,6 +145,8 @@ def scan_binary_bytes(
                     locations[byte_offset] = overlapping
                     findings[overlapping] = finding
                     finding_run_lengths[overlapping] = len(text)
+            if len(run_findings) >= remaining_findings:
+                raise BinaryScanLimitError("binary finding limit reached", findings)
     except BinaryScanLimitError as exc:
         raise BinaryScanLimitError(str(exc), findings) from exc
     return findings
@@ -150,6 +158,7 @@ def scan_binary_file(
     *,
     source: Optional[str] = None,
     run_salt: Optional[bytes] = None,
+    max_findings: int = MAX_BINARY_FINDINGS,
 ) -> list:
     """Read and scan one bounded binary candidate."""
     try:
@@ -159,4 +168,10 @@ def scan_binary_file(
         raise
     if len(data) > MAX_BINARY_FILE_BYTES:
         raise ValueError("binary file exceeds per-file size limit")
-    return scan_binary_bytes(data, source or str(path), detectors, run_salt=run_salt)
+    return scan_binary_bytes(
+        data,
+        source or str(path),
+        detectors,
+        run_salt=run_salt,
+        max_findings=max_findings,
+    )
