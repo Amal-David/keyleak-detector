@@ -4,6 +4,34 @@ All notable changes to KeyLeak Detector are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and the project aims to follow [Semantic Versioning](https://semver.org/).
 
+## [0.7.0] — 2026-10-11
+
+A feature release for deeper local audits and browser privacy controls. The
+Chrome extension release is v1.3.0 and is distributed separately.
+
+### Added
+- `keyleak audit` coordinates local, archive, and authorized browser/site scan
+  phases, records coverage and artifacts, and requires explicit authorization
+  and network attestation for active network phases.
+- Opt-in `--scan-binaries` inspects bounded printable strings in recognized
+  native artifacts and in supported ZIP/tar archives without executing files.
+- Opt-in dependency-source and build-output scanning reports skipped or capped
+  work as incomplete coverage.
+
+### Security and privacy
+- Browser and site scans guard redirects, subresources, and WebSocket targets;
+  incomplete collection is visible in reports.
+- The extension stores redacted findings, keeps raw values in service-worker
+  memory, and can pause collection for the current origin.
+- HTML and SARIF reports include structured remediation with a legacy fallback.
+
+### Chrome extension 1.3.0 — 2026-10-11
+- Per-origin pause/resume applies to page content, network headers, and frames.
+- Raw findings are removed from persisted extension storage and stay in
+  service-worker memory; copied reports remain redacted.
+- Local full scans use the native helper with an exact extension-origin
+  allowlist and a challenge before sending the selected target to loopback.
+
 ## [0.6.1] — 2026-07-08
 
 A patch release for finding identity, report reliability, and Python dependency
@@ -107,3 +135,4 @@ The browser extension is versioned independently of the Python package
 
 [0.6.1]: https://github.com/Amal-David/keyleak-detector/releases/tag/v0.6.1
 [0.6.0]: https://github.com/Amal-David/keyleak-detector/releases/tag/v0.6.0
+[0.7.0]: https://github.com/Amal-David/keyleak-detector/releases/tag/v0.7.0

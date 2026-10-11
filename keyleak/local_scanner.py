@@ -42,6 +42,9 @@ MAX_FILE_BYTES = 5 * 1024 * 1024
 MAX_OPT_IN_FILES = 1000
 MAX_OPT_IN_BYTES = 50 * 1024 * 1024
 MAX_OPT_IN_DIRECTORIES = 5000
+MAX_BINARY_FILES = 1000
+MAX_BINARY_TOTAL_BYTES = 100 * 1024 * 1024
+MAX_BINARY_TOTAL_WORK_BYTES = 500 * 1024 * 1024
 SKIP_DIRS = {
     ".git",
     ".hg",
@@ -68,6 +71,8 @@ def scan_path(
     run_salt: Optional[bytes] = None,
     scan_node_modules: bool = False,
     scan_dist: bool = False,
+    scan_binaries: bool = False,
+    binary_source_prefix: Optional[str] = None,
 ):
     requested_target = Path(path).expanduser()
     if requested_target.is_symlink():
@@ -94,11 +99,69 @@ def scan_path(
 
     scan_root = target.parent if target_is_file else target
     code_files: List[Path] = []
+    binary_budget = {"files": 0, "bytes": 0, "work_bytes": 0, "findings": 0}
     for file_path, categories in _iter_candidate_files(
         target, active_includes, scan_node_modules=scan_node_modules,
-        scan_dist=scan_dist, coverage=coverage_state, target_is_file=target_is_file,
+        scan_dist=scan_dist, scan_binaries=scan_binaries,
+        coverage=coverage_state, target_is_file=target_is_file,
     ):
         coverage_state["attempted"] += 1
+        if scan_binaries:
+            from .binary_scanner import (
+                BinaryScanLimitError,
+                MAX_BINARY_FILE_BYTES,
+                MAX_BINARY_FINDINGS,
+                is_binary_candidate,
+                scan_binary_file,
+            )
+            if is_binary_candidate(file_path):
+                try:
+                    size = file_path.stat().st_size
+                except OSError:
+                    _record_coverage(coverage_state, "failed", "binary file could not be inspected")
+                    continue
+                if size > MAX_BINARY_FILE_BYTES:
+                    _record_coverage(coverage_state, "skipped", "binary file exceeds per-file size limit")
+                    continue
+                if (
+                    binary_budget["files"] >= MAX_BINARY_FILES
+                    or binary_budget["bytes"] + size > MAX_BINARY_TOTAL_BYTES
+                    or binary_budget["work_bytes"] + size * 5 > MAX_BINARY_TOTAL_WORK_BYTES
+                ):
+                    _record_coverage(coverage_state, "skipped", "bounded binary scan file or byte limit reached")
+                    continue
+                binary_budget["files"] += 1
+                binary_budget["bytes"] += size
+                binary_budget["work_bytes"] += size * 5
+                if binary_budget["findings"] >= MAX_BINARY_FINDINGS:
+                    _record_coverage(coverage_state, "skipped", "bounded binary finding limit reached")
+                    continue
+                if binary_source_prefix is not None:
+                    relative = file_path.name if target_is_file else file_path.relative_to(target).as_posix()
+                    source = f"{binary_source_prefix.rstrip('/!')}!/{relative}"
+                else:
+                    source = str(file_path)
+                try:
+                    binary_findings = scan_binary_file(
+                        file_path, detectors_for_categories(categories, active_packs),
+                        source=source, run_salt=run_salt,
+                        max_findings=MAX_BINARY_FINDINGS - binary_budget["findings"],
+                    )
+                    findings.extend(binary_findings)
+                    binary_budget["findings"] += len(binary_findings)
+                except BinaryScanLimitError as exc:
+                    findings.extend(exc.findings)
+                    binary_budget["findings"] += len(exc.findings)
+                    _record_coverage(coverage_state, "skipped", str(exc))
+                    continue
+                except ValueError as exc:
+                    _record_coverage(coverage_state, "skipped", str(exc))
+                    continue
+                except OSError:
+                    _record_coverage(coverage_state, "failed", "binary file could not be read")
+                    continue
+                coverage_state["completed"] += 1
+                continue
         findings.extend(
             scan_file(
                 file_path, detectors_for_categories(categories, active_packs),
@@ -303,14 +366,28 @@ def scan_text(
     *,
     run_salt: Optional[bytes] = None,
     request_url: str = "",
+    byte_offset_base: Optional[int] = None,
+    byte_offset_width: int = 1,
+    max_findings: Optional[int] = None,
 ) -> List[Finding]:
     findings: List[Finding] = []
     seen = set()
     safe_request_url = redact_url(request_url) if request_url else ""
     for detector in detectors:
+        if max_findings is not None and len(findings) >= max_findings:
+            break
         regex = detector.compile()
+        line = 1
+        line_offset = 0
         for match in regex.finditer(content):
+            if max_findings is not None and len(findings) >= max_findings:
+                break
             raw_value = match.group(detector.capture_group) if detector.capture_group and match.groups() else match.group(1) if match.groups() else match.group(0)
+            token_start = (
+                match.start(detector.capture_group)
+                if detector.capture_group and match.groups()
+                else match.start(1) if match.groups() else match.start()
+            )
             if _is_placeholder(raw_value, min_length=detector.min_match_length):
                 continue
             # L.3 — database_url placeholder-password gate (skip dev defaults).
@@ -340,7 +417,8 @@ def scan_text(
             # prefix are by definition public.
             if detector.id in {"bearer_token", "openai_api_key", "stripe_secret_key"} and _has_public_prefix(raw_value):
                 continue
-            line = content.count("\n", 0, match.start()) + 1
+            line += content.count("\n", line_offset, match.start())
+            line_offset = match.start()
             snippet = _snippet_for(content, match.start(), match.end())
             # Q.6 + Q.9 — AIza referrer-restricted keys: Google's Firebase /
             # Maps / Analytics keys are designed to live in client code.
@@ -352,21 +430,27 @@ def scan_text(
             if detector.id == "gemini_api_key" and _looks_like_client_side_aiza(content):
                 effective_severity = "medium"
             redacted_value = redact_value(raw_value, run_salt=run_salt)
-            key = (detector.canonical_id, source, redacted_value, line)
+            byte_offset = (
+                byte_offset_base + token_start * byte_offset_width
+                if byte_offset_base is not None
+                else None
+            )
+            key = (detector.canonical_id, source, redacted_value, line, byte_offset)
             if key in seen:
                 continue
             seen.add(key)
-            # 1. Replace the raw secret with its redacted form in the snippet,
-            #    then 2. mask any *adjacent* PII so the report can't carry
-            #    third-party emails/phones/cards into auditor hands.
-            redacted_snippet = redact_snippet(snippet, raw_value, run_salt=run_salt)
-            redacted_snippet = pii_scrub_snippet(redacted_snippet, redacted_value)
+            if byte_offset_base is None:
+                redacted_snippet = redact_snippet(snippet, raw_value, run_salt=run_salt)
+                redacted_snippet = pii_scrub_snippet(redacted_snippet, redacted_value)
+            else:
+                redacted_snippet = ""
             evidence = Evidence(
                 source=source,
                 snippet=redacted_snippet,
                 line=line,
                 request_url=safe_request_url,
                 redacted_value=redacted_value,
+                byte_offset=byte_offset,
             )
             findings.append(
                 Finding(
@@ -387,6 +471,7 @@ def scan_text(
                         raw_value=raw_value,
                         request_url=safe_request_url,
                         line=line,
+                        byte_offset=byte_offset,
                     ),
                     remediation_v2=detector.get_remediation().to_dict(),
                 )
@@ -402,10 +487,11 @@ def _iter_candidate_files(
     scan_dist: bool = False,
     coverage: Optional[dict] = None,
     target_is_file: bool = False,
+    scan_binaries: bool = False,
 ):
     if target_is_file:
         categories = _categories_for_file(target, includes)
-        if categories:
+        if categories or (scan_binaries and _binary_candidate(target)):
             yield target, categories
         return
 
@@ -444,8 +530,8 @@ def _iter_candidate_files(
             rel_parts = directory_path.relative_to(target).parts
             is_root_dist = len(rel_parts) == 1 and directory == "dist"
             selected_scope = (
-                (directory == "node_modules" and scan_node_modules)
-                or (is_root_dist and scan_dist)
+                (directory == "node_modules" and (scan_node_modules or scan_binaries))
+                or (is_root_dist and (scan_dist or scan_binaries))
                 or (in_node_modules and directory == "dist")
             )
             if directory in SKIP_DIRS and not selected_scope:
@@ -462,6 +548,7 @@ def _iter_candidate_files(
             candidate = _candidate_for_local_scan(
                 file_path, target, includes, scan_node_modules, scan_dist,
                 budgets, capped, coverage,
+                scan_binaries,
             )
             if candidate is not None:
                 yield candidate
@@ -476,6 +563,7 @@ def _candidate_for_local_scan(
     budgets: dict,
     capped: set,
     coverage: Optional[dict],
+    scan_binaries: bool = False,
 ) -> Optional[Tuple[Path, List[str]]]:
     rel_parts = file_path.relative_to(target).parts
     in_node_modules = "node_modules" in rel_parts
@@ -486,14 +574,15 @@ def _candidate_for_local_scan(
             coverage["attempted"] += 1
             _record_coverage(coverage, "skipped", "file symlink was not scanned")
         return None
-    if in_node_modules and (
-        not scan_node_modules
-        or suffix not in {".js", ".mjs", ".cjs", ".ts", ".tsx", ".jsx"}
+    binary_candidate = scan_binaries and _binary_candidate(file_path)
+    if in_node_modules and not (
+        (scan_node_modules and suffix in {".js", ".mjs", ".cjs", ".ts", ".tsx", ".jsx"})
+        or binary_candidate
     ):
         return None
-    if in_root_dist and (
-        not scan_dist
-        or suffix not in {".js", ".mjs", ".cjs", ".ts", ".tsx", ".jsx", ".map"}
+    if in_root_dist and not (
+        (scan_dist and suffix in {".js", ".mjs", ".cjs", ".ts", ".tsx", ".jsx", ".map"})
+        or binary_candidate
     ):
         return None
     if _is_generated_file(file_path):
@@ -524,7 +613,17 @@ def _candidate_for_local_scan(
         budget["files"] += 1
         budget["bytes"] += size
     categories = [] if in_node_modules else _categories_for_file(file_path, includes)
-    return (file_path, categories) if categories or in_node_modules else None
+    if categories or in_node_modules:
+        return file_path, categories
+    if binary_candidate:
+        return file_path, []
+    return None
+
+
+def _binary_candidate(path: Path) -> bool:
+    from .binary_scanner import is_binary_candidate
+
+    return is_binary_candidate(path)
 
 
 def _record_coverage(coverage: dict, field: str, reason: str) -> None:

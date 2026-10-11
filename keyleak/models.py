@@ -142,9 +142,10 @@ class Evidence:
     request_url: str = ""
     response_status: Optional[int] = None
     redacted_value: str = ""
+    byte_offset: Optional[int] = None
 
     def to_dict(self) -> Dict[str, Any]:
-        return {
+        payload = {
             "source": self.source,
             "snippet": self.snippet,
             "line": self.line,
@@ -152,6 +153,9 @@ class Evidence:
             "response_status": self.response_status,
             "redacted_value": self.redacted_value,
         }
+        if self.byte_offset is not None:
+            payload["byte_offset"] = self.byte_offset
+        return payload
 
     @classmethod
     def from_dict(cls, payload: Dict[str, Any]) -> "Evidence":
@@ -162,6 +166,7 @@ class Evidence:
             request_url=str(payload.get("request_url") or ""),
             response_status=payload.get("response_status"),
             redacted_value=str(payload.get("redacted_value") or ""),
+            byte_offset=payload.get("byte_offset"),
         )
 
 
@@ -188,7 +193,7 @@ class Finding:
     def __post_init__(self) -> None:
         self.severity = normalize_severity(self.severity)
         if not self.id:
-            self.id = stable_id(
+            identity = (
                 self.type,
                 self.detector_id,
                 self.source,
@@ -196,6 +201,9 @@ class Finding:
                 self.evidence.line,
                 self.evidence.request_url,
             )
+            if self.evidence.byte_offset is not None:
+                identity += ("byte_offset", self.evidence.byte_offset)
+            self.id = stable_id(*identity)
 
     def to_dict(self) -> Dict[str, Any]:
         payload = {
