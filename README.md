@@ -56,6 +56,8 @@ Use `--json`, `--sarif`, `--markdown`, or `--html` for machine-readable or share
 - **Web app:** `keyleak browser-scan URL` scans one authorized target; `keyleak site-scan DOMAIN` discovers and crawls an authorized site.
 - **Coordinated audit:** `keyleak audit --help` describes the local, archive, and authorized network phases. Active network scans require explicit scope and attestation.
 
+Audit writes redacted artifacts under `.keyleak/audits/`; `artifact_dir` is reported as an absolute path.
+
 Advanced coverage limits, source scanning options, archive behavior, and examples are in [scanner workflows](docs/SCANNER_WORKFLOWS.md) and the [binary artifact guide](docs/BINARY_ARTIFACT_SCANNING.md).
 
 ### Local coverage options
