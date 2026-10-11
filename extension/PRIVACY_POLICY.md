@@ -1,6 +1,6 @@
 # Privacy Policy — KeyLeak Detector Chrome Extension
 
-**Last updated:** September 15, 2026
+**Last updated:** October 9, 2026
 
 ## What KeyLeak Does
 
@@ -10,17 +10,21 @@ KeyLeak Detector is a security tool whose live extension analysis runs entirely 
 
 **KeyLeak does not send data to KeyLeak-operated services or third-party analytics.**
 
-- Captured browser content and live findings stay in your browser
+- Captured browser content is analyzed in the service worker and is not saved as page content
+- Redacted findings and per-origin pause settings are stored in Chrome local storage
+- Raw detected values stay only in service-worker memory and disappear when that worker restarts
 - Except for explicitly requested Full Scan traffic, analyzed data is not sent over the network
 - No analytics, telemetry, or tracking of any kind
 - No user accounts or registration required
-- Findings are stored only in Chrome's local storage (per-tab, cleared when tab closes)
+- Redacted findings are stored in Chrome local storage per tab and cleared when the tab closes. Raw detected values are never persisted; reveal and test controls work only while those values remain in service-worker memory.
 
 ## What the Extension Accesses
 
-- **Web requests:** Intercepts HTTP requests/responses on pages you visit to scan for secrets. This data never leaves your browser.
+- **Web requests:** Observes request and response headers and page scripts may inspect response bodies on pages you visit to scan for secrets. This data never leaves your browser.
 - **Page content:** Reads DOM, inline scripts, and browser storage to detect exposed credentials. This data never leaves your browser.
 - **`<all_urls>` permission:** Required to scan any website you visit. The extension cannot read this data unless you are actively browsing the site.
+
+The popup's **PAUSE SITE** control pauses monitoring for the current page origin and stores that choice in Chrome local storage. While paused, the extension avoids reading page response bodies, scanning page content, or analyzing and storing that page's web request headers, including requests from frames inside that page. **RESUME SITE** restores monitoring for that origin. An origin includes its scheme, host, and port; pausing it covers all paths on that origin, while subdomains are separate origins.
 
 ## Optional Local Scanner
 

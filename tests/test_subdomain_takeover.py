@@ -78,7 +78,10 @@ class ScanSiteWiringTests(unittest.TestCase):
             risk_reason="x", remediation="y", validation_status="lead", category="appsec",
         )
         with mock.patch.object(ss, "discover_subdomains", lambda d, **k: ["t.example.test"]), \
-             mock.patch.object(ss, "crawl_pages", lambda hosts, **k: ["https://t.example.test/"]), \
+             mock.patch.object(
+                 ss, "crawl_pages",
+                 lambda hosts, **k: ss.CrawlResult(pages=["https://t.example.test/"]),
+             ), \
              mock.patch.object(ss, "run_browser_scan",
                                lambda url, **k: ScanReport(target=url, scan_mode="browser", findings=[])), \
              mock.patch("keyleak.subdomain_takeover.check_subdomain_takeovers",
@@ -90,7 +93,7 @@ class ScanSiteWiringTests(unittest.TestCase):
 
     def test_offline_skips_takeover(self):
         with mock.patch.object(ss, "discover_subdomains", lambda d, **k: ["x.example.test"]), \
-             mock.patch.object(ss, "crawl_pages", lambda hosts, **k: []), \
+             mock.patch.object(ss, "crawl_pages", lambda hosts, **k: ss.CrawlResult(pages=[])), \
              mock.patch.object(ss, "run_browser_scan",
                                lambda url, **k: ScanReport(target=url, scan_mode="browser", findings=[])), \
              mock.patch("keyleak.subdomain_takeover.check_subdomain_takeovers") as chk:

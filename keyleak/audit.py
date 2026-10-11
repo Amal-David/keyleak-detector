@@ -710,7 +710,7 @@ def _run_runtime_phase(
                 headless=options.headless,
                 baas_validate=_should_baas_validate(options),
                 proxy=options.proxy,
-                target_guard=url_block_reason,
+                target_guard=scan_target_block_reason,
             )
             report = _apply_phase_suppressions(report, options)
         except Exception as exc:

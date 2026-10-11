@@ -9,6 +9,7 @@ import unittest
 from unittest import mock
 
 from keyleak.extension_runtime import ActiveScanCounter, challenge_proof, proof_matches
+from keyleak.models import ScanReport
 
 
 class ExtensionRuntimeTests(unittest.TestCase):
@@ -71,6 +72,33 @@ class ExtensionRuntimeTests(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertNotIn("proof", response.get_json())
+
+    def test_scan_api_preserves_malformed_coverage_and_review_verdict(self):
+        with mock.patch("pattern_importer.get_enhanced_patterns", return_value={}):
+            web_app = importlib.import_module("app")
+
+        malformed_coverage = {"scope": "pages", "attempted": "unknown"}
+        report = ScanReport(
+            target="https://example.com",
+            scan_mode="full-site",
+            findings=[],
+            extra={"coverage": malformed_coverage},
+        )
+        client = web_app.app.test_client()
+        with mock.patch("keyleak.site_scanner.scan_site", return_value=report), mock.patch.object(
+            web_app, "_scan_target_is_blocked", return_value=None
+        ):
+            response = client.post(
+                "/scan",
+                json={"url": "https://example.com", "scan_mode": "full-site"},
+            )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.get_json()
+        self.assertEqual(payload["coverage"], malformed_coverage)
+        self.assertEqual(payload["report"]["coverage"], malformed_coverage)
+        self.assertEqual(payload["verdict"]["status"], "REVIEW")
+        self.assertEqual(payload["report"]["verdict"]["status"], "REVIEW")
 
 
 if __name__ == "__main__":

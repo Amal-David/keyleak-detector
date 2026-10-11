@@ -214,7 +214,7 @@ class AuditRunTests(unittest.TestCase):
 
         browser_scan.assert_called_once()
         self.assertEqual(browser_scan.call_args.args[0], "https://app.example.com")
-        self.assertTrue(callable(browser_scan.call_args.kwargs["target_guard"]))
+        self.assertIs(browser_scan.call_args.kwargs["target_guard"], audit.scan_target_block_reason)
         site_scan.assert_not_called()
 
     def test_local_audit_disables_self_audit_subprocesses(self):

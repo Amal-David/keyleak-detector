@@ -70,7 +70,8 @@ class ConvexDetectorTests(unittest.TestCase):
             "runs `leak`, `appsec`, `access-control`, and `baas`",
             security_model,
         )
-        self.assertIn("**Last updated:** September 15, 2026", privacy_policy)
+        self.assertIn("Raw detected values stay only in service-worker memory", privacy_policy)
+        self.assertIn("**PAUSE SITE** control pauses monitoring for the current page origin", privacy_policy)
         self.assertIn(
             "Except for explicitly requested Full Scan traffic",
             privacy_policy,

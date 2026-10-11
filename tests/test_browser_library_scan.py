@@ -32,7 +32,7 @@ class BrowserLibraryScanTests(unittest.TestCase):
         with mock.patch("playwright.sync_api.sync_playwright", return_value=cm):
             report = run_browser_scan(
                 "https://app.example.test/",
-                target_guard=lambda _url: None,
+                target_guard=lambda _host: None,
             )
 
         context.route.assert_called_once()

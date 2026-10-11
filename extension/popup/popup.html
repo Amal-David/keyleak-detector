@@ -68,6 +68,7 @@
     .verdict-block { background: #7f1d1d; color: #fca5a5; border-color: #dc2626; }
     .reason { color: #cbd5e1; line-height: 1.4; }
     .target { color: #64748b; word-break: break-all; font-size: 10px; }
+    .privacy-note { color: #64748b; font-size: 9px; line-height: 1.4; }
     .actions {
       padding: 10px 16px;
       border-bottom: 1px solid #1e293b;
@@ -279,6 +280,7 @@
   <div class="header">
     <h1>keyleak launch gate</h1>
     <span id="findingCount" class="count count-zero">0</span>
+    <button id="pauseOriginBtn" title="Pause or resume scanning for this website">PAUSE SITE</button>
     <button id="clearBtn" class="danger">CLEAR</button>
   </div>
 
@@ -301,7 +303,9 @@
       <button id="fullScanBtn" class="primary">RUN FULL SCAN</button>
       <button id="copyJsonBtn">COPY JSON</button>
       <button id="copyMarkdownBtn">COPY MD</button>
+      <button id="copySarifBtn">COPY SARIF</button>
     </div>
+    <div class="privacy-note" style="padding: 0 16px 8px;">Raw values stay in service-worker memory and may be unavailable after an extension restart.</div>
     <div id="actionStatus" class="status-line"></div>
 
     <div id="coverage" class="coverage"></div>

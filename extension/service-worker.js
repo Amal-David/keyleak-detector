@@ -9,8 +9,17 @@ import {
   formatMarkdownReport,
   formatSarifReport,
   normalizeFinding,
+  persistentSnapshot,
+  sanitizeStoredTabData,
   severityRank,
 } from './lib/reporting.js';
+import {
+  ActivityEpochs,
+  isOriginPaused,
+  isPagePaused,
+  normalizeOrigin,
+  shouldRunPrivacyMigration,
+} from './lib/privacy.js';
 import { detectBaaSRequest, BaaSTabState } from './lib/baas-detector.js';
 import { ConvexTabState, parseConvexDeployment } from './lib/convex-detector.js';
 import { buildLibraryFindings } from './lib/library-cves.js';
@@ -25,6 +34,8 @@ import {
 
 const STORAGE_PREFIX = 'keyleak_tab_';
 const SETTINGS_KEY = 'keyleak_settings';
+const PRIVACY_MIGRATION_KEY = 'keyleak_privacy_migration_version';
+const PRIVACY_MIGRATION_VERSION = 1;
 const MAX_FINDINGS_PER_TAB = 300;
 const MAX_REMOTE_BODY_SIZE = 2 * 1024 * 1024;
 const DEFAULT_PACKS = ['leak', 'appsec', 'access-control', 'baas'];
@@ -49,6 +60,12 @@ const EMPTY_STATS = {
 };
 
 const tabCache = new Map();
+const activityEpochs = new ActivityEpochs();
+const tabObservedOrigins = new Map();
+const topLevelUrls = new Map();
+let pausedOriginsCache = null;
+let pausedOriginsLoading = null;
+let pausedOriginsRevision = 0;
 
 function storageKey(tabId) {
   return `${STORAGE_PREFIX}${tabId}`;
@@ -58,12 +75,22 @@ function storageGet(key) {
   return new Promise(resolve => chrome.storage.local.get(key, resolve));
 }
 
-function storageSet(payload) {
+function storageSetRaw(payload) {
   return new Promise(resolve => chrome.storage.local.set(payload, resolve));
 }
 
-function storageRemove(key) {
+function storageRemoveRaw(key) {
   return new Promise(resolve => chrome.storage.local.remove(key, resolve));
+}
+
+async function storageSet(payload) {
+  await ensurePrivacyMigration();
+  return storageSetRaw(payload);
+}
+
+async function storageRemove(key) {
+  await ensurePrivacyMigration();
+  return storageRemoveRaw(key);
 }
 
 function cloneStats(stats = {}) {
@@ -74,12 +101,109 @@ async function readSettings() {
   const stored = await storageGet(SETTINGS_KEY);
   return {
     suppressed_ids: [],
+    paused_origins: [],
     ...(stored[SETTINGS_KEY] || {}),
   };
 }
 
 async function writeSettings(settings) {
   await storageSet({ [SETTINGS_KEY]: settings });
+  pausedOriginsRevision += 1;
+  pausedOriginsCache = new Set(settings.paused_origins || []);
+}
+
+async function pageIsPaused(pageUrl, topLevelUrl = '') {
+  if (!pausedOriginsCache) {
+    if (!pausedOriginsLoading) {
+      const revision = pausedOriginsRevision;
+      pausedOriginsLoading = readSettings().then((settings) => {
+        if (revision === pausedOriginsRevision) {
+          pausedOriginsCache = new Set(settings.paused_origins || []);
+        }
+      }).finally(() => {
+        pausedOriginsLoading = null;
+      });
+    }
+    await pausedOriginsLoading;
+  }
+  return isPagePaused(pageUrl, topLevelUrl, pausedOriginsCache);
+}
+
+async function topLevelUrlForTab(tabId) {
+  if (topLevelUrls.has(tabId)) return topLevelUrls.get(tabId);
+  const tab = await chrome.tabs.get(tabId).catch(() => null);
+  if (tab?.url) topLevelUrls.set(tabId, tab.url);
+  return tab?.url || '';
+}
+
+async function activityIsPaused(tabId, expectedEpoch, pageUrl, topLevelUrl = '') {
+  const paused = await pageIsPaused(pageUrl, topLevelUrl);
+  return activityEpochs.current(tabId) !== expectedEpoch || paused;
+}
+
+function rememberTabOrigins(tabId, ...urls) {
+  if (!Number.isInteger(tabId)) return;
+  const origins = tabObservedOrigins.get(tabId) || new Set();
+  for (const url of urls) {
+    const origin = normalizeOrigin(url);
+    if (origin) origins.add(origin);
+  }
+  const topLevelUrl = urls[urls.length - 1];
+  if (normalizeOrigin(topLevelUrl)) topLevelUrls.set(tabId, topLevelUrl);
+  tabObservedOrigins.set(tabId, origins);
+}
+
+async function sanitizePersistedFindings() {
+  const migration = await storageGet(PRIVACY_MIGRATION_KEY);
+  if (!shouldRunPrivacyMigration(migration[PRIVACY_MIGRATION_KEY], PRIVACY_MIGRATION_VERSION)) return;
+  const stored = await storageGet(null);
+  const updates = sanitizeStoredTabData(stored, STORAGE_PREFIX);
+  updates[PRIVACY_MIGRATION_KEY] = PRIVACY_MIGRATION_VERSION;
+  await storageSetRaw(updates);
+}
+
+let privacyMigrationPromise;
+function ensurePrivacyMigration() {
+  if (!privacyMigrationPromise) {
+    privacyMigrationPromise = Promise.resolve()
+      .then(sanitizePersistedFindings)
+      .catch((error) => {
+        privacyMigrationPromise = null;
+        throw error;
+      });
+  }
+  return privacyMigrationPromise;
+}
+
+async function setOriginPaused(originValue, paused) {
+  const origin = normalizeOrigin(originValue);
+  if (!origin) return { ok: false, error: 'Pause controls require an http:// or https:// page.' };
+  const settings = await readSettings();
+  const origins = new Set(settings.paused_origins || []);
+  if (paused) origins.add(origin);
+  else origins.delete(origin);
+  settings.paused_origins = [...origins];
+  await writeSettings(settings);
+  const nextPaused = origins.has(origin);
+  const tabs = await chrome.tabs.query({ url: `${origin}/*` });
+  const affectedTabIds = new Set();
+  for (const tab of tabs) {
+    if (!Number.isInteger(tab.id)) continue;
+    if (tab.url) topLevelUrls.set(tab.id, tab.url);
+    if (normalizeOrigin(tab.url) === origin) {
+      affectedTabIds.add(tab.id);
+      chrome.tabs.sendMessage(tab.id, {
+        action: 'origin_pause_changed',
+        origin,
+        paused: nextPaused,
+      }, () => { void chrome.runtime.lastError; });
+    }
+  }
+  for (const [tabId, observedOrigins] of tabObservedOrigins) {
+    if (observedOrigins.has(origin)) affectedTabIds.add(tabId);
+  }
+  for (const tabId of affectedTabIds) activityEpochs.advance(tabId);
+  return { ok: true, origin, paused: nextPaused };
 }
 
 function emptyTabData(pageUrl = '') {
@@ -107,7 +231,11 @@ async function readTabData(tabId, pageUrl = '') {
   }
 
   const stored = await storageGet(storageKey(tabId));
-  const data = stored[storageKey(tabId)] || emptyTabData(pageUrl);
+  const storedData = stored[storageKey(tabId)] || emptyTabData(pageUrl);
+  const data = persistentSnapshot(storedData);
+  if (JSON.stringify(data) !== JSON.stringify(storedData)) {
+    await storageSet({ [storageKey(tabId)]: data });
+  }
   data.stats = cloneStats(data.stats);
   data.findings = (data.findings || []).map(finding => normalizeFinding(finding));
   data.url = pageUrl || data.url || '';
@@ -120,8 +248,12 @@ async function readTabData(tabId, pageUrl = '') {
   return data;
 }
 
-async function persistTabData(tabId, data) {
+async function persistTabData(tabId, data, expectedEpoch = null) {
   if (!Number.isInteger(tabId) || tabId < 0) return;
+  if (expectedEpoch !== null && activityEpochs.current(tabId) !== expectedEpoch) {
+    tabCache.delete(tabId);
+    return false;
+  }
   data.last_updated = Date.now();
   data.report = buildReport(data.url, data.findings, data.stats, {
     profile: 'launch-gate',
@@ -129,8 +261,9 @@ async function persistTabData(tabId, data) {
     full_scan_report: data.full_scan_report || null,
   });
   tabCache.set(tabId, data);
-  await storageSet({ [storageKey(tabId)]: data });
+  await storageSet({ [storageKey(tabId)]: persistentSnapshot(data) });
   updateBadge(tabId, data);
+  return true;
 }
 
 function updateBadge(tabId, data = tabCache.get(tabId)) {
@@ -150,23 +283,27 @@ function updateBadge(tabId, data = tabCache.get(tabId)) {
   });
 }
 
-async function addFindings(tabId, newFindings, pageUrl = '') {
+async function addFindings(tabId, newFindings, pageUrl = '', expectedEpoch = activityEpochs.current(tabId)) {
   if (!Number.isInteger(tabId) || tabId < 0 || !newFindings || newFindings.length === 0) {
     return emptyTabData(pageUrl);
   }
 
   const data = await readTabData(tabId, pageUrl);
   const settings = await readSettings();
+  if (activityEpochs.current(tabId) !== expectedEpoch) return data;
   const suppressedIds = new Set(settings.suppressed_ids || []);
   if (pageUrl) data.url = pageUrl;
 
-  const existing = new Set(data.findings.map(finding => finding.id));
+  const existing = new Map(data.findings.map((finding, index) => [finding.id, index]));
   for (const rawFinding of newFindings) {
     const finding = normalizeFinding(rawFinding);
     if (suppressedIds.has(finding.id)) continue;
     if (!existing.has(finding.id)) {
-      existing.add(finding.id);
+      existing.set(finding.id, data.findings.length);
       data.findings.push(finding);
+    } else {
+      const index = existing.get(finding.id);
+      if (!data.findings[index].raw_value && finding.raw_value) data.findings[index] = finding;
     }
   }
 
@@ -175,7 +312,7 @@ async function addFindings(tabId, newFindings, pageUrl = '') {
     data.findings = data.findings.slice(0, MAX_FINDINGS_PER_TAB);
   }
 
-  await persistTabData(tabId, data);
+  await persistTabData(tabId, data, expectedEpoch);
   return data;
 }
 
@@ -224,7 +361,7 @@ function sourceMapUrlsFromBody(body, baseUrl) {
   return Array.from(new Set(urls)).slice(0, 5);
 }
 
-async function fetchAndAnalyzeRemote(tabId, { url, source, pageUrl, captureType = 'remote', depth = 0 }) {
+async function fetchAndAnalyzeRemote(tabId, { url, source, pageUrl, captureType = 'remote', depth = 0 }, expectedEpoch = activityEpochs.current(tabId)) {
   const resolvedUrl = resolveUrl(url, pageUrl);
   if (!canScanUrl(resolvedUrl, pageUrl)) return { ok: false, skipped: true, reason: 'unsupported_url' };
 
@@ -256,8 +393,12 @@ async function fetchAndAnalyzeRemote(tabId, { url, source, pageUrl, captureType 
   if (!body || body.length > MAX_REMOTE_BODY_SIZE) {
     return { ok: false, skipped: true, reason: 'too_large' };
   }
+  if (await activityIsPaused(tabId, expectedEpoch, pageUrl)) {
+    return { ok: true, skipped: true, reason: 'origin_paused' };
+  }
 
   const data = await readTabData(tabId, pageUrl);
+  if (activityEpochs.current(tabId) !== expectedEpoch) return { ok: true, skipped: true, reason: 'origin_paused' };
   if (captureType === 'source-map') data.stats.sourceMaps += 1;
   else if (captureType === 'devtools') data.stats.devtoolsBodies += 1;
   else data.stats.externalScripts += 1;
@@ -269,8 +410,11 @@ async function fetchAndAnalyzeRemote(tabId, { url, source, pageUrl, captureType 
     capture_type: captureType,
   });
 
-  await addFindings(tabId, findings, pageUrl || data.url);
+  await addFindings(tabId, findings, pageUrl || data.url, expectedEpoch);
 
+  if (await activityIsPaused(tabId, expectedEpoch, pageUrl)) {
+    return { ok: true, skipped: true, reason: 'origin_paused' };
+  }
   if (depth < 1 && captureType !== 'source-map') {
     for (const mapUrl of sourceMapUrlsFromBody(body, resolvedUrl)) {
       await fetchAndAnalyzeRemote(tabId, {
@@ -279,7 +423,7 @@ async function fetchAndAnalyzeRemote(tabId, { url, source, pageUrl, captureType 
         pageUrl: pageUrl || data.url,
         captureType: 'source-map',
         depth: depth + 1,
-      }).catch(() => {});
+      }, expectedEpoch).catch(() => {});
     }
   }
 
@@ -292,8 +436,13 @@ async function runFullScan(tabId, targetUrl) {
   if (!canScanUrl(targetUrl, targetUrl)) {
     return { ok: false, error: 'Full scan requires an http:// or https:// URL.' };
   }
+  const expectedEpoch = activityEpochs.current(tabId);
+  if (await activityIsPaused(tabId, expectedEpoch, targetUrl, targetUrl)) {
+    return { ok: false, error: 'Scanning is paused for this site.' };
+  }
 
   const data = await readTabData(tabId, targetUrl);
+  if (activityEpochs.current(tabId) !== expectedEpoch) return { ok: false, skipped: true, reason: 'origin_paused' };
   data.stats.fullScans += 1;
   data.full_scan_error = '';
 
@@ -318,12 +467,24 @@ async function runFullScan(tabId, targetUrl) {
     }
 
     const payload = await response.json();
-    data.full_scan_report = payload.report || payload;
-    await persistTabData(tabId, data);
+    if (await activityIsPaused(tabId, expectedEpoch, targetUrl, targetUrl)) {
+      tabCache.delete(tabId);
+      return { ok: false, skipped: true, reason: 'origin_paused' };
+    }
+    data.full_scan_report = persistentSnapshot(payload.report || payload);
+    if (!await persistTabData(tabId, data, expectedEpoch)) {
+      return { ok: false, skipped: true, reason: 'origin_paused' };
+    }
     return { ok: true, report: data.full_scan_report };
   } catch (error) {
+    if (activityEpochs.current(tabId) !== expectedEpoch) {
+      tabCache.delete(tabId);
+      return { ok: false, skipped: true, reason: 'origin_paused' };
+    }
     data.full_scan_error = error.message || String(error);
-    await persistTabData(tabId, data);
+    if (!await persistTabData(tabId, data, expectedEpoch)) {
+      return { ok: false, skipped: true, reason: 'origin_paused' };
+    }
     return { ok: false, error: data.full_scan_error };
   }
 }
@@ -354,7 +515,7 @@ async function clearTab(tabId) {
   return { ok: true };
 }
 
-async function handleAnalyzeIntercepted(tabId, data = {}) {
+async function handleAnalyzeIntercepted(tabId, data = {}, expectedEpoch = activityEpochs.current(tabId)) {
   const {
     url,
     body,
@@ -367,10 +528,18 @@ async function handleAnalyzeIntercepted(tabId, data = {}) {
     connectionId,
   } = data;
   const tabData = await readTabData(tabId, pageUrl);
+  if (await activityIsPaused(tabId, expectedEpoch, pageUrl)) {
+    return { ok: true, skipped: true, reason: 'origin_paused' };
+  }
   if (captureType === 'websocket') tabData.stats.websockets += body ? 1 : 0;
   else if (captureType === 'eventstream') tabData.stats.eventStreams += body ? 1 : 0;
   else tabData.stats.bodies += body ? 1 : 0;
-  await persistTabData(tabId, tabData);
+  if (!await persistTabData(tabId, tabData, expectedEpoch)) {
+    return { ok: true, skipped: true, reason: 'origin_paused' };
+  }
+  if (await activityIsPaused(tabId, expectedEpoch, pageUrl)) {
+    return { ok: true, skipped: true, reason: 'origin_paused' };
+  }
 
   const findings = [];
   const convexDeployment = parseConvexDeployment(url);
@@ -395,7 +564,10 @@ async function handleAnalyzeIntercepted(tabId, data = {}) {
     }));
   }
 
-  await addFindings(tabId, findings, pageUrl);
+  await addFindings(tabId, findings, pageUrl, expectedEpoch);
+  if (await activityIsPaused(tabId, expectedEpoch, pageUrl)) {
+    return { ok: true, skipped: true, reason: 'origin_paused' };
+  }
 
   // BaaS real-time detection: check if this request targets a BaaS provider
   const requestHeaders = headers || [];
@@ -404,16 +576,19 @@ async function handleAnalyzeIntercepted(tabId, data = {}) {
     if (!baasTabStates.has(tabId)) baasTabStates.set(tabId, new BaaSTabState());
     const baasState = baasTabStates.get(tabId);
     baasState.enqueueProbe(baasInfo, (baasFindings) => {
-      addFindings(tabId, baasFindings, pageUrl).catch(() => {});
+      addFindings(tabId, baasFindings, pageUrl, expectedEpoch).catch(() => {});
     });
   }
 
   return { ok: true, findings: findings.length };
 }
 
-async function handleAnalyzeContent(tabId, data = {}) {
+async function handleAnalyzeContent(tabId, data = {}, expectedEpoch = activityEpochs.current(tabId)) {
   const { content, source, pageUrl, url, status, contentType, captureType } = data;
   const tabData = await readTabData(tabId, pageUrl);
+  if (await activityIsPaused(tabId, expectedEpoch, pageUrl)) {
+    return { ok: true, skipped: true, reason: 'origin_paused' };
+  }
 
   if (source && source.includes('Inline Script')) tabData.stats.scripts += 1;
   else if (source && source.includes('data attribute')) tabData.stats.dataAttrs += 1;
@@ -422,7 +597,12 @@ async function handleAnalyzeContent(tabId, data = {}) {
   else if (captureType === 'websocket') tabData.stats.websockets += 1;
   else if (captureType === 'eventstream') tabData.stats.eventStreams += 1;
 
-  await persistTabData(tabId, tabData);
+  if (!await persistTabData(tabId, tabData, expectedEpoch)) {
+    return { ok: true, skipped: true, reason: 'origin_paused' };
+  }
+  if (await activityIsPaused(tabId, expectedEpoch, pageUrl)) {
+    return { ok: true, skipped: true, reason: 'origin_paused' };
+  }
 
   const findings = analyzeContent(content, source, {
     url,
@@ -430,11 +610,11 @@ async function handleAnalyzeContent(tabId, data = {}) {
     contentType,
     capture_type: captureType || 'content',
   });
-  await addFindings(tabId, findings, pageUrl);
+  await addFindings(tabId, findings, pageUrl, expectedEpoch);
   return { ok: true, findings: findings.length };
 }
 
-async function handleAnalyzeLibraries(tabId, data = {}) {
+async function handleAnalyzeLibraries(tabId, data = {}, expectedEpoch = activityEpochs.current(tabId)) {
   const { libraries, pageUrl } = data;
   if (!Array.isArray(libraries) || libraries.length === 0) {
     return { ok: true, findings: 0 };
@@ -443,11 +623,19 @@ async function handleAnalyzeLibraries(tabId, data = {}) {
   // regardless of whether any version turned out to be vulnerable, so a page
   // running only safe libraries still reports "JS library versions" covered.
   const tabData = await readTabData(tabId, pageUrl);
+  if (await activityIsPaused(tabId, expectedEpoch, pageUrl)) {
+    return { ok: true, skipped: true, reason: 'origin_paused' };
+  }
   tabData.stats.libraries += 1;
-  await persistTabData(tabId, tabData);
+  if (!await persistTabData(tabId, tabData, expectedEpoch)) {
+    return { ok: true, skipped: true, reason: 'origin_paused' };
+  }
+  if (await activityIsPaused(tabId, expectedEpoch, pageUrl)) {
+    return { ok: true, skipped: true, reason: 'origin_paused' };
+  }
 
   const findings = buildLibraryFindings(libraries, pageUrl);
-  await addFindings(tabId, findings, pageUrl);
+  await addFindings(tabId, findings, pageUrl, expectedEpoch);
   return { ok: true, findings: findings.length };
 }
 
@@ -457,7 +645,34 @@ async function handleMessage(message, sender) {
 
   if (message.action === 'get_findings') {
     if (!Number.isInteger(targetTabId)) return emptyTabData();
-    return readTabData(targetTabId);
+    const data = await readTabData(targetTabId);
+    return {
+      ...data,
+      raw_values_available: data.findings.some(finding => Boolean(finding.raw_value)),
+    };
+  }
+
+  if (message.action === 'get_origin_state') {
+    const pageUrl = message.pageUrl || sender.tab?.url || '';
+    const topLevelUrl = sender.tab?.url || pageUrl;
+    await pageIsPaused(pageUrl, topLevelUrl);
+    const ownerOrigin = normalizeOrigin(pageUrl);
+    const topOrigin = normalizeOrigin(topLevelUrl);
+    const ownerPaused = isOriginPaused(pageUrl, pausedOriginsCache);
+    const topPaused = isOriginPaused(topLevelUrl, pausedOriginsCache);
+    return {
+      ok: Boolean(ownerOrigin),
+      origin: ownerOrigin,
+      topOrigin,
+      paused: ownerPaused || topPaused,
+      ownerPaused,
+      topPaused,
+    };
+  }
+
+  if (message.action === 'set_origin_paused') {
+    const result = await setOriginPaused(message.pageUrl || sender.tab?.url || '', Boolean(message.paused));
+    return result;
   }
 
   if (message.action === 'clear_findings') {
@@ -514,34 +729,62 @@ async function handleMessage(message, sender) {
 
   const analysisTabId = Number.isInteger(senderTabId) ? senderTabId : targetTabId;
 
+  if ([
+    'analyze_intercepted', 'analyze_content', 'analyze_libraries',
+    'analyze_remote_url', 'analyze_devtools_content',
+  ].includes(message.action)) {
+    message.data = message.data || {};
+    const expectedEpoch = activityEpochs.current(analysisTabId);
+    let pageUrl = message.data?.pageUrl;
+    let topLevelUrl = sender.tab?.url || '';
+    if (!pageUrl && message.action === 'analyze_devtools_content' && Number.isInteger(targetTabId)) {
+      topLevelUrl = (await chrome.tabs.get(targetTabId)).url;
+      pageUrl = topLevelUrl;
+    }
+    if (!normalizeOrigin(pageUrl) || await activityIsPaused(analysisTabId, expectedEpoch, pageUrl, topLevelUrl)) {
+      return { ok: true, skipped: true, reason: 'origin_paused_or_unknown' };
+    }
+    rememberTabOrigins(analysisTabId, pageUrl, topLevelUrl);
+    message.expectedEpoch = expectedEpoch;
+    message.data.pageUrl = pageUrl;
+  }
+
   if (message.action === 'analyze_intercepted') {
-    return handleAnalyzeIntercepted(analysisTabId, message.data);
+    return handleAnalyzeIntercepted(analysisTabId, message.data, message.expectedEpoch);
   }
 
   if (message.action === 'analyze_content') {
-    return handleAnalyzeContent(analysisTabId, message.data);
+    return handleAnalyzeContent(analysisTabId, message.data, message.expectedEpoch);
   }
 
   if (message.action === 'analyze_libraries') {
-    return handleAnalyzeLibraries(analysisTabId, message.data);
+    return handleAnalyzeLibraries(analysisTabId, message.data, message.expectedEpoch);
   }
 
   if (message.action === 'analyze_remote_url') {
-    return fetchAndAnalyzeRemote(analysisTabId, message.data || {});
+    return fetchAndAnalyzeRemote(analysisTabId, message.data || {}, message.expectedEpoch);
   }
 
   if (message.action === 'analyze_devtools_content') {
     const data = message.data || {};
+    if (await activityIsPaused(analysisTabId, message.expectedEpoch, data.pageUrl)) {
+      return { ok: true, skipped: true, reason: 'origin_paused' };
+    }
     const tabData = await readTabData(analysisTabId, data.pageUrl || data.url);
     tabData.stats.devtoolsBodies += 1;
-    await persistTabData(analysisTabId, tabData);
+    if (!await persistTabData(analysisTabId, tabData, message.expectedEpoch)) {
+      return { ok: true, skipped: true, reason: 'origin_paused' };
+    }
+    if (await activityIsPaused(analysisTabId, message.expectedEpoch, data.pageUrl)) {
+      return { ok: true, skipped: true, reason: 'origin_paused' };
+    }
     const findings = analyzeContent(data.body || '', data.source || data.url || 'DevTools Network Body', {
       url: data.url,
       status: data.status,
       contentType: data.contentType,
       capture_type: 'devtools',
     });
-    await addFindings(analysisTabId, findings, data.pageUrl || data.url);
+    await addFindings(analysisTabId, findings, data.pageUrl || data.url, message.expectedEpoch);
     return { ok: true, findings: findings.length };
   }
 
@@ -556,7 +799,10 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 });
 
 chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
+  if (changeInfo.url) topLevelUrls.set(tabId, changeInfo.url);
   if (changeInfo.status === 'loading') {
+    activityEpochs.advance(tabId);
+    tabObservedOrigins.delete(tabId);
     clearTab(tabId).catch(() => {});
   }
 });
@@ -565,19 +811,29 @@ chrome.tabs.onRemoved.addListener((tabId) => {
   tabCache.delete(tabId);
   baasTabStates.delete(tabId);
   convexTabStates.delete(tabId);
+  tabObservedOrigins.delete(tabId);
+  topLevelUrls.delete(tabId);
+  activityEpochs.clear(tabId);
   storageRemove(storageKey(tabId)).catch(() => {});
 });
 
 chrome.webRequest.onBeforeSendHeaders.addListener(
-  (details) => {
-    if (!details.tabId || details.tabId < 0 || !details.requestHeaders) return;
+  async (details) => {
+    if (!Number.isInteger(details.tabId) || details.tabId < 0 || !details.requestHeaders) return;
+    const pageOwner = details.documentUrl || details.initiator;
     const tabId = details.tabId;
-    readTabData(tabId, details.url)
+    if (!normalizeOrigin(pageOwner)) return;
+    const expectedEpoch = activityEpochs.current(tabId);
+    const topLevelUrl = await topLevelUrlForTab(tabId);
+    if (await activityIsPaused(tabId, expectedEpoch, pageOwner, topLevelUrl)) return;
+    rememberTabOrigins(tabId, pageOwner, topLevelUrl);
+    readTabData(tabId, pageOwner)
       .then((data) => {
         data.stats.requests += 1;
-        return persistTabData(tabId, data);
+        return persistTabData(tabId, data, expectedEpoch);
       })
       .then(() => {
+        if (activityEpochs.current(tabId) !== expectedEpoch) return;
         const headers = details.requestHeaders.map(h => ({ name: h.name, value: h.value || '' }));
         const findings = [
           ...analyzeHeaders(headers, 'Request Header', { url: details.url, capture_type: 'header' }),
@@ -590,11 +846,11 @@ chrome.webRequest.onBeforeSendHeaders.addListener(
           if (!baasTabStates.has(tabId)) baasTabStates.set(tabId, new BaaSTabState());
           const baasState = baasTabStates.get(tabId);
           baasState.enqueueProbe(baasInfo, (baasFindings) => {
-            addFindings(tabId, baasFindings, details.url).catch(() => {});
+            addFindings(tabId, baasFindings, pageOwner, expectedEpoch).catch(() => {});
           });
         }
 
-        return addFindings(tabId, findings, details.url);
+        return addFindings(tabId, findings, pageOwner, expectedEpoch);
       })
       .catch(() => {});
   },
@@ -603,18 +859,25 @@ chrome.webRequest.onBeforeSendHeaders.addListener(
 );
 
 chrome.webRequest.onHeadersReceived.addListener(
-  (details) => {
-    if (!details.tabId || details.tabId < 0 || !details.responseHeaders) return;
+  async (details) => {
+    if (!Number.isInteger(details.tabId) || details.tabId < 0 || !details.responseHeaders) return;
+    const pageOwner = details.documentUrl || details.initiator;
+    if (!normalizeOrigin(pageOwner)) return;
+    const expectedEpoch = activityEpochs.current(details.tabId);
+    const topLevelUrl = await topLevelUrlForTab(details.tabId);
+    if (await activityIsPaused(details.tabId, expectedEpoch, pageOwner, topLevelUrl)) return;
+    rememberTabOrigins(details.tabId, pageOwner, topLevelUrl);
     const headers = details.responseHeaders.map(h => ({ name: h.name, value: h.value || '' }));
     const findings = analyzeHeaders(headers, 'Response Header', {
       url: details.url,
       status: details.statusCode,
       capture_type: 'header',
     });
-    addFindings(details.tabId, findings, details.url).catch(() => {});
+    addFindings(details.tabId, findings, pageOwner, expectedEpoch).catch(() => {});
   },
   { urls: ['<all_urls>'] },
   ['responseHeaders'],
 );
 
 console.log('[KeyLeak] Service worker started - launch-gate monitoring active');
+ensurePrivacyMigration().catch(() => {});

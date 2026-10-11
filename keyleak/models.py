@@ -4,7 +4,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from itertools import islice
+from typing import Any, Dict, Iterable, List, Optional
 
 from .fingerprints import finding_fingerprint
 from .redaction import redact_snippet, redact_url, redact_value, stable_id
@@ -21,6 +22,63 @@ SEVERITY_ORDER = {
 VERDICT_SAFE = "SAFE_TO_SHIP"
 VERDICT_REVIEW = "REVIEW"
 VERDICT_BLOCK = "BLOCK_SHIP"
+
+
+def build_coverage(
+    scope: str,
+    attempted: int,
+    completed: int,
+    skipped: int = 0,
+    failed: int = 0,
+    reasons: Iterable[str] = (),
+) -> Dict[str, Any]:
+    """Build the shared, serializable coverage summary used by scan modes."""
+    reason_items = list(islice(reasons, 21))
+    clean_reasons = [redact_snippet(reason)[:200] for reason in reason_items[:20] if isinstance(reason, str)]
+    complete = (
+        all(type(count) is int and count >= 0 for count in (attempted, completed, skipped, failed))
+        and completed == attempted
+        and skipped == 0
+        and failed == 0
+        and not reason_items
+    )
+    return {
+        "schema_version": 1,
+        "scope": str(scope)[:100],
+        "status": "complete" if complete else "incomplete",
+        "attempted": attempted,
+        "completed": completed,
+        "skipped": skipped,
+        "failed": failed,
+        "message": "All attempted files were scanned." if complete else "Some scan scope was skipped or failed.",
+        "reasons": clean_reasons,
+    }
+
+
+def coverage_is_incomplete(value: Any) -> bool:
+    """Fail closed for malformed coverage summaries and incomplete scans."""
+    if not isinstance(value, dict):
+        return True
+    if type(value.get("schema_version")) is not int or value["schema_version"] != 1:
+        return True
+    if not isinstance(value.get("scope"), str) or not value["scope"].strip() or len(value["scope"]) > 100:
+        return True
+    if not isinstance(value.get("status"), str) or value["status"] not in {"complete", "incomplete"}:
+        return True
+    if not isinstance(value.get("message"), str) or len(value["message"]) > 200:
+        return True
+    counts = ("attempted", "completed", "skipped", "failed")
+    if any(type(value.get(key)) is not int or value[key] < 0 for key in counts):
+        return True
+    if value["completed"] + value["skipped"] + value["failed"] != value["attempted"]:
+        return True
+    if (
+        not isinstance(value.get("reasons"), list)
+        or len(value["reasons"]) > 20
+        or any(not isinstance(reason, str) or len(reason) > 200 for reason in value["reasons"])
+    ):
+        return True
+    return value["status"] != "complete" or value["skipped"] > 0 or value["failed"] > 0 or value["completed"] != value["attempted"]
 
 
 # Wave 1.6 — Structured Remediation contract.
@@ -243,6 +301,12 @@ class ScanReport:
                 "status": VERDICT_BLOCK,
                 "label": "BLOCK SHIP",
                 "reason": f"{'; '.join(parts)}. Fix before release.",
+            }
+        if "coverage" in self.extra and coverage_is_incomplete(self.extra["coverage"]):
+            return {
+                "status": VERDICT_REVIEW,
+                "label": "REVIEW",
+                "reason": "Scan coverage is incomplete or malformed; review skipped or failed scope before release.",
             }
         if counts["medium_severity"]:
             return {

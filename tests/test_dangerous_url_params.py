@@ -51,7 +51,7 @@ class ScanSiteWiringTests(unittest.TestCase):
             collect = kwargs.get("collect_raw")
             if collect is not None:
                 collect.add("https://h.example.test/Eval/QP.aspx?cmd=whoami")
-            return ["https://h.example.test/"]
+            return ss.CrawlResult(pages=["https://h.example.test/"])
 
         with mock.patch.object(ss, "discover_subdomains", lambda d, **k: ["h.example.test"]), \
              mock.patch.object(ss, "crawl_pages", fake_crawl), \

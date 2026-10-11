@@ -6,6 +6,7 @@ import { TESTABLE_TYPES } from '../lib/key-tester.js';
 const content = document.getElementById('content');
 const findingCount = document.getElementById('findingCount');
 const clearBtn = document.getElementById('clearBtn');
+const pauseOriginBtn = document.getElementById('pauseOriginBtn');
 const filtersEl = document.getElementById('filters');
 const scanStatsEl = document.getElementById('scanStats');
 const verdictBadge = document.getElementById('verdictBadge');
@@ -16,6 +17,7 @@ const actionStatus = document.getElementById('actionStatus');
 const fullScanBtn = document.getElementById('fullScanBtn');
 const copyJsonBtn = document.getElementById('copyJsonBtn');
 const copyMarkdownBtn = document.getElementById('copyMarkdownBtn');
+const copySarifBtn = document.getElementById('copySarifBtn');
 const revealBtn = document.getElementById('revealBtn');
 const tabstripEl = document.getElementById('tabstrip');
 const findingsViewEl = document.getElementById('findingsView');
@@ -25,6 +27,7 @@ const activeFilters = new Set(['critical', 'high', 'medium', 'low']);
 let activeTab = null;
 let latestData = null;
 let revealRaw = false;
+let originPaused = false;
 let referenceMounted = false;
 
 const sharedStyle = document.createElement('style');
@@ -39,6 +42,7 @@ async function currentTab() {
 async function loadFindings() {
   activeTab = await currentTab();
   if (!activeTab) return;
+  loadOriginState();
 
   chrome.runtime.sendMessage({ action: 'get_findings', tabId: activeTab.id }, (data) => {
     if (chrome.runtime.lastError || !data) {
@@ -51,6 +55,26 @@ async function loadFindings() {
   });
 }
 
+function loadOriginState() {
+  if (!activeTab?.url) {
+    pauseOriginBtn.disabled = true;
+    return;
+  }
+  chrome.runtime.sendMessage({ action: 'get_origin_state', pageUrl: activeTab.url }, (state) => {
+    if (chrome.runtime.lastError || !state?.ok) {
+      pauseOriginBtn.disabled = true;
+      pauseOriginBtn.textContent = 'SITE N/A';
+      return;
+    }
+    originPaused = state.paused;
+    pauseOriginBtn.disabled = false;
+    pauseOriginBtn.textContent = originPaused ? 'RESUME SITE' : 'PAUSE SITE';
+    pauseOriginBtn.title = originPaused
+      ? `Resume scanning ${state.origin}`
+      : `Pause scanning ${state.origin}`;
+  });
+}
+
 function render(data) {
   const findings = data.findings || [];
   const stats = data.stats || {};
@@ -60,6 +84,10 @@ function render(data) {
   updateCount(findings);
   renderCoverage(report.coverage || {}, stats, report.packs || []);
   renderStats(stats, findings.length);
+  revealBtn.disabled = !data.raw_values_available;
+  revealBtn.title = data.raw_values_available
+    ? 'Temporarily reveal raw values in this popup'
+    : 'Raw values are unavailable after the service worker restarted';
 
   if (findings.length === 0) {
     filtersEl.style.display = 'none';
@@ -439,6 +467,28 @@ fullScanBtn.addEventListener('click', async () => {
 
 copyJsonBtn.addEventListener('click', () => copyReport('json'));
 copyMarkdownBtn.addEventListener('click', () => copyReport('markdown'));
+copySarifBtn.addEventListener('click', () => copyReport('sarif'));
+
+pauseOriginBtn.addEventListener('click', () => {
+  if (!activeTab?.url) return;
+  chrome.runtime.sendMessage({
+    action: 'set_origin_paused',
+    tabId: activeTab.id,
+    pageUrl: activeTab.url,
+    paused: !originPaused,
+  }, (response) => {
+    if (chrome.runtime.lastError || !response?.ok) {
+      showStatus(response?.error || 'Unable to update this site’s scan state.');
+      return;
+    }
+    originPaused = response.paused;
+    pauseOriginBtn.textContent = originPaused ? 'RESUME SITE' : 'PAUSE SITE';
+    showStatus(originPaused
+      ? `Scanning paused for ${response.origin}.`
+      : `Scanning resumed for ${response.origin}.`);
+    loadFindings();
+  });
+});
 
 revealBtn.addEventListener('click', () => {
   revealRaw = !revealRaw;
