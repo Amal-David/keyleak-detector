@@ -49,6 +49,7 @@ tmp/
 !docs/SCANNER_WORKFLOWS.md
 !.claude/skills/**/SKILL.md
 !.codex/skills/**/SKILL.md
+!docs/BINARY_ARTIFACT_SCANNING.md
 !docs/audit/maintenance/*.md
 
 # Pattern cache
