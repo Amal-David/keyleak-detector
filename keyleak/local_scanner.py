@@ -69,7 +69,10 @@ def scan_path(
     scan_node_modules: bool = False,
     scan_dist: bool = False,
 ):
-    target = Path(path).expanduser().resolve()
+    requested_target = Path(path).expanduser()
+    if requested_target.is_symlink():
+        raise ValueError("scan target must not be a symlink")
+    target = requested_target.resolve()
     findings: List[Finding] = []
     active_packs = normalize_packs(packs, profile=profile)
     active_includes = _effective_includes(includes, active_packs)
@@ -478,6 +481,11 @@ def _candidate_for_local_scan(
     in_node_modules = "node_modules" in rel_parts
     in_root_dist = (target / "dist") in file_path.parents
     suffix = file_path.suffix.lower()
+    if file_path.is_symlink():
+        if coverage is not None:
+            coverage["attempted"] += 1
+            _record_coverage(coverage, "skipped", "file symlink was not scanned")
+        return None
     if in_node_modules and (
         not scan_node_modules
         or suffix not in {".js", ".mjs", ".cjs", ".ts", ".tsx", ".jsx"}

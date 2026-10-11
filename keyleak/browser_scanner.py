@@ -867,6 +867,10 @@ def run_browser_scan(
     both the browser and BaaS validation probes route through it.
     """
 
+    initial_block_reason = browser_request_block_reason(url, target_guard)
+    if initial_block_reason:
+        raise SSRFBlocked(initial_block_reason)
+
     try:
         from playwright.sync_api import sync_playwright  # type: ignore
     except ImportError as exc:  # pragma: no cover
@@ -875,7 +879,6 @@ def run_browser_scan(
             "Install with `pip install playwright && python -m playwright install chromium`."
         ) from exc
 
-    target_guard = bounded_browser_target_guard(target_guard)
     initial_block_reason = browser_request_block_reason(url, target_guard)
     if initial_block_reason:
         raise SSRFBlocked(initial_block_reason)
@@ -896,9 +899,9 @@ def run_browser_scan(
         if auth_state_path:
             context_kwargs["storage_state"] = auth_state_path
         context = browser.new_context(**context_kwargs)
-        context.add_init_script(init_script)
         egress_blocked = BlockedRequestSummary()
         install_browser_egress_guards(context, target_guard, egress_blocked)
+        context.add_init_script(init_script)
 
         page = context.new_page()
         page.set_default_timeout(scan_budget_seconds * 1000)

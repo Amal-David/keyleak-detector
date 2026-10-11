@@ -91,6 +91,41 @@ class _LocalEgressHandler(BaseHTTPRequestHandler):
 
 
 class BrowserEgressTests(unittest.TestCase):
+    def test_installed_http_route_guards_internal_public_and_unsupported_targets(self):
+        context = _Context()
+        install_browser_egress_guards(
+            context,
+            target_guard=lambda host: "internal target" if host == "127.0.0.1" else None,
+        )
+        blocked = _Route("http://127.0.0.1/private", [_Response()])
+        public = _Route("https://8.8.8.8/app.js", [_Response()])
+        unsupported = _Route("file:///etc/passwd", [])
+
+        context.request_route[1](blocked)
+        context.request_route[1](public)
+        context.request_route[1](unsupported)
+
+        self.assertTrue(blocked.aborted)
+        self.assertIsNone(blocked.fulfilled)
+        self.assertFalse(public.aborted)
+        self.assertIsNotNone(public.fulfilled)
+        self.assertTrue(unsupported.aborted)
+
+    def test_installed_websocket_route_uses_the_same_host_guard(self):
+        context = _Context()
+        install_browser_egress_guards(
+            context,
+            target_guard=lambda host: "internal target" if host == "127.0.0.1" else None,
+        )
+        blocked = mock.Mock(url="ws://127.0.0.1/socket")
+        public = mock.Mock(url="wss://8.8.8.8/socket")
+
+        context.websocket_route[1](blocked)
+        context.websocket_route[1](public)
+
+        blocked.connect_to_server.assert_not_called()
+        public.connect_to_server.assert_called_once_with()
+
     def test_blocks_private_redirect_before_following_it(self):
         context = _Context()
         install_browser_egress_guards(context)

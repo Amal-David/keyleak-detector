@@ -47,6 +47,8 @@ tmp/
 !DISCLAIMER.md
 !LICENSE.md
 !docs/SCANNER_WORKFLOWS.md
+!.claude/skills/**/SKILL.md
+!.codex/skills/**/SKILL.md
 !docs/audit/maintenance/*.md
 
 # Pattern cache

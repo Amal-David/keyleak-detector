@@ -8,6 +8,7 @@ import json
 import threading
 import unittest
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from unittest import mock
 
 from keyleak.browser_scanner import (
     CDP_MAX_BODY_BYTES,
