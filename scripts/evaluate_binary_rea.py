@@ -261,6 +261,8 @@ def main() -> int:
         if not decompile_text:
             raise RuntimeError("REA/Ghidra returned no pseudocode for the synthetic XOR function.")
         xor_visible = bool(re.search(r"\^|\bxor\b", decompile_text, re.IGNORECASE))
+        if not xor_visible:
+            raise RuntimeError("REA/Ghidra did not expose the XOR operation in its pseudocode.")
         excerpt = _sanitized_excerpt(decompile_text)
         if CANARY in excerpt or PUBLIC_EXAMPLE in excerpt:
             raise RuntimeError("The sanitized REA excerpt contains a raw synthetic test value.")
