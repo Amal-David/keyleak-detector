@@ -7,688 +7,167 @@
 [![Chrome Extension](https://img.shields.io/badge/Chrome-Extension-4285F4?logo=googlechrome&logoColor=white)](extension/)
 [![Python](https://img.shields.io/badge/Python-3.12%2B-3776AB?logo=python&logoColor=white)](https://www.python.org/)
 
-Runtime leak detector for modern web apps. Finds exposed API keys, **validates BaaS misconfigurations** (Supabase RLS, Firebase Security Rules), and catches secrets in JavaScript bundles -- with a Chrome extension for real-time detection.
-
-## What Makes This Different
-
-Static scanners find hardcoded secrets in source code. KeyLeak finds the ones that only appear at runtime -- and then **proves they're exploitable**.
-
-- **BaaS vulnerability scanner**: Detects Supabase, Firebase, Appwrite, PocketBase, and Convex usage. It validates Supabase access policies and correlates anonymous Convex query subscriptions with returned data without invoking mutations, actions, or guessed functions. See [Convex support and safety boundaries](docs/CONVEX_SUPPORT.md).
-- **Chrome extension**: Detects leaked keys in real-time as you browse. TEST button validates whether a found key is still active (supports 14 providers). JWT decoder surfaces suspicious claims (service_role, admin flags, broad scopes).
-- **Full Site Scan**: Enumerates subdomains (crt.sh certificate transparency + DNS, and a deep scan auto-installs **subfinder** — pinned, opt-out — for far richer discovery; **amass** is used too if present), crawls every page of the domain, and scans them all, reporting which subdomains/pages each leak appeared on plus a per-source discovery breakdown. One command (or one click in the web UI) for a full domain audit. Authorized targets only.
-- **200+ first-party domain suppression**: No false positives when browsing Google, AWS, Azure, GitHub, Stripe, etc.
+KeyLeak finds exposed credentials in browser traffic, local projects, build
+artifacts, and supported deployment archives. It checks selected backend-as-a-
+service configurations and returns redacted evidence with remediation guidance.
 
 ## Install
 
-### PyPI (recommended)
+KeyLeak requires Python 3.12 or newer.
 
 ```bash
-pip install keyleak-detector
-keyleak browser-scan https://your-app.vercel.app --html > report.html
+python -m pip install keyleak-detector
 ```
 
-Or with **uv** (faster):
+Or run without a permanent install:
 
 ```bash
-uv pip install keyleak-detector
-# or run directly without installing:
-uvx keyleak-detector browser-scan https://your-app.vercel.app --html > report.html
+uvx keyleak-detector --help
 ```
 
-### GitHub Action (CI/CD)
+## Quick start
 
-Add to any repo to scan preview deployments automatically:
-
-```yaml
-# .github/workflows/keyleak.yml
-name: KeyLeak Security Scan
-on: [deployment_status]
-
-jobs:
-  keyleak:
-    if: github.event.deployment_status.state == 'success'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: Amal-David/keyleak-detector@v0.5.0
-        id: scan
-        with:
-          mode: browser
-          url: ${{ github.event.deployment_status.target_url }}
-          baas-validate: true
-          fail-on: high
-```
-
-Works with **Vercel**, **Netlify**, **Render**, **Railway** — anywhere a preview URL is generated. See [full GitHub Action docs](docs/github-action.md) for all options, SARIF upload, and local-only scanning.
-
-### Chrome Extension
-
-```
-1. Open chrome://extensions
-2. Enable "Developer mode"
-3. Click "Load unpacked" → select the extension/ folder
-4. Run `poetry run keyleak install-extension-host` once, then reload the extension
-```
-
-Browse any site. The extension icon shows a badge count for findings. Click to see details, TEST keys live, and view remediation. `RUN FULL SCAN` now opens Docker Desktop if necessary, starts the local scanner, and stops the helper-started container after about five idle minutes.
-
-### From Source
+Scan the current project before shipping:
 
 ```bash
-git clone https://github.com/Amal-David/keyleak-detector.git
-cd keyleak-detector
-
-# With poetry
-poetry install && poetry run playwright install chromium
-
-# Or with uv
-uv sync && uv run playwright install chromium
+keyleak local . --launch-profile launch-gate --fail-on high
 ```
 
-## Usage
+Scan a web app you own or are authorized to test:
 
 ```bash
-# Agentic audit front door: local path, archive, URL, or domain
-keyleak audit . --intent security-audit --depth exploit-validation --authorized-scope "owned repo"
-keyleak audit example.com --intent bug-bounty --depth exploit-validation --authorized-scope "owned domain + staging accounts" --attest-network-scope --include-subdomains --html > audit.html
-
-# Scan a single page
-keyleak browser-scan https://your-app.vercel.app --html > report.html
-
-# Scan with BaaS validation (tests Supabase RLS, Firebase rules)
-keyleak browser-scan https://your-app.vercel.app --baas-validate --html > report.html
-
-# Full Site Scan — subdomain enumeration (subfinder/amass if installed + crt.sh + DNS) + multi-page crawl
-keyleak site-scan example.com --depth 3 --max-pages 100 --max-subdomains 50 --baas-validate --html > report.html
-# A deep scan auto-installs subfinder if it's missing (brew → pinned `go install`), then uses it;
-# pass --no-auto-install (or set KEYLEAK_NO_AUTO_INSTALL=1) to stay on crt.sh + DNS only.
-# amass is also auto-used if present. `keyleak doctor` reports which enumerators are active.
-
-# Scan local files for secrets
-keyleak local . --fail-on high
-
-# Output formats: --json, --sarif, --markdown, --html
+keyleak browser-scan https://your-owned-app.example --html > report.html
 ```
 
-`keyleak audit` writes durable redacted artifacts to
-`.keyleak/audits/<timestamp>-<target>-<run-id>/` by default: `audit-plan.json`,
-`report.json`, `findings.jsonl`, `coverage.json`, `evidence-ledger.json`, and
-`summary.md`. That location is layout shorthand; `artifact_dir` is reported as
-an absolute path, as is a normalized explicit `--out-dir`. Active network scans
-and exploit-validation require both an
-`--authorized-scope` statement and `--attest-network-scope`; this is an operator
-attestation, not independent technical proof of authorization. Audit planning is
-available with `--plan` and does not scan, navigate, or install tooling. Audit
-execution never uses external PATH discovery tools; raw cookies, bearer tokens,
-browser payloads, and raw secrets are not persisted. Under `--offline`, URL and
-domain audits are refused before Chromium launches; use a local path or archive
-audit instead.
-
-### Private scans through a proxy
-
-Route a scan's outbound traffic through a proxy with the global `--proxy` flag
-(off by default). It covers every outbound path of a scan — crt.sh subdomain
-lookups, the Playwright crawl, and BaaS validation probes:
+Scan an authorized site and its pages:
 
 ```bash
-# Cloudflare WARP (recommended): a free, local SOCKS5 proxy.
-#   warp-cli set-mode proxy && warp-cli connect
-keyleak --proxy warp site-scan example.com
-
-# Tor (socks5://127.0.0.1:9050)
-keyleak --proxy tor site-scan example.com
-
-# Any explicit proxy URL — http://, https://, or socks5://
-keyleak --proxy socks5://127.0.0.1:1080 browser-scan https://your-app.vercel.app
+keyleak site-scan your-owned-domain.example \
+  --depth 3 --max-pages 100 --max-subdomains 25 --baas-validate --html \
+  > site-report.html
 ```
 
-Notes:
-- `--proxy` is a **global** flag, so it must come **before** the subcommand
-  (like `--offline`).
-- `socks5://` proxies need PySocks (`pip install requests[socks]`); the `warp`
-  and `tor` aliases are SOCKS5.
-- **Privacy caveat:** a proxy operator can see (and log) the traffic you route
-  through it — including secrets a scan discovers. Prefer a trusted local proxy
-  such as Cloudflare WARP or Tor over random free public proxies, which are an
-  active man-in-the-middle risk.
-- WARP/Tor are loopback proxies, so `--proxy warp` coexists with `--offline`. A
-  non-loopback proxy is rejected under `--offline`. The local KeyLeak web bridge
-  is never proxied.
+Use `--json`, `--sarif`, `--markdown`, or `--html` for machine-readable or shareable reports. See the [agent scan runbook](docs/AGENT_SCAN_HOWTO.md) for setup and triage examples.
 
-### HTML Report
+## Choose a scan
 
-The `--html` flag generates a self-contained dark-theme vulnerability report:
+- **Local project:** `keyleak local .` scans supported configuration, CI, Docker, MCP, source-map, and log files. Source files in `node_modules` and root `dist/` are opt-in.
+- **Binary release:** add `--scan-binaries` to scan printable strings in recognized native files. Use `keyleak archive release.zip --scan-binaries` for ZIP/tar archives, including APK/IPA ZIP containers.
+- **Web app:** `keyleak browser-scan URL` scans one authorized target; `keyleak site-scan DOMAIN` discovers and crawls an authorized site.
+- **Coordinated audit:** `keyleak audit --help` describes the local, archive, and authorized network phases. Active network scans require explicit scope and attestation.
 
-![KeyLeak BaaS Report](docs/images/sample-report.png)
+Advanced coverage limits, source scanning options, archive behavior, and examples are in [scanner workflows](docs/SCANNER_WORKFLOWS.md) and the [binary artifact guide](docs/BINARY_ARTIFACT_SCANNING.md).
 
-## What It Detects
+### Local coverage options
 
-| Category | What | How |
-|---|---|---|
-| **BaaS misconfig** | Open Supabase tables, missing RLS, public storage buckets, callable RPCs | Active validation -- probes the REST API with only the anon key |
-| **BaaS providers** | Supabase, Firebase, Appwrite, PocketBase, Convex | Config extraction plus provider-specific read-only validation |
-| **API keys** | OpenAI, Anthropic, Gemini, Stripe, GitHub, AWS, and 20+ more | Regex detection + live TEST validation |
-| **JWT analysis** | service_role exposure, admin flags, broad scopes, long expiry | Decode + claims analysis (no verification needed) |
-| **Client-side auth** | `isAdmin === true` checks in browser JS | Pattern detection in bundles |
-| **Write access** | Tables accepting INSERT/UPDATE without auth | `Prefer: tx=rollback` probing (never creates data) |
-| **Auth config** | Missing email confirmation, exposed auth settings | Supabase auth endpoint probing |
-| **Supply chain** | Malicious npm lifecycle hooks (download-and-exec, base64/PowerShell/Bun stagers), Git-ref/tarball deps — incl. inside `node_modules` | Structured manifest scan (Shai-Hulud / Miasma class) |
-| **Attack chains** | Individual findings correlated into real attack paths (e.g. anon key + RLS-less table = unauth exfil) | Correlation engine over the merged findings |
-| **CI/CD hardening** | Unpinned GitHub Actions / reusable workflows / `docker://` tags, `permissions: write-all`, secrets echoed in `run:` | Workflow-file detectors |
-| **Local files** | `.env`, MCP configs, CI workflows, Docker files, source maps | `keyleak local` scanner |
-
-## Chrome Extension Features
-
-- **Real-time BaaS detection**: Probes Supabase/Firebase access and correlates anonymous Convex query results without invoking Convex functions
-- **TEST button**: Validates keys against 14 providers (Gemini, OpenAI, Anthropic, GitHub, Stripe, Groq, etc.)
-- **JWT decoder**: Click TEST on any JWT to see decoded claims with severity flags
-- **Finding grouping**: Same key in multiple scripts = one card with clickable source URLs
-- **AIza classification**: Distinguishes Google Maps keys (expected) from Gemini AI keys (leaked)
-- **87 vendor CDN suppression**: No false positives from Google Analytics, PostHog, Segment, etc.
-- **200+ first-party domains**: Google, Microsoft, AWS, Apple, Meta, Anthropic, Stripe -- their own keys on their own sites are never flagged
-
-## v0.7.0 -- What's New
-
-A feature release for deeper audits and safer browser scanning. Full notes are in
-[CHANGELOG.md](CHANGELOG.md).
-
-- **Agentic audit workflow** -- `keyleak audit` coordinates local, archive, and
-  authorized network phases and records coverage and evidence artifacts.
-- **Binary artifact scanning** -- opt-in `--scan-binaries` checks printable
-  strings in bounded native artifacts and supported archives without executing
-  them.
-- **More truthful coverage** -- source-map gaps, skipped symlinks, crawl failures,
-  and scan limits are visible instead of being treated as clean results.
-- **Extension privacy controls** -- raw values stay in service-worker memory,
-  findings are redacted in storage, and users can pause collection per origin.
-
-## v0.6.1 -- What's New
-
-A patch release for finding identity, report reliability, and dependency
-hardening. Full notes in [CHANGELOG.md](CHANGELOG.md).
-
-- **Stable finding identity** -- report fingerprints survive harmless line shifts
-  and can use configured HMAC material for reproducible, non-secret IDs.
-- **Baseline compatibility** -- legacy baselines and suppressions continue to
-  match after the newer fingerprint/report identity shape.
-- **Louder report failures** -- scan errors and suppression-loading problems no
-  longer disappear into misleadingly clean reports.
-- **Python dependency hardening** -- the vulnerable dependency graph was updated,
-  and optional `mitmproxy` import failures are preserved/logged while proxy mode
-  falls back to the disabled path when unavailable.
-
-## v0.6.0 -- What's New
-
-A security-and-usefulness release. Full notes in [CHANGELOG.md](CHANGELOG.md).
-
-- **Attack-chain correlation** -- KeyLeak now chains findings the way an attacker
-  does: a published anon key **+** a table readable without RLS is reported as one
-  unauthenticated-exfiltration path, in the JSON/Markdown/HTML report.
-- **Scan bundles** -- `keyleak bundles` and `--bundle <id>` run named groups of
-  checks (secrets, baas, authz, recon, deep, …) instead of "everything or nothing".
-- **Dependency lifecycle-hook scanner** -- catches malicious `preinstall`/
-  `postinstall`/`prepare` scripts and git-ref deps **inside `node_modules`** (the
-  Shai-Hulud / Miasma / Bitwarden-CLI supply-chain class) that the regex pack skips.
-- **GitHub Actions hardening detectors** -- unpinned actions, `write-all`, secret echo.
-- **Security hardening** -- fixed an SSRF in the active BaaS prober (page-controlled
-  URLs could reach internal/cloud-metadata hosts); redirect-revalidating egress
-  guard; PII scrubbing now spans **every** scan surface; confidence-aware ship verdict.
-- **CI** -- `pull_request`-triggered, SHA-pinned workflow running the test suites +
-  launch-gate.
-- **Chrome extension v1.2.0** -- PII scrubbing, JS-library CVE detection, and an
-  SSRF-guarded remote fetch (see [CHANGELOG.md](CHANGELOG.md#chrome-extension)).
-
-## v0.5.0 -- What's New
-
-- **BaaS vulnerability scanner** with provider-specific validation (Supabase, Firebase, Appwrite, PocketBase, Convex)
-- **Chrome extension** with real-time detection, TEST button, and JWT analysis
-- **Full Site Scan** (`keyleak site-scan` + web UI button) with crt.sh + DNS subdomain enumeration, multi-level crawl, and per-finding page provenance
-- **HTML report** output (`--html`)
-- **20 new `baas` pack detectors**
-- **Comprehensive false positive suppression** (200+ first-party domains, 87 vendor CDNs, cloud storage URLs, infra headers)
-
-## False Positives
-
-The Chrome extension suppresses findings from 200+ first-party domains (Google, AWS, Azure, GitHub, Stripe, etc.), 87 vendor CDN scripts, cloud storage signed URLs, and infrastructure headers. Despite this, you may encounter false positives on sites we haven't seen yet.
-
-**If you find a false positive, please report it.** Open an issue with:
-- The finding type (e.g., "GEMINI API KEY", "SQL INJECTION")
-- The source (e.g., "External Script: cdn.example.com/lib.js")
-- Why it's a false positive (e.g., "This is the vendor's own key in their CDN script")
-
-We actively review reported FPs and add suppression rules. The more sites you browse with the extension, the better the suppression gets.
-
-## The Delta Four Result
-
-Every serious scan should lead to four things:
-
-- `Verdict`: `SAFE TO SHIP`, `REVIEW`, or `BLOCK SHIP`.
-- `Proof`: redacted evidence, source, detector, and confidence.
-- `Fix`: exact remediation and rotation guidance.
-- `Re-test`: the command or profile to run after fixing.
-
-Example CLI result:
+Local scans cover configuration and infrastructure files such as `.env`, MCP,
+CI, Docker, source maps, and logs. Add source trees or release artifacts
+explicitly:
 
 ```bash
-keyleak scan https://preview.example.com
-BLOCK SHIP: 1 critical, 0 high, 2 medium, 3 low
-Critical or high-confidence exposures need fixing before release.
-Re-test: keyleak scan https://preview.example.com
+keyleak local . --scan-node-modules --json
+keyleak local . --scan-dist --json
+keyleak local . --scan-binaries --sarif
+keyleak archive release.zip --scan-binaries --out release-report.json
 ```
 
-## What It Checks
+`--scan-node-modules` checks JavaScript and TypeScript source; `--scan-dist`
+includes root `dist/` build output. `--scan-binaries` checks printable strings
+in supported executables and binary members of ZIP/tar archives. APK and IPA
+files are ZIP containers. The scanner does not execute artifacts; encoded or
+runtime-assembled secrets can be missed. Limits and skipped files are reported
+as incomplete coverage, never as a clean result. See the [binary guide](docs/BINARY_ARTIFACT_SCANNING.md)
+for supported formats, caps, and output examples.
 
-| Area | Status | Notes |
-|---|---:|---|
-| Runtime JS/API response secrets | Strong | Browser + proxy capture scans scripts, headers, URLs, and responses. |
-| AI/LLM provider keys | Strong | OpenAI, Anthropic, Gemini, OpenRouter, Groq, Hugging Face, and more. |
-| Cloud/SaaS/PAT/webhooks | Strong | AWS, GitHub, Stripe, Slack, SendGrid, PyPI, database URLs, private keys. |
-| Auth-only leaks | Partial | Authenticated bearer/cookie scan support exists; two-user comparison is available with explicit second-user credentials. |
-| SQLi/XSS/auth bypass leads | Opt-in | `appsec` pack labels these as leads until exploit validation exists. |
-| IDOR/BOLA hints | Improved | Flags direct object references and can validate with two explicit user contexts. |
-| Attack surface | Partial | Security headers, TLS, exposed files, admin paths, subdomain enumeration. |
-| Local config leaks | New | `keyleak local` scans `.env`, MCP, CI, Docker, source maps, and logs. |
-| Correctness/housekeeping | Opt-in | `correctness` and `housekeeping` packs catch N+1, regressions, off-by-one/date/config leads, missing tests, dead code, and stale docs. |
-| Source maps/debug bundles | New | Local scanner detects source map content and provider keys. |
-| GraphQL/LLM/agent hints | Early | Local detectors catch GraphQL introspection and prompt-injection-style text. |
+Full site scans can use crt.sh, DNS, and pinned `subfinder` for subdomain
+discovery. If you do not want automatic tool installation, pass
+`--no-auto-install` or set `KEYLEAK_NO_AUTO_INSTALL=1`. `keyleak doctor`
+reports which discovery tools are available.
 
-KeyLeak is not a full DAST, not exploit automation, and not a replacement for GitLeaks, TruffleHog, GitHub secret scanning, or GitGuardian. It is the runtime/browser/local-config layer that complements them.
+## Findings and safe use
 
-## How To Use It Now
+Reports include a verdict, severity, confidence, source, evidence, remediation, and a re-test command. Normalized reports redact credential values by default. Binary findings include a zero-based byte offset and omit surrounding string snippets so nearby credentials cannot leak through context.
 
-Use the surface that matches your workflow.
+Scans are bounded. If a file, archive, or scan limit is reached, earlier findings remain in the report and coverage is marked incomplete. Exit code `0` means the selected threshold passed with complete coverage; `1` means the command failed; `2` means the threshold was reached or coverage was incomplete.
 
-### 1. Run The Web UI With Docker
+Use KeyLeak only on systems you own or have permission to test. Authenticated
+scans should use throwaway credentials, for example:
 
-This is the fastest way to try the browser scanner without installing Python dependencies locally.
+```bash
+keyleak scan https://your-staging-app.example \
+  --profile authenticated --bearer "$THROWAWAY_TOKEN"
+```
+
+KeyLeak does not upload reports to a hosted service. Values are redacted in
+normalized reports by default. A proxy can see the scan traffic routed through
+it, so use a trusted local proxy rather than an unknown public service. Read the
+[security model](docs/SECURITY_MODEL.md) before scanning sensitive targets.
+
+### Read the result
+
+KeyLeak reports `SAFE TO SHIP`, `REVIEW`, or `BLOCK SHIP`. Use the evidence,
+confidence, remediation, and re-test command to decide what to fix. The default
+launch gate blocks on high and critical findings:
+
+- Exit `0`: the selected threshold passed and coverage is complete.
+- Exit `1`: the command failed.
+- Exit `2`: findings met `--fail-on`, or coverage was incomplete or malformed.
+
+If you believe a result is a false positive, report its detector, source, and
+why it is benign. Do not include unredacted credential values in an issue.
+
+## Chrome extension
+
+The extension observes request and response metadata, page content, and
+fetch/XHR responses locally. It redacts stored and copied findings, keeps raw
+finding values in service-worker memory, and lets you pause collection for an
+origin. `nativeMessaging` is used for explicit full scans through the installed
+local helper; it sends fixed lifecycle actions, a startup challenge, and local
+proof, not page URLs or scan data.
+
+- [Install the published Chrome Web Store extension](https://chromewebstore.google.com/detail/keyleak-detector/ildodbfchnbmndkcijllpmihcbfchgdl) (listing version **1.2.0**).
+- [Download extension v1.3.0](https://github.com/Amal-David/keyleak-detector/releases/download/v0.7.0/keyleak-detector-extension-v1.3.0.zip) from the GitHub release. This ZIP is available for unpacked testing; it has not been submitted to the store listing.
+- For local development, load the `extension/` directory in
+  `chrome://extensions`, then run `poetry run keyleak install-extension-host`
+  from a source checkout. The helper restricts access to the exact extension
+  origin.
+
+## What it detects
+
+- API credentials, private keys, JWT risks, and secrets in browser responses or local files.
+- Supabase, Firebase, Appwrite, PocketBase, and Convex configuration or access-control issues.
+- Risky npm lifecycle hooks, CI workflow settings, exposed local configuration, and selected build artifacts.
+- Opt-in application-security and correctness leads, labeled for review when they are not validated exploits.
+
+KeyLeak complements dedicated source-secret scanners and DAST tools. It is not a general exploit framework. See [Convex support and safety boundaries](docs/CONVEX_SUPPORT.md) for provider-specific limits.
+
+## GitHub Action
+
+Use the [GitHub Action guide](docs/github-action.md) to scan a deployment or repository in CI. The action supports browser and local modes, SARIF upload, and configurable failure thresholds.
+
+## Development
 
 ```bash
 git clone https://github.com/Amal-David/keyleak-detector.git
 cd keyleak-detector
-docker compose up -d
-```
-
-Open `http://localhost:5002`.
-
-Use the page input for a basic runtime scan. Use the authenticated scan modal only with throwaway test credentials.
-
-### 2. Run The Web UI Locally
-
-Use this path when you want to develop the Flask app, scanner, templates, CSS, or JavaScript.
-
-```bash
 poetry install
 poetry run playwright install chromium
-poetry run python app.py
+poetry run keyleak local . --launch-profile launch-gate --fail-on high
 ```
 
-Open `http://localhost:5002`.
-
-If you do not use Poetry, create a virtual environment and install the package locally:
-
-```bash
-python3.12 -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
-pip install -e .
-python -m playwright install chromium
-python app.py
-```
-
-### 3. Scan Local Files And Configs
-
-Use `keyleak local` before pushing or shipping. It scans local files without starting the web app.
-For a beginner walkthrough of bounded dependency/build scans, coverage, owned-site scans,
-extension privacy, and report triage, see [Scanner workflows](docs/SCANNER_WORKFLOWS.md).
-
-```bash
-poetry install
-poetry run keyleak local fixtures/vulnerable-demo
-poetry run keyleak local . --json
-poetry run keyleak local . --sarif --fail-on high
-```
-
-By default, local mode includes `env,mcp,ci,docker,sourcemaps,logs`.
-Dependency source files in `node_modules` and root `dist/` build output are
-excluded from source scanning by default. With the `leak` pack active, the
-separate read-only lifecycle-hook audit may still inspect manifests and install
-scripts under `node_modules`; it never runs them. Use the bounded opt-in flags
-to add dependency source and root build-output scanning:
-
-```bash
-poetry run keyleak local . --scan-node-modules
-poetry run keyleak local . --scan-dist --json
-poetry run keyleak local . --scan-node-modules --scan-dist --json
-poetry run keyleak local . --scan-binaries --sarif
-```
-
-`--scan-node-modules` checks JavaScript and TypeScript sources with the existing
-worm-shape and fingerprint detectors. `--scan-dist` includes JavaScript build
-artifacts and source maps from the root `dist/` directory. Both scopes have file,
-byte, and directory limits. Local reports include a coverage summary; missing
-declared local source maps, escaped symlinks, and limit or read failures mark
-coverage incomplete, which makes the CLI return the failing exit code.
-
-`--scan-binaries` opts into bounded printable-string scanning for recognized
-PE, ELF, Mach-O, and WASM files, plus common binary suffixes such as `.dll`,
-`.exe`, `.so`, `.dylib`, `.wasm`, `.bin`, `.elf`, and `.macho`. It extracts
-ASCII and UTF-16LE/BE strings and checks them with the existing detectors; files
-are read only and never executed. Binary findings include a redacted value and
-zero-based byte offset; surrounding string snippets are omitted to avoid
-exposing nearby credentials. The scan is capped at 10 MiB per file, 1,000
-files, 100 MiB total, and 10,000 findings across binary artifacts per scan;
-skipped files appear in coverage. Archive scans also accept `--scan-binaries`.
-Each artifact is capped at 50 MiB of string-extraction work and 1 billion
-detector-input units (printable characters multiplied by active detectors),
-plus 100,000 printable runs. Reaching a limit retains earlier findings and
-marks coverage incomplete.
-This pass only detects secrets present as printable strings; secrets assembled
-at runtime, including XOR-obfuscated values, are outside its coverage. Archive
-scans cap extraction at 10,000 entries, 100 MiB per member, 500 MiB total, and a
-200:1 expansion ratio; ZIP64 archives are not supported by this opt-in path. If
-an archive limit stops extraction, findings from earlier members are retained
-and coverage is marked incomplete.
-For a copyable synthetic release walkthrough, ZIP/archive example, byte-offset
-interpretation, and cleanup steps, see the [binary artifact scanning guide](docs/BINARY_ARTIFACT_SCANNING.md).
-
-Limit the scan to specific file families:
-
-```bash
-poetry run keyleak local . --include env,mcp,sourcemaps
-```
-
-Detector packs control the kind of failure patterns to look for. CLI/web default to `leak`; the extension default uses `leak,appsec,access-control`.
-
-```bash
-poetry run keyleak local . --packs leak,appsec,access-control --json
-poetry run keyleak local . --launch-profile full --markdown
-poetry run keyleak local . --launch-profile ci --fail-on high
-```
-
-Exit codes are designed for automation: `0` means the selected threshold passed with complete coverage, `1` means the command failed, and `2` means findings met `--fail-on` or scan coverage was incomplete or malformed.
-
-### 4. Scan A Running Web App From The CLI
-
-Use `keyleak scan` when you have a preview URL, staging URL, or local app URL.
-
-The CLI talks to the local KeyLeak web scanner API, so start the web app first:
-
-```bash
-poetry run python app.py
-poetry run keyleak scan https://preview.example.com --json
-poetry run keyleak scan https://preview.example.com --bearer "$TOKEN" --fail-on medium
-```
-
-You can also point the CLI at the Docker web scanner:
-
-```bash
-docker compose up -d
-poetry run keyleak scan http://host.docker.internal:3000 --server http://127.0.0.1:5002
-```
-
-### 5. Run Authenticated Scans
-
-Use authenticated mode only against systems you own or have permission to test.
-
-```bash
-poetry run keyleak scan https://preview.example.com \
-  --profile authenticated \
-  --bearer "$THROWAWAY_TOKEN"
-```
-
-Use a cookie instead of a bearer token:
-
-```bash
-poetry run keyleak scan https://preview.example.com \
-  --profile authenticated \
-  --cookie "session=throwaway-session"
-```
-
-Use both when the app requires both:
-
-```bash
-poetry run keyleak scan https://preview.example.com \
-  --profile authenticated \
-  --bearer "$THROWAWAY_TOKEN" \
-  --cookie "session=throwaway-session"
-```
-
-For access-control checks, provide a second throwaway user explicitly. KeyLeak will compare object-looking URLs as user A and user B and mark same-access evidence as validated:
-
-```bash
-poetry run keyleak scan https://preview.example.com/users/123456 \
-  --profile authenticated \
-  --launch-profile bug-bounty \
-  --packs access-control \
-  --bearer "$USER_A_TOKEN" \
-  --bearer-b "$USER_B_TOKEN"
-```
-
-### 6. Generate Reports For CI Or Review
-
-Use JSON for baselines, SARIF for code scanning systems, and Markdown for human review.
-
-```bash
-poetry run keyleak local . --json > keyleak-report.json
-poetry run keyleak local . --sarif > keyleak.sarif
-poetry run keyleak local . --markdown > keyleak-report.md
-```
-
-Fail on high or critical findings:
-
-```bash
-poetry run keyleak local . --fail-on high
-poetry run keyleak scan https://preview.example.com --fail-on critical
-```
-
-Suppress known findings with a previous JSON report or allowlist:
-
-```bash
-poetry run keyleak local . --baseline keyleak-report.json
-poetry run keyleak local . --allowlist keyleak-allowlist.txt
-```
-
-The default launch profile is `launch-gate`, which blocks on high and critical findings while keeping lower-severity hardening notes visible for review:
-
-```bash
-poetry run keyleak local . --launch-profile launch-gate --fail-on high --json > keyleak-report.json
-```
-
-The repository includes a GitHub Actions launch gate at `.github/workflows/keyleak-launch-gate.yml` that runs the local scanner and uploads a JSON report artifact.
-
-### 7. Use With Claude Code / Codex
-
-The repo ships an agent skill at `.claude/skills/keyleak-verify/SKILL.md`. In any Claude Code session inside this repo, prompts like:
-
-```text
-Is this build safe to ship?
-Run a launch-gate check on the preview URL https://preview.example.com.
-Scan the current branch for leaked secrets before I deploy.
-```
-
-trigger the skill. The agent then chooses between `keyleak local` and `keyleak scan`, picks the right `--launch-profile` and `--fail-on` threshold, interprets the verdict JSON, and reports back with `BLOCK SHIP` / `REVIEW` / `SAFE TO SHIP` plus the top blocking findings and a re-test command. The skill respects the local-first trust model: it only scans systems you own, never auto-suppresses findings, and never echoes raw secret values back.
-
-## Safe Demo
-
-The repo includes an intentionally vulnerable local fixture:
-
-```bash
-poetry run keyleak local fixtures/vulnerable-demo --markdown
-```
-
-This gives contributors and Hacker News readers a safe way to see a `BLOCK SHIP` result without scanning random systems.
-
-## Web Scanner
-
-Basic scan:
-
-1. Loads the target in headless Chromium through mitmproxy.
-2. Captures URLs, headers, responses, inline scripts, and DOM config data.
-3. Applies custom and GitLeaks-derived secret patterns.
-4. Runs attack-surface checks for exposed files, security headers, admin paths, TLS, and subdomains.
-5. Returns a verdict, summary, findings, proof, fix guidance, and re-test command.
-
-Authenticated scan:
-
-1. Adds a throwaway bearer token and/or cookie to the browser context.
-2. Scans authenticated pages and traffic.
-3. Applies best-effort access-control heuristics for direct object references.
-
-Use throwaway credentials only.
-
-## Chrome Extension
-
-The `extension/` folder contains the Chrome extension source. The extension passively monitors pages as you browse.
-
-It scans:
-
-- request and response headers
-- URLs and query parameters
-- fetch/XHR response bodies
-- inline scripts
-- data attributes and page config
-
-### Install from the Chrome Web Store
-
-Install the published [KeyLeak Detector extension](https://chromewebstore.google.com/detail/keyleak-detector/ildodbfchnbmndkcijllpmihcbfchgdl). To test the latest repository source before a store update is approved, load the unpacked extension from this repo:
-
-1. Clone or pull the latest `main` branch.
-2. Open `chrome://extensions` in Chrome.
-3. Enable `Developer mode`.
-4. Click `Load unpacked`.
-5. Select the `extension/` folder, not the repository root.
-6. From the repository root, run `poetry run keyleak install-extension-host` once.
-7. Return to `chrome://extensions` and click Reload on KeyLeak Detector.
-8. Pin `KeyLeak Detector` from the Chrome toolbar extensions menu.
-9. Browse an app you own or have permission to test.
-10. Click the KeyLeak toolbar icon to see findings for the current tab.
-
-The exact folder to select is:
-
-```text
-keyleak-detector/extension
-```
-
-The one-time setup discovers the unpacked extension ID in Chrome and installs an exact-origin native-messaging manifest for this checkout. If Chrome uses a profile the installer cannot discover, copy the extension ID from `chrome://extensions` and run:
-
-```bash
-poetry run keyleak install-extension-host --extension-id <extension-id>
-```
-
-For the published Chrome Web Store build, install the helper with that listing's exact extension ID:
-
-```bash
-poetry run keyleak install-extension-host --extension-id ildodbfchnbmndkcijllpmihcbfchgdl
-```
-
-The helper authorizes only `chrome-extension://<extension-id>/`; it does not add a wildcard origin.
-
-### Use The Popup
-
-The popup shows:
-
-- a badge count for findings on the current tab
-- a launch verdict: `SAFE TO SHIP`, `REVIEW`, or `BLOCK SHIP`
-- severity filters for `CRIT`, `HIGH`, `MED`, and `LOW`
-- scan activity stats for headers, fetch/XHR bodies, external scripts, source maps, storage, WebSocket/SSE messages, data attributes, and meta tags
-- redacted proof, detector IDs, confidence, validation status, and fix guidance
-- report copy actions for redacted JSON and Markdown
-- per-finding suppression by stable finding ID for known launch-gate noise
-- a bounded `REDACTED SAMPLE ROW` on confirmed open BaaS tables plus an explicit `REVEAL RAW SAMPLE` control for up to two actual rows; raw rows stay in tab-scoped memory and never enter extension storage or copied reports
-- a `RUN FULL SCAN` action that starts the Docker Compose scanner automatically when loopback is unavailable, calls it at `http://127.0.0.1:5002` without forwarding browser cookies or bearer tokens, and stops only helper-started containers after about five idle minutes
-- a `CLEAR` button to reset findings for the current tab
-
-### Use The DevTools Panel
-
-Open Chrome DevTools on a page, then select the `Secrets` panel. It shows a wider launch-gate table and enables DevTools network body capture while the panel is open, which improves coverage for parser-loaded bundles and source maps.
-
-### Learn And Reference Tabs
-
-Both the popup and the DevTools panel include a `Findings` tab and a `Reference` tab:
-
-- Click `LEARN` on any finding to inline-expand a panel explaining what the detector is, why it matters, the canonical attack scenario, the fix, and external references (OWASP, CWE, vendor docs).
-- Switch to `Reference` to browse every detector grouped by pack (`leak`, `appsec`, `access-control`, `correctness`, `housekeeping`). The search box filters by detector ID, description, remediation, or category. Use this as a glossary even when there are no findings.
-
-Detector educational content is sourced from `keyleak/detectors.py` (`description`, `remediation`, `references`, optional `attack_scenario`) and regenerated into `extension/lib/detector-info.js` by `scripts/generate_extension_patterns.py`. To add or improve an explanation, edit the detector and re-run the script.
-
-### Extension Permissions
-
-The extension requests `webRequest`, `storage`, `activeTab`, `tabs`, and `<all_urls>` because it observes requests, headers, page content, and fetch/XHR responses locally. It requests `nativeMessaging` only to send fixed lifecycle actions, a random startup challenge, and its local proof to the installed KeyLeak helper; page URLs, site credentials, findings, and captured browser content are never included in those native messages. The proof authenticates the loopback scanner before the extension sends a scan target.
-
-Use it for development, staging, bug bounty scopes, or owned systems. Disable it when browsing unrelated sensitive sites. See [docs/SECURITY_MODEL.md](docs/SECURITY_MODEL.md) before using it on sensitive browsing sessions.
-
-## Reports
-
-CLI output formats:
-
-```bash
-poetry run keyleak local . --json
-poetry run keyleak local . --markdown
-poetry run keyleak local . --sarif
-poetry run keyleak scan https://preview.example.com --baseline keyleak-baseline.json --fail-on high
-```
-
-Each normalized finding includes:
-
-- `id`
-- `type`
-- `severity`
-- `confidence`
-- `detector_id`
-- `category`
-- `source`
-- `evidence`
-- `redacted_value`
-- `risk_reason`
-- `remediation`
-- `references`
-- `validation_status`
-
-Reports also include `packs` and `pack_summary`, so web, CLI, CI, and extension exports can group findings by heatmap category.
-
-Baselines and allowlists are intentionally simple. A baseline can be a previous KeyLeak JSON report; those finding IDs/signatures are suppressed so CI fails only on new findings. An allowlist can be JSON (`ids`, `detector_ids`, `types`, `source_contains`) or a line file using entries like `id:finding_...`, `detector:local:openai_api_key`, `type:source_map_reference`, or `source:fixtures/vulnerable-demo`.
-
-## Security Model
-
-- Local-first: scans run on your machine or self-hosted Docker container.
-- No hosted credential upload is required.
-- Values are redacted in normalized reports by default.
-- Authenticated scans should use throwaway test credentials.
-- Only scan systems you own or have explicit permission to test.
-
-Read [docs/SECURITY_MODEL.md](docs/SECURITY_MODEL.md) for details and limits.
-
-## Contributing
-
-Useful PRs are very welcome. The best contribution lanes are:
-
-- add provider patterns with fixtures
-- add safe vulnerable fixtures
-- improve false-positive handling
-- add remediation playbooks
-- improve Chrome extension UX or tests
-- add report exporters
-- improve CLI profiles and CI behavior
-- add MCP/agent/LLM leak detectors
-- add detector-pack fixtures and lower-noise validators for correctness and housekeeping leads
-
-Start with [CONTRIBUTING.md](CONTRIBUTING.md) and [docs/DETECTOR_AUTHORING.md](docs/DETECTOR_AUTHORING.md). For an end-to-end runbook on running a scan (setup, choosing a command, and triaging output), see [docs/AGENT_SCAN_HOWTO.md](docs/AGENT_SCAN_HOWTO.md).
-
-## Roadmap
-
-- Shared scanner core for web UI, CLI, and extension.
-- More detector fixtures and report tests.
-- More validated appsec checks beyond lead detection.
-- GraphQL, OAuth/OIDC, CORS, source-map, and agent-web safety detectors.
-
-## Responsible Use
-
-Only scan systems you own or have written permission to test. Unauthorized scanning may be illegal. Handle findings securely, rotate exposed credentials immediately, and report vulnerabilities through responsible disclosure.
-
-## Acknowledgments
-
-- [GitLeaks](https://github.com/gitleaks/gitleaks) for the industry-standard secret scanning rules that KeyLeak imports.
-- [Keyleaksecret](https://github.com/0xSojalSec/Keyleaksecret) for additional pattern inspiration.
+To run the Flask web UI, use `poetry run python app.py` and open `http://127.0.0.1:5002`. For detector contributions, see [CONTRIBUTING.md](CONTRIBUTING.md) and the [detector authoring guide](docs/DETECTOR_AUTHORING.md).
+
+## Releases and documentation
+
+The current Python package release is **0.7.0**. The extension Web Store
+listing and downloadable ZIP can have different versions because store updates
+require a separate submission.
+
+- [Changelog](CHANGELOG.md)
+- [Scanner workflows](docs/SCANNER_WORKFLOWS.md)
+- [Binary artifact scanning](docs/BINARY_ARTIFACT_SCANNING.md)
+- [Security model](docs/SECURITY_MODEL.md)
+- [Agent scan runbook](docs/AGENT_SCAN_HOWTO.md)
 
 ## License
 
