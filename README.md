@@ -187,6 +187,21 @@ The `--html` flag generates a self-contained dark-theme vulnerability report:
 - **87 vendor CDN suppression**: No false positives from Google Analytics, PostHog, Segment, etc.
 - **200+ first-party domains**: Google, Microsoft, AWS, Apple, Meta, Anthropic, Stripe -- their own keys on their own sites are never flagged
 
+## v0.7.0 -- What's New
+
+A feature release for deeper audits and safer browser scanning. Full notes are in
+[CHANGELOG.md](CHANGELOG.md).
+
+- **Agentic audit workflow** -- `keyleak audit` coordinates local, archive, and
+  authorized network phases and records coverage and evidence artifacts.
+- **Binary artifact scanning** -- opt-in `--scan-binaries` checks printable
+  strings in bounded native artifacts and supported archives without executing
+  them.
+- **More truthful coverage** -- source-map gaps, skipped symlinks, crawl failures,
+  and scan limits are visible instead of being treated as clean results.
+- **Extension privacy controls** -- raw values stay in service-worker memory,
+  findings are redacted in storage, and users can pause collection per origin.
+
 ## v0.6.1 -- What's New
 
 A patch release for finding identity, report reliability, and dependency
@@ -344,6 +359,7 @@ to add dependency source and root build-output scanning:
 poetry run keyleak local . --scan-node-modules
 poetry run keyleak local . --scan-dist --json
 poetry run keyleak local . --scan-node-modules --scan-dist --json
+poetry run keyleak local . --scan-binaries --sarif
 ```
 
 `--scan-node-modules` checks JavaScript and TypeScript sources with the existing
@@ -352,6 +368,24 @@ artifacts and source maps from the root `dist/` directory. Both scopes have file
 byte, and directory limits. Local reports include a coverage summary; missing
 declared local source maps, escaped symlinks, and limit or read failures mark
 coverage incomplete, which makes the CLI return the failing exit code.
+
+`--scan-binaries` opts into bounded printable-string scanning for recognized
+PE, ELF, Mach-O, and WASM files, plus common binary suffixes such as `.dll`,
+`.exe`, `.so`, `.dylib`, `.wasm`, `.bin`, `.elf`, and `.macho`. It extracts
+ASCII and UTF-16LE/BE strings and checks them with the existing detectors; files
+are read only and never executed. Binary findings include a zero-based byte
+offset into the file payload. The scan is capped at 10 MiB per file, 1,000
+files, and 100 MiB total; skipped files appear in coverage. Archive scans also
+accept `--scan-binaries`. String extraction is also bounded by a per-file
+work limit and a 100,000-run limit per artifact.
+This pass only detects secrets present as printable strings; secrets assembled
+at runtime, including XOR-obfuscated values, are outside its coverage. Archive
+scans cap extraction at 10,000 entries, 100 MiB per member, 500 MiB total, and a
+200:1 expansion ratio; ZIP64 archives are not supported by this opt-in path. If
+an archive limit stops extraction, findings from earlier members are retained
+and coverage is marked incomplete.
+For a copyable synthetic release walkthrough, ZIP/archive example, byte-offset
+interpretation, and cleanup steps, see the [binary artifact scanning guide](docs/BINARY_ARTIFACT_SCANNING.md).
 
 Limit the scan to specific file families:
 
@@ -500,7 +534,7 @@ Use throwaway credentials only.
 
 ## Chrome Extension
 
-The `extension/` folder contains an experimental local Chrome extension that passively monitors pages as you browse.
+The `extension/` folder contains the Chrome extension source. The extension passively monitors pages as you browse.
 
 It scans:
 
@@ -510,9 +544,9 @@ It scans:
 - inline scripts
 - data attributes and page config
 
-### Load It In Chrome
+### Install from the Chrome Web Store
 
-The extension is not published to the Chrome Web Store yet. Load it from this repo:
+Install the published [KeyLeak Detector extension](https://chromewebstore.google.com/detail/keyleak-detector/ildodbfchnbmndkcijllpmihcbfchgdl). To test the latest repository source before a store update is approved, load the unpacked extension from this repo:
 
 1. Clone or pull the latest `main` branch.
 2. Open `chrome://extensions` in Chrome.
@@ -536,6 +570,14 @@ The one-time setup discovers the unpacked extension ID in Chrome and installs an
 ```bash
 poetry run keyleak install-extension-host --extension-id <extension-id>
 ```
+
+For the published Chrome Web Store build, install the helper with that listing's exact extension ID:
+
+```bash
+poetry run keyleak install-extension-host --extension-id ildodbfchnbmndkcijllpmihcbfchgdl
+```
+
+The helper authorizes only `chrome-extension://<extension-id>/`; it does not add a wildcard origin.
 
 ### Use The Popup
 
