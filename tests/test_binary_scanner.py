@@ -12,7 +12,7 @@ from keyleak.detectors import detectors_for_packs
 from keyleak.local_scanner import scan_path
 from keyleak.models import Evidence, Finding, ScanReport, coverage_is_incomplete
 from keyleak.reporting import format_sarif
-from keyleak.binary_scanner import scan_binary_bytes
+from keyleak.binary_scanner import extract_printable_runs, scan_binary_bytes
 from keyleak.cli import main
 
 
@@ -93,9 +93,26 @@ class BinaryScannerTests(unittest.TestCase):
         ]
         self.assertEqual(lines, [1, 2, 3])
 
+    def test_printable_key_crossing_old_run_boundary_is_scanned_whole(self):
+        old_run_limit = 1_000_000
+        prefix_length = old_run_limit - 5
+        payload = b"." * prefix_length + CANARY + b"\x00"
+
+        findings = scan_binary_bytes(payload, "large-resource.bin", detectors_for_packs(["leak"]))
+        aws = next(item for item in findings if item.detector_id == "leak.aws_access_key")
+
+        self.assertEqual(aws.evidence.byte_offset, prefix_length)
+        self.assertNotIn(CANARY.decode(), aws.evidence.snippet)
+
+    def test_public_run_extractor_enforces_binary_file_limit(self):
+        with patch("keyleak.binary_scanner.MAX_BINARY_FILE_BYTES", 4):
+            with self.assertRaisesRegex(ValueError, "per-file size limit"):
+                list(extract_printable_runs(b"12345"))
+
     def test_same_line_binary_occurrences_keep_distinct_byte_offsets(self):
         payload = CANARY + b"\x00" + CANARY
-        findings = scan_binary_bytes(payload, "same-line.bin", detectors_for_packs(["leak"]))
+        with patch.dict("os.environ", {"KEYLEAK_FINDING_FINGERPRINT_KEY": "binary-id-test"}):
+            findings = scan_binary_bytes(payload, "same-line.bin", detectors_for_packs(["leak"]))
         aws_findings = [
             item for item in findings if item.detector_id == "leak.aws_access_key"
         ]
@@ -103,8 +120,14 @@ class BinaryScannerTests(unittest.TestCase):
         self.assertEqual([item.evidence.line for item in aws_findings], [1, 1])
         offsets = [item.evidence.byte_offset for item in aws_findings]
         self.assertEqual(offsets, [0, len(CANARY) + 1])
+        self.assertEqual(len({item.id for item in aws_findings}), 2)
+        self.assertEqual(len({item.fingerprint for item in aws_findings}), 2)
         for offset in offsets:
             self.assertEqual(payload[offset:offset + len(CANARY)], CANARY)
+        round_tripped = [Finding.from_dict(item.to_dict()) for item in aws_findings]
+        self.assertEqual([item.evidence.byte_offset for item in round_tripped], offsets)
+        self.assertEqual([item.id for item in round_tripped], [item.id for item in aws_findings])
+        self.assertEqual([item.fingerprint for item in round_tripped], [item.fingerprint for item in aws_findings])
 
     def test_work_limit_preserves_findings_and_marks_coverage_incomplete(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -116,6 +139,23 @@ class BinaryScannerTests(unittest.TestCase):
         self.assertTrue(any(item.detector_id == "leak.aws_access_key" for item in report.findings))
         self.assertTrue(coverage_is_incomplete(report.extra["coverage"]))
         self.assertEqual(report.extra["coverage"]["skipped"], 1)
+
+    def test_detector_work_limit_counts_text_times_active_detectors(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "bounded.bin"
+            path.write_bytes(CANARY + b"\x00" + CANARY)
+            detectors = detectors_for_packs(["leak"])
+            first_run_budget = len(CANARY) * len(detectors)
+            with patch(
+                "keyleak.binary_scanner.MAX_BINARY_REGEX_WORK_UNITS",
+                first_run_budget + 1,
+            ):
+                report = scan_path(str(path), packs=["leak"], scan_binaries=True)
+
+        matches = [item for item in report.findings if item.detector_id == "leak.aws_access_key"]
+        self.assertEqual(len(matches), 1)
+        self.assertNotIn(CANARY.decode(), json.dumps(report.to_dict()))
+        self.assertTrue(coverage_is_incomplete(report.extra["coverage"]))
 
     def test_compiled_program_is_scanned_as_bytes_and_never_executed(self):
         compiler = shutil.which("cc") or shutil.which("clang")

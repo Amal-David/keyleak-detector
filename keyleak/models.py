@@ -193,7 +193,7 @@ class Finding:
     def __post_init__(self) -> None:
         self.severity = normalize_severity(self.severity)
         if not self.id:
-            self.id = stable_id(
+            identity = (
                 self.type,
                 self.detector_id,
                 self.source,
@@ -201,6 +201,9 @@ class Finding:
                 self.evidence.line,
                 self.evidence.request_url,
             )
+            if self.evidence.byte_offset is not None:
+                identity += ("byte_offset", self.evidence.byte_offset)
+            self.id = stable_id(*identity)
 
     def to_dict(self) -> Dict[str, Any]:
         payload = {

@@ -160,6 +160,17 @@ class BinaryArchiveTests(unittest.TestCase):
         self.assertEqual(finding["source"], f"{archive.resolve()}!/Payload/app.bin")
         self.assertEqual(finding["evidence"]["byte_offset"], member.index(key))
 
+    def test_scan_binaries_visits_native_members_under_dist(self):
+        member = (Path(__file__).parent / "fixtures" / "binary_canary.macho").read_bytes()
+        archive = self.make_zip("release.zip", [("dist/app.macho", member)])
+
+        report = scan_archive(str(archive), scan_binaries=True)["report"]
+
+        finding = next(item for item in report["findings"] if item["detector_id"] == "leak.aws_access_key")
+        self.assertEqual(finding["source"], f"{archive.resolve()}!/dist/app.macho")
+        self.assertEqual(finding["evidence"]["byte_offset"], member.index(b"AKIA1234567890ABCDEF"))
+        self.assertEqual(report["coverage"]["status"], "complete")
+
     def test_scan_binaries_applies_to_pre_extracted_directory_inputs(self):
         directory = self.root / "release"
         directory.mkdir()

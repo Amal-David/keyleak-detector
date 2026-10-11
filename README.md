@@ -376,8 +376,10 @@ ASCII and UTF-16LE/BE strings and checks them with the existing detectors; files
 are read only and never executed. Binary findings include a zero-based byte
 offset into the file payload. The scan is capped at 10 MiB per file, 1,000
 files, and 100 MiB total; skipped files appear in coverage. Archive scans also
-accept `--scan-binaries`. String extraction is also bounded by a per-file
-work limit and a 100,000-run limit per artifact.
+accept `--scan-binaries`. Each artifact is capped at 50 MiB of string-extraction
+work and 1 billion detector-input units (printable characters multiplied by
+active detectors), plus 100,000 printable runs. Reaching a limit retains earlier
+findings and marks coverage incomplete.
 This pass only detects secrets present as printable strings; secrets assembled
 at runtime, including XOR-obfuscated values, are outside its coverage. Archive
 scans cap extraction at 10,000 entries, 100 MiB per member, 500 MiB total, and a

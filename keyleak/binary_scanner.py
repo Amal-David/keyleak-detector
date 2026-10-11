@@ -11,8 +11,8 @@ from .local_scanner import scan_text
 
 MAX_BINARY_FILE_BYTES = 10 * 1024 * 1024
 MAX_BINARY_RUNS = 100_000
-MAX_RUN_CHARS = 1_000_000
 MAX_BINARY_SCAN_WORK_UNITS = 50 * 1024 * 1024
+MAX_BINARY_REGEX_WORK_UNITS = 1_000_000_000
 MIN_RUN_CHARS = 4
 
 _BINARY_SUFFIXES = {".dll", ".exe", ".so", ".dylib", ".wasm", ".bin", ".elf", ".macho"}
@@ -53,6 +53,8 @@ def _printable(value: int) -> bool:
 
 def extract_printable_runs(data: bytes) -> Iterator[Tuple[str, int, int]]:
     """Yield printable ASCII/UTF-16 runs as text, byte start, and byte width."""
+    if len(data) > MAX_BINARY_FILE_BYTES:
+        raise ValueError("binary file exceeds per-file size limit")
     work_units = 0
     for width, little_endian in ((1, True), (2, True), (2, False)):
         for alignment in range(width):
@@ -70,8 +72,6 @@ def extract_printable_runs(data: bytes) -> Iterator[Tuple[str, int, int]]:
                         break
                     chars.append(chr(value))
                     index += width
-                    if len(chars) >= MAX_RUN_CHARS:
-                        break
                 if len(chars) >= MIN_RUN_CHARS:
                     yield "".join(chars), start, width
                 index = max(index, start + width)
@@ -90,6 +90,7 @@ def scan_binary_bytes(
     findings = []
     detectors = list(detectors)
     runs = 0
+    regex_work_units = 0
     findings_by_location = {}
     finding_run_lengths = []
     try:
@@ -97,6 +98,9 @@ def scan_binary_bytes(
             runs += 1
             if runs > MAX_BINARY_RUNS:
                 raise BinaryScanLimitError("binary printable-run limit reached")
+            regex_work_units += len(text) * len(detectors)
+            if regex_work_units > MAX_BINARY_REGEX_WORK_UNITS:
+                raise BinaryScanLimitError("binary detector work limit reached", findings)
             run_findings = scan_text(
                     text,
                     source,
@@ -136,7 +140,7 @@ def scan_binary_bytes(
                     findings[overlapping] = finding
                     finding_run_lengths[overlapping] = len(text)
     except BinaryScanLimitError as exc:
-        raise BinaryScanLimitError(str(exc), findings + exc.findings) from exc
+        raise BinaryScanLimitError(str(exc), findings) from exc
     return findings
 
 

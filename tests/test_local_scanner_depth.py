@@ -46,6 +46,27 @@ fs.writeFileSync('~/.ssh/authorized_keys', token);
         self.assertEqual(selected_report.extra["coverage"]["attempted"], 1)
         self.assertEqual(selected_report.extra["coverage"]["status"], "complete")
 
+    def test_binary_scan_visits_binary_files_under_opt_in_source_directories_only(self):
+        fixture = Path(__file__).parent / "fixtures" / "binary_canary.macho"
+        binary = fixture.read_bytes()
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            dist = root / "dist"
+            dependency = root / "node_modules" / "native-addon"
+            dependency.mkdir(parents=True)
+            dist.mkdir()
+            (dist / "app.macho").write_bytes(binary)
+            (dependency / "addon.macho").write_bytes(binary)
+            (dist / "source.js").write_text("const publicExample = true;", encoding="utf-8")
+            (dependency / "source.js").write_text("const publicExample = true;", encoding="utf-8")
+
+            report = scan_path(str(root), scan_binaries=True)
+
+        aws_findings = [f for f in report.findings if f.detector_id == "leak.aws_access_key"]
+        self.assertEqual({Path(f.source).name for f in aws_findings}, {"app.macho", "addon.macho"})
+        self.assertEqual(report.extra["coverage"]["attempted"], 2)
+        self.assertEqual(report.extra["coverage"]["status"], "complete")
+
     def test_missing_declared_local_source_map_marks_coverage_incomplete(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

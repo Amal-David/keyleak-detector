@@ -458,6 +458,7 @@ def scan_text(
                         raw_value=raw_value,
                         request_url=safe_request_url,
                         line=line,
+                        byte_offset=byte_offset,
                     ),
                     remediation_v2=detector.get_remediation().to_dict(),
                 )
@@ -516,8 +517,8 @@ def _iter_candidate_files(
             rel_parts = directory_path.relative_to(target).parts
             is_root_dist = len(rel_parts) == 1 and directory == "dist"
             selected_scope = (
-                (directory == "node_modules" and scan_node_modules)
-                or (is_root_dist and scan_dist)
+                (directory == "node_modules" and (scan_node_modules or scan_binaries))
+                or (is_root_dist and (scan_dist or scan_binaries))
                 or (in_node_modules and directory == "dist")
             )
             if directory in SKIP_DIRS and not selected_scope:
@@ -560,20 +561,15 @@ def _candidate_for_local_scan(
             coverage["attempted"] += 1
             _record_coverage(coverage, "skipped", "file symlink was not scanned")
         return None
-    if in_node_modules and (
-        not scan_node_modules
-        or (
-            suffix not in {".js", ".mjs", ".cjs", ".ts", ".tsx", ".jsx"}
-            and not (scan_binaries and _binary_candidate(file_path))
-        )
+    binary_candidate = scan_binaries and _binary_candidate(file_path)
+    if in_node_modules and not (
+        (scan_node_modules and suffix in {".js", ".mjs", ".cjs", ".ts", ".tsx", ".jsx"})
+        or binary_candidate
     ):
         return None
-    if in_root_dist and (
-        not scan_dist
-        or (
-            suffix not in {".js", ".mjs", ".cjs", ".ts", ".tsx", ".jsx", ".map"}
-            and not (scan_binaries and _binary_candidate(file_path))
-        )
+    if in_root_dist and not (
+        (scan_dist and suffix in {".js", ".mjs", ".cjs", ".ts", ".tsx", ".jsx", ".map"})
+        or binary_candidate
     ):
         return None
     if _is_generated_file(file_path):
@@ -606,7 +602,7 @@ def _candidate_for_local_scan(
     categories = [] if in_node_modules else _categories_for_file(file_path, includes)
     if categories or in_node_modules:
         return file_path, categories
-    if scan_binaries and _binary_candidate(file_path):
+    if binary_candidate:
         return file_path, []
     return None
 
