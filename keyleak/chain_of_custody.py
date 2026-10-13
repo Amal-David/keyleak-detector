@@ -1,11 +1,4 @@
-"""Chain-of-custody envelope for KeyLeak reports.
-
-Wraps a :class:`~keyleak.models.ScanReport` with a hash-chained signature so
-the report becomes legally defensible: identifier, timestamp, finding hash,
-previous-record hash, and (optionally) a cryptographic signature. The same
-envelope is used by Wave 3.1 (time-machine archive scans) and the Wave 1.7
-disclosure flow.
-"""
+"""Versioned report integrity envelopes, optionally authenticated with HMAC."""
 
 from __future__ import annotations
 
@@ -39,71 +32,57 @@ def build_envelope(
     signature_mode: str = "hmac-sha256",
     now: Optional[datetime] = None,
 ) -> Dict[str, Any]:
-    """Build the chain-of-custody envelope for ``report_dict``.
-
-    Returns a dict shaped like::
-
-        {
-          "version": "1",
-          "envelope": "keyleak.chain_of_custody",
-          "generated_at": "...",
-          "signer": "...",
-          "prev_hash": "...",
-          "findings_sha256": "...",
-          "self_hash": "...",
-          "signature_mode": "hmac-sha256" | "none",
-          "signature": "...",
-          "report": <original report dict>
-        }
-
-    ``self_hash`` is HMAC-SHA256 over ``prev_hash + findings_sha256 +
-    generated_at + signer``. The signature is HMAC-SHA256 over ``self_hash``
-    when ``signature_mode == 'hmac-sha256'``.
-    """
-
+    """Bind the entire report and envelope metadata; hash-only mode is not authentication."""
+    if signature_mode not in {"hmac-sha256", "none"}:
+        raise ValueError("Unsupported envelope signature mode")
+    report_bytes = json.dumps(report_dict, sort_keys=True, separators=(",", ":"), allow_nan=False).encode("utf-8")
     generated_at = (now or datetime.now(timezone.utc)).isoformat()
-    digest = findings_sha256(report_dict)
-
-    self_payload = f"{prev_hash}|{digest}|{generated_at}|{signer}".encode("utf-8")
-    self_hash = hashlib.sha256(self_payload).hexdigest()
-
-    signature = ""
-    if signature_mode == "hmac-sha256":
-        key = os.environ.get(COC_HMAC_KEY_ENV)
-        if not key:
-            signature_mode = "none"
-        else:
-            signature = hmac.new(key.encode("utf-8"), self_hash.encode("utf-8"), hashlib.sha256).hexdigest()
-
-    return {
-        "version": "1",
+    key = os.environ.get(COC_HMAC_KEY_ENV)
+    if signature_mode == "hmac-sha256" and not key:
+        signature_mode = "none"
+    envelope = {
+        "version": "2",
         "envelope": "keyleak.chain_of_custody",
         "generated_at": generated_at,
         "signer": signer,
         "prev_hash": prev_hash,
-        "findings_sha256": digest,
-        "self_hash": self_hash,
+        "findings_sha256": findings_sha256(report_dict),
+        "report_sha256": hashlib.sha256(report_bytes).hexdigest(),
         "signature_mode": signature_mode,
-        "signature": signature,
-        "report": report_dict,
     }
+    self_hash = hashlib.sha256(json.dumps(envelope, sort_keys=True, separators=(",", ":")).encode("utf-8")).hexdigest()
+    envelope.update(
+        self_hash=self_hash,
+        signature=hmac.new(key.encode("utf-8"), self_hash.encode("utf-8"), hashlib.sha256).hexdigest() if signature_mode == "hmac-sha256" else "",
+        report=json.loads(report_bytes),
+    )
+    return envelope
 
 
-def verify_envelope(envelope: Dict[str, Any]) -> bool:
-    """Verify ``envelope``'s self-hash + signature.
-
-    Returns True if every check passes:
-    - Recomputed self_hash matches the embedded one.
-    - HMAC signature verifies under ``KEYLEAK_COC_KEY`` (if mode is hmac).
-    - ``findings_sha256`` matches the embedded report.
-    """
-
-    report = envelope.get("report") or {}
+def verify_envelope(envelope: Dict[str, Any], *, require_signature: bool = False) -> bool:
+    """Verify integrity; legacy v1 binds findings only. Require a signature for authenticity."""
+    if not isinstance(envelope, dict) or envelope.get("version") not in ("1", "2"):
+        return False
+    report = envelope.get("report")
+    if not isinstance(report, dict):
+        return False
     digest = findings_sha256(report)
     if digest != envelope.get("findings_sha256"):
         return False
 
-    self_payload = f"{envelope.get('prev_hash', '')}|{digest}|{envelope.get('generated_at', '')}|{envelope.get('signer', '')}".encode("utf-8")
+    if envelope["version"] == "2":
+        if envelope.get("envelope") != "keyleak.chain_of_custody":
+            return False
+        try:
+            report_bytes = json.dumps(report, sort_keys=True, separators=(",", ":"), allow_nan=False).encode("utf-8")
+            if hashlib.sha256(report_bytes).hexdigest() != envelope.get("report_sha256"):
+                return False
+            metadata = {k: v for k, v in envelope.items() if k not in {"report", "self_hash", "signature"}}
+            self_payload = json.dumps(metadata, sort_keys=True, separators=(",", ":"), allow_nan=False).encode("utf-8")
+        except (TypeError, ValueError):
+            return False
+    else:
+        self_payload = f"{envelope.get('prev_hash', '')}|{digest}|{envelope.get('generated_at', '')}|{envelope.get('signer', '')}".encode("utf-8")
     expected_self_hash = hashlib.sha256(self_payload).hexdigest()
     if expected_self_hash != envelope.get("self_hash"):
         return False
@@ -111,10 +90,10 @@ def verify_envelope(envelope: Dict[str, Any]) -> bool:
     mode = envelope.get("signature_mode") or "none"
     sig = envelope.get("signature") or ""
     if mode == "none":
-        return not sig
+        return not require_signature and not sig
     if mode == "hmac-sha256":
         key = os.environ.get(COC_HMAC_KEY_ENV)
-        if not key:
+        if not key or not isinstance(sig, str):
             return False
         expected = hmac.new(key.encode("utf-8"), expected_self_hash.encode("utf-8"), hashlib.sha256).hexdigest()
         return hmac.compare_digest(expected, sig.strip().lower())

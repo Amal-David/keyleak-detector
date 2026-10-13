@@ -31,7 +31,7 @@ class BinaryArchiveTests(unittest.TestCase):
         return path
 
     def extract(self, archive):
-        dest = self.root / "out"
+        dest = self.root / (archive.name + ".out")
         dest.mkdir(exist_ok=True)
         return _extract_binary_archive(archive, dest)
 
@@ -215,7 +215,7 @@ class BinaryArchiveTests(unittest.TestCase):
         with patch("keyleak.archive_scanner.scan_path", return_value=report) as scan:
             scan_archive(str(archive))
         self.assertNotIn("scan_binaries", scan.call_args.kwargs)
-        self.assertNotIn("binary_source_prefix", scan.call_args.kwargs)
+        self.assertEqual(scan.call_args.kwargs["binary_source_prefix"], str(archive.resolve()))
 
     def test_archive_contents_are_never_executed(self):
         marker = self.root / "executed"
@@ -223,6 +223,78 @@ class BinaryArchiveTests(unittest.TestCase):
         archive = self.make_zip("app.ipa", [("Payload/run.sh", script.encode())])
         scan_archive(str(archive), scan_binaries=True)
         self.assertFalse(marker.exists())
+
+    def test_nested_archives_preserve_provenance_and_share_limits(self):
+        key = b"AKIA1234567890ABCDEF"
+        inner = io.BytesIO()
+        with zipfile.ZipFile(inner, "w") as zf:
+            zf.writestr("second.bin", key)
+        outer = self.make_zip(entries=[("first.bin", key), ("inner.zip", inner.getvalue())])
+        report = scan_archive(str(outer), scan_binaries=True)["report"]
+        self.assertEqual(len(report["findings"]), 2)
+        self.assertEqual(report["coverage"]["status"], "complete")
+        self.assertIn(f"{outer.resolve()}!/inner.zip!/second.bin", {f["source"] for f in report["findings"]})
+        self.assertEqual(report["scan_manifest"]["archives"][0]["status"], "expanded")
+        limits = [
+            ("keyleak.archive_scanner.MAX_BINARY_ARCHIVE_ENTRIES", 2),
+            ("keyleak.archive_scanner.MAX_BINARY_ARCHIVE_TOTAL_BYTES", len(inner.getvalue()) + len(key)),
+            ("keyleak.binary_scanner.MAX_BINARY_FILES", 1),
+            ("keyleak.archive_scanner.MAX_ARCHIVE_DEPTH", 0),
+        ]
+        for name, value in limits:
+            with self.subTest(limit=name), patch(name, value):
+                limited = scan_archive(str(outer), scan_binaries=True)["report"]
+                self.assertEqual(len(limited["findings"]), 1)
+                self.assertEqual(limited["coverage"]["status"], "incomplete")
+
+    def test_duplicate_and_malformed_nested_members_keep_prior_evidence(self):
+        key = b"AKIA1234567890ABCDEF"
+        for entries in ([('first.bin', key), ('broken.zip', b'not a zip')],
+                        [('first.bin', key), ('first.bin', b'overwritten')]):
+            with self.subTest(entries=len(entries)):
+                archive = self.make_zip(entries=entries)
+                report = scan_archive(str(archive), scan_binaries=True)["report"]
+                self.assertEqual(len(report["findings"]), 1)
+                self.assertEqual(report["coverage"]["status"], "incomplete")
+
+    def test_oversized_input_returns_incomplete_instead_of_a_success_or_traceback(self):
+        archive = self.make_zip()
+        with patch("keyleak.archive_scanner.MAX_ARCHIVE_INPUT_BYTES", 1):
+            with contextlib.redirect_stdout(io.StringIO()):
+                status = main(["archive", str(archive), "--scan-binaries"])
+            report = scan_archive(str(archive), scan_binaries=True)["report"]
+        self.assertEqual(status, 2)
+        self.assertEqual(report["input_artifact"]["status"], "input_limit")
+        self.assertEqual(report["coverage"]["status"], "incomplete")
+
+    def test_directory_nested_snapshots_share_a_copy_budget(self):
+        key = b"AKIA1234567890ABCDEF"
+        directory = self.root / "release"
+        directory.mkdir()
+        for name in ("first.zip", "second.zip"):
+            with zipfile.ZipFile(directory / name, "w") as archive:
+                archive.writestr("app.bin", key)
+        size = (directory / "first.zip").stat().st_size
+        with patch("keyleak.archive_scanner.MAX_ARCHIVE_INPUT_BYTES", size):
+            report = scan_archive(str(directory), scan_binaries=True)["report"]
+        self.assertEqual(len(report["findings"]), 1)
+        self.assertEqual(report["coverage"]["status"], "incomplete")
+
+    def test_input_digest_and_findings_describe_the_same_snapshot(self):
+        import hashlib
+        key = b"AKIA1234567890ABCDEF"
+        archive = self.make_zip(entries=[("app.bin", key)])
+        original_hash = hashlib.sha256(archive.read_bytes()).hexdigest()
+        extract = _extract_binary_archive
+
+        def replace_original(snapshot, dest, **kwargs):
+            archive.write_bytes(b"changed after snapshot")
+            return extract(snapshot, dest, **kwargs)
+
+        with patch("keyleak.archive_scanner._extract_binary_archive", side_effect=replace_original):
+            report = scan_archive(str(archive), scan_binaries=True)["report"]
+        self.assertEqual(report["input_artifact"]["sha256"], original_hash)
+        self.assertEqual(len(report["findings"]), 1)
 
 
 if __name__ == "__main__":

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import shlex
 import sys
 from typing import Any, Dict, List, Optional
 
@@ -232,6 +233,7 @@ def main(argv: Optional[List[str]] = None) -> int:
                 signer=args.signer,
                 prev_hash=args.prev_hash,
                 scan_binaries=args.scan_binaries,
+                fail_on=args.fail_on,
             )
         except ArchiveScanError as exc:
             print(f"archive scan failed: {exc}", file=sys.stderr)
@@ -668,6 +670,23 @@ def _emit_report(report, args: argparse.Namespace) -> int:
         except (OSError, ValueError) as exc:
             print(f"Unable to load suppression file: {exc}", file=sys.stderr)
             return 1
+
+    if getattr(args, "command", "") == "local" and "scan_manifest" in report.extra:
+        command = shlex.split(report.retest_command)
+        policy = {"fail_on": args.fail_on}
+        command.extend(["--fail-on", args.fail_on])
+        for name in ("baseline", "allowlist"):
+            value = getattr(args, name, "")
+            if value:
+                value = str(Path(value).expanduser().resolve())
+                command.extend(["--" + name, value])
+                policy[name] = value
+        for name in ("offline", "no_default_suppressions"):
+            if getattr(args, name, False):
+                command.insert(1, "--" + name.replace("_", "-"))
+                policy[name] = True
+        report.retest_command = shlex.join(command)
+        report.extra["scan_manifest"]["cli_policy"] = policy
 
     if getattr(args, "json", False):
         print(format_json(report))

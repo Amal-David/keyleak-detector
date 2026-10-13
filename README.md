@@ -75,9 +75,10 @@ keyleak archive release.zip --scan-binaries --out release-report.json
 
 `--scan-node-modules` checks JavaScript and TypeScript source; `--scan-dist`
 includes root `dist/` build output. `--scan-binaries` checks printable strings
-in supported executables and binary members of ZIP/tar archives. APK and IPA
-files are ZIP containers. The scanner does not execute artifacts; encoded or
-runtime-assembled secrets can be missed. Limits and skipped files are reported
+in supported executables and binary members of ZIP/tar archives, with bounded
+common decoding and nested archive traversal. APK and IPA files are ZIP containers;
+DEX and mobile resource semantics remain unsupported. The scanner does not execute
+artifacts; encrypted and runtime-assembled secrets can be missed. Limits and unsupported scope are reported
 as incomplete coverage, never as a clean result. See the [binary guide](docs/BINARY_ARTIFACT_SCANNING.md)
 for supported formats, caps, and output examples.
 
@@ -107,7 +108,11 @@ it, so use a trusted local proxy rather than an unknown public service. Read the
 
 ### Read the result
 
-KeyLeak reports `SAFE TO SHIP`, `REVIEW`, or `BLOCK SHIP`. Use the evidence,
+KeyLeak retains the machine statuses `SAFE_TO_SHIP`, `REVIEW`, and `BLOCK_SHIP`.
+Local zero-finding reports say **No findings in selected checks** and include
+coverage, inventory, extraction limits, and a retest command preserving scan options.
+Archive envelopes bind the report and input digests; HMAC authentication requires
+`KEYLEAK_COC_KEY`. Use the evidence,
 confidence, remediation, and re-test command to decide what to fix. The default
 launch gate blocks on high and critical findings:
 
