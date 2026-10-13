@@ -389,7 +389,9 @@ def _scan_binary_members(archive: Path, source: str, staging: Path, profile: str
         def walk_error(_error):
             reasons.append("Archive member directory could not be read")
         for directory, dirs, files in os.walk(root, followlinks=False, onerror=walk_error):
-            dirs[:] = sorted(d for d in dirs if d not in SKIP_DIRS or d in {"dist", "node_modules"})
+            relative_parts = Path(directory).relative_to(root).parts
+            dirs[:] = sorted(d for d in dirs if d not in SKIP_DIRS or d == "node_modules"
+                             or (d == "dist" and (not relative_parts or "node_modules" in relative_parts)))
             inspected += len(dirs) + len(files)
             if inspected > MAX_BINARY_ARCHIVE_ENTRIES:
                 reasons.append("Archive discovery entry limit reached")

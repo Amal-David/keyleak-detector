@@ -296,6 +296,18 @@ class BinaryArchiveTests(unittest.TestCase):
         self.assertEqual(report["input_artifact"]["sha256"], original_hash)
         self.assertEqual(len(report["findings"]), 1)
 
+    def test_nested_expansion_respects_local_directory_exclusions(self):
+        key = b"AKIA1234567890ABCDEF"
+        nested = io.BytesIO()
+        with zipfile.ZipFile(nested, "w") as zf:
+            zf.writestr("app.bin", key)
+        archive = self.make_zip(entries=[("app.bin", key), ("package/dist/nested.zip", nested.getvalue())])
+        report = scan_archive(str(archive), scan_binaries=True)["report"]
+        self.assertEqual(len(report["findings"]), 1)
+        self.assertEqual(report["scan_manifest"]["archives"], [])
+        self.assertEqual(report["inventory"]["excluded_directories"], 1)
+        self.assertEqual(report["coverage"]["status"], "complete")
+
 
 if __name__ == "__main__":
     unittest.main()
