@@ -3,6 +3,7 @@ name = "keyleak-detector"
 version = "0.7.0"
 description = "Runtime leak detector for modern web apps — finds exposed API keys, BaaS misconfigurations (Supabase/Firebase RLS), and secrets in JS bundles, with a Chrome extension for real-time detection."
 authors = ["Amal David <amal@utopianlabs.co>"]
+maintainers = ["Amal David <amal@utopianlabs.co>"]
 license = "MIT"
 readme = "README.md"
 packages = [{include = "keyleak"}]
@@ -18,6 +19,7 @@ classifiers = [
 [tool.poetry.urls]
 "Homepage" = "https://github.com/Amal-David/keyleak-detector"
 "Bug Tracker" = "https://github.com/Amal-David/keyleak-detector/issues"
+"Security" = "https://github.com/Amal-David/keyleak-detector/security/policy"
 
 [tool.poetry.dependencies]
 python = ">=3.12,<4.0"
@@ -50,6 +52,8 @@ description = "Runtime leak detector for modern web apps — finds exposed API k
 requires-python = ">=3.12,<4.0"
 license = {text = "MIT"}
 authors = [{name = "Amal David", email = "amal@utopianlabs.co"}]
+maintainers = [{name = "Amal David", email = "amal@utopianlabs.co"}]
+readme = "README.md"
 keywords = ["security", "api-keys", "secrets", "supabase", "firebase", "baas", "vulnerability-scanner"]
 classifiers = [
     "Development Status :: 4 - Beta",
@@ -77,6 +81,7 @@ dependencies = [
 [project.urls]
 Homepage = "https://github.com/Amal-David/keyleak-detector"
 Issues = "https://github.com/Amal-David/keyleak-detector/issues"
+Security = "https://github.com/Amal-David/keyleak-detector/security/policy"
 
 [project.scripts]
 keyleak = "keyleak.cli:main"
