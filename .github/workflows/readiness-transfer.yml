@@ -1,5 +1,5 @@
 # Temporary staging helper, excluded from the final PR tree.
-# Only assembles already-reviewed patch blobs; never moves a ref or publishes.
+# Does not change refs, releases or workflows. Workflow edits use the connector.
 name: Assemble readiness changes
 on:
   push:
@@ -17,7 +17,7 @@ jobs:
         with:
           ref: d97d8c82f28fc924fafb63fb833d7ab5b3ec9025
           persist-credentials: false
-      - name: Assemble exact tested tree without changing branches
+      - name: Assemble exact tested source tree without changing branches
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -34,6 +34,7 @@ jobs:
           repo = 'Amal-David/keyleak-detector'
           base_tree = 'c5eb53d49063c9497f25d9303dcb8016f42b5589'
           expected_tree = '96fd0e2be29aa66dad6102fb009d68783dd02510'
+          source_tree = '02d97cc7215e30567b62c47ffff36927efe05cbd'
           blobs = [
               'dcaf0b5e5adf4ee485b7f00a72786f9000ed05e6',
               '29fc3af909907da05b46cd6314543545a25817d7',
@@ -56,7 +57,6 @@ jobs:
           assert hashlib.sha256(patch).hexdigest() == '9d6a9131b3af4b37424135021434d6bf3562fa45ddf86ddd33a83bc5edecb8e2'
           subprocess.run(['git', 'apply', '--check', '-'], input=patch, check=True)
           subprocess.run(['git', 'apply', '-'], input=patch, check=True)
-          # Keep the packaged onboarding demo minimal; source fixtures stay intact.
           p = Path('CONTRIBUTING.md')
           old = ('Keep `fixtures/vulnerable-demo/` and its packaged copy under\n'
                  '`keyleak/data/demo/` identical; a regression test checks this. Both contain only\n'
@@ -73,13 +73,14 @@ jobs:
           subprocess.run(['git', 'diff', '--cached', '--check'], check=True)
           tree = subprocess.check_output(['git', 'write-tree'], text=True).strip()
           assert tree == expected_tree, (tree, expected_tree)
-          # Upload exactly these UTF-8 source changes as a Git tree object.
+          # GITHUB_TOKEN cannot modify workflows. Leave those two files to the
+          # authenticated connector, and upload only the ordinary source tree.
           result = api('git/trees', {'base_tree': base_tree, 'tree': [
               {'path': path, 'mode': '100644', 'type': 'blob',
                'content': Path(path).read_text(encoding='utf-8')}
-              for path in paths
+              for path in paths if not path.startswith('.github/workflows/')
           ]})
-          assert result['sha'] == expected_tree
-          print('READY_TREE=' + result['sha'])
-          print('Verified 20 changed files; no branch, release or package was published.')
+          assert result['sha'] == source_tree
+          print('READY_SOURCE_TREE=' + result['sha'])
+          print('Verified source files; no branch, release, package or workflow was published.')
           PY
