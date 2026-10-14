@@ -44,6 +44,7 @@ from .models import (
 from .proxy import playwright_proxy, requests_proxies
 from .redaction import redact_url
 from .reporting import build_report
+from .install_policy import tool_install_allowed
 
 
 # Query parameter names that commonly feed OS command / code execution sinks.
@@ -192,19 +193,18 @@ def _go_bin_dir() -> Optional[str]:
     return os.path.join(os.path.expanduser("~"), "go", "bin")
 
 
-def _ensure_subfinder(*, auto_install: bool, on_progress: ProgressFn = None) -> bool:
+def _ensure_subfinder(*, auto_install: bool = False, on_progress: ProgressFn = None) -> bool:
     """Make subfinder available for a deep scan, installing it if needed.
 
-    If subfinder is missing and ``auto_install`` is set (and the env var
-    ``KEYLEAK_NO_AUTO_INSTALL`` is unset), try Homebrew first, then a pinned
-    ``go install``. Never raises — a failed install just means discovery
+    If subfinder is missing, require explicit ``auto_install=True`` consent.
+    ``KEYLEAK_NO_AUTO_INSTALL`` or ``KEYLEAK_MANAGED_INSTALL`` can veto it.
+    When allowed, try Homebrew first, then a pinned ``go install``.
+    Never raises — a failed install just means discovery
     falls back to crt.sh + DNS. Returns True if subfinder is usable.
     """
     if shutil.which("subfinder"):
         return True
-    no_auto_install = (os.environ.get("KEYLEAK_NO_AUTO_INSTALL", "").strip().lower()
-                       in {"1", "true", "yes", "on"})
-    if not auto_install or no_auto_install:
+    if not tool_install_allowed(requested=auto_install):
         return False
 
     if shutil.which("brew"):
@@ -611,7 +611,7 @@ def scan_site(
     launch_profile: str = "launch-gate",
     offline: bool = False,
     proxy: Optional[str] = None,
-    auto_install: bool = True,
+    auto_install: bool = False,
     external_discovery: bool = True,
     target_guard: Optional[Callable[[str], Optional[str]]] = None,
     on_progress: ProgressFn = None,
