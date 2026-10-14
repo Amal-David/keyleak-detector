@@ -27,6 +27,7 @@ from .offline_guard import install_socket_block, print_egress_banner
 from .proxy import ProxyError, is_loopback_proxy, preflight, resolve_proxy
 from .self_audit import run_self_audit
 from .suppressions import apply_suppressions
+from .install_policy import add_tool_install_flags
 
 
 DEFAULT_SERVER = "http://127.0.0.1:5002"
@@ -160,7 +161,7 @@ def main(argv: Optional[List[str]] = None) -> int:
 
         canonical_id = args.detector_id
         if not canonical_id:
-            print("explain requires a detector canonical_id (e.g. leak.source_map_reference)", file=sys.stderr)
+            print("explain requires a detector canonical_id (e.g. leak.openai_api_key)", file=sys.stderr)
             return 1
         detector = find_detector(canonical_id)
         if detector is None:
@@ -539,7 +540,7 @@ def build_parser() -> argparse.ArgumentParser:
     site_scan.add_argument("--depth", default="3", help="Link crawl depth per host (default: 3).")
     site_scan.add_argument("--max-pages", default="100", help="Maximum pages to scan (default: 100).")
     site_scan.add_argument("--max-subdomains", default="50", help="Maximum subdomains to scan (default: 50).")
-    site_scan.add_argument("--no-auto-install", action="store_true", help="Don't auto-install subfinder; still use amass if already on PATH, otherwise fall back to crt.sh + DNS (also via KEYLEAK_NO_AUTO_INSTALL=1).")
+    add_tool_install_flags(site_scan)
     site_scan.add_argument("--launch-profile", default="launch-gate", choices=["launch-gate", "local-dev", "bug-bounty", "ci", "full"])
     site_scan.add_argument("--scan-budget", default="30", help="Per-page timeout in seconds.")
     site_scan.add_argument("--headed", action="store_true", help="Show browser windows.")
