@@ -1,14 +1,17 @@
 import io
+import lzma
 import contextlib
 import tarfile
 import tempfile
 import unittest
 import zipfile
+import zlib
 from pathlib import Path
 from unittest.mock import patch
 
 from keyleak.archive_scanner import (
     ArchiveScanError,
+    _copy_limited,
     _extract_binary_archive,
     scan_archive,
 )
@@ -374,6 +377,34 @@ class BinaryArchiveTests(unittest.TestCase):
         self.assertEqual([item["status"] for item in report["scan_manifest"]["archives"]],
                          ["unreadable", "expanded", "unreadable"])
         self.assertEqual(report["coverage"]["status"], "incomplete")
+
+    def test_corrupt_compressed_tar_keeps_parent_and_later_sibling_findings(self):
+        """A malformed compressed child must not abort the enclosing assessment."""
+        key = b"AKIA1234567890ABCDEF"
+        nested = io.BytesIO()
+        with zipfile.ZipFile(nested, "w") as zf:
+            zf.writestr("app.bin", key)
+        for suffix, invalid in (("xz", b"invalid xz"), ("gz", b"\x1f\x8b\x08\x00" + bytes(6) + b"\xff" * 20)):
+            with self.subTest(compression=suffix):
+                archive = self.make_zip(entries=[("first.bin", key), (f"a-bad.tar.{suffix}", invalid),
+                                                 ("z-good.zip", nested.getvalue())])
+                report = scan_archive(str(archive), scan_binaries=True)["report"]
+                self.assertEqual(len(report["findings"]), 2)
+                self.assertTrue(any(f["source"].endswith("z-good.zip!/app.bin") for f in report["findings"]))
+                self.assertEqual(report["coverage"]["status"], "incomplete")
+                with contextlib.redirect_stdout(io.StringIO()):
+                    self.assertEqual(main(["archive", str(archive), "--scan-binaries", "--fail-on", "critical"]), 2)
+
+    def test_decoder_read_error_removes_a_partial_member(self):
+        """Partially decompressed bytes must not masquerade as a complete extracted member."""
+        for error in (lzma.LZMAError, zlib.error):
+            with self.subTest(decoder_error=error):
+                source = unittest.mock.Mock()
+                source.read.side_effect = [b"partial", error("synthetic corruption")]
+                target = self.root / "partial.bin"
+                with self.assertRaises(error):
+                    _copy_limited(source, target, 16, 16, 0)
+                self.assertFalse(target.exists())
 
 
 if __name__ == "__main__":

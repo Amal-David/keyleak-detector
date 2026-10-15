@@ -27,6 +27,7 @@ import shlex
 import tarfile
 import tempfile
 import zipfile
+import zlib
 from pathlib import Path
 from typing import Optional
 
@@ -146,7 +147,7 @@ def _copy_limited(
                 output.write(chunk)
             if written != declared_size:
                 raise ArchiveScanError("Archive member size did not match its header")
-        except (ArchiveScanError, OSError, EOFError, RuntimeError, zipfile.BadZipFile):
+        except (ArchiveScanError, OSError, EOFError, RuntimeError, zipfile.BadZipFile, lzma.LZMAError, zlib.error):
             output.close()
             target.unlink(missing_ok=True)
             raise
@@ -395,7 +396,7 @@ def _scan_binary_members(archive: Path, source: str, staging: Path, profile: str
                 _extract_binary_archive(current, root, budget=extraction_budget)
                 if container is not None:
                     container["status"] = "expanded"
-            except (ArchiveScanError, zipfile.BadZipFile, tarfile.TarError, OSError, EOFError, RuntimeError):
+            except (ArchiveScanError, zipfile.BadZipFile, tarfile.TarError, OSError, EOFError, RuntimeError, lzma.LZMAError, zlib.error):
                 if container is not None:
                     container["status"] = "partial"
                 reasons.append("Archive extraction stopped before all entries could be scanned.")
