@@ -397,7 +397,7 @@ class BinaryArchiveTests(unittest.TestCase):
 
     def test_decoder_read_error_removes_a_partial_member(self):
         """Partially decompressed bytes must not masquerade as a complete extracted member."""
-        for error in (lzma.LZMAError, zlib.error):
+        for error in (lzma.LZMAError, zlib.error, tarfile.ReadError):
             with self.subTest(decoder_error=error):
                 source = unittest.mock.Mock()
                 source.read.side_effect = [b"partial", error("synthetic corruption")]
@@ -405,6 +405,23 @@ class BinaryArchiveTests(unittest.TestCase):
                 with self.assertRaises(error):
                     _copy_limited(source, target, 16, 16, 0)
                 self.assertFalse(target.exists())
+
+    def test_truncated_tar_does_not_report_a_partial_member_as_scanned(self):
+        """A rejected member must be absent from the successful artifact manifest."""
+        key = b"AKIA1234567890ABCDEF"
+        contents = io.BytesIO()
+        with tarfile.open(fileobj=contents, mode="w") as archive:
+            for name, value in (("first.bin", key), ("partial.bin", b"x" * 1024)):
+                info = tarfile.TarInfo(name)
+                info.size = len(value)
+                archive.addfile(info, io.BytesIO(value))
+        path = self.root / "truncated.tar"
+        path.write_bytes(contents.getvalue()[:1536 + 16])
+        report = scan_archive(str(path), scan_binaries=True)["report"]
+        self.assertEqual(len(report["findings"]), 1)
+        self.assertEqual([a["source"] for a in report["scan_manifest"]["artifacts"]],
+                         [f"{path.resolve()}!/first.bin"])
+        self.assertEqual(report["coverage"]["status"], "incomplete")
 
 
 if __name__ == "__main__":

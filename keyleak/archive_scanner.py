@@ -147,7 +147,7 @@ def _copy_limited(
                 output.write(chunk)
             if written != declared_size:
                 raise ArchiveScanError("Archive member size did not match its header")
-        except (ArchiveScanError, OSError, EOFError, RuntimeError, zipfile.BadZipFile, lzma.LZMAError, zlib.error):
+        except (ArchiveScanError, OSError, EOFError, RuntimeError, zipfile.BadZipFile, tarfile.TarError, lzma.LZMAError, zlib.error):
             output.close()
             target.unlink(missing_ok=True)
             raise
