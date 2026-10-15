@@ -23,6 +23,7 @@ class DistributionCheckError(RuntimeError):
 
 
 def require(condition: bool, message: str) -> None:
+    """Raise a concise smoke-test failure when a contract is violated."""
     if not condition:
         raise DistributionCheckError(message)
 
@@ -74,19 +75,37 @@ def check_json_report(
 
 
 def check_redaction(result: subprocess.CompletedProcess[str], synthetic_secret: str) -> None:
+    """Reject raw synthetic credentials in either subprocess output stream."""
     require(synthetic_secret not in result.stdout + result.stderr,
             "Synthetic credential appeared unredacted in process output")
 
 
+def build_smoke_environment() -> dict[str, str]:
+    """Supply only fixed smoke-test settings and minimal platform prerequisites.
+
+    Never forward an operator's cloud credentials, proxy configuration, shell
+    startup environment, or Python/library injection settings to an installed
+    artifact. The subprocess uses absolute interpreter/entry-point paths.
+    """
+    env = {
+        "PATH": os.defpath,
+        "PYTHONUTF8": "1",
+        "PYTHONSAFEPATH": "1",
+        "KEYLEAK_MANAGED_INSTALL": "1",
+        "KEYLEAK_NO_DEFAULT_SUPPRESSIONS": "1",
+    }
+    if os.name == "nt":
+        # Windows Python needs SystemRoot to locate some platform DLLs.
+        for name in ("SystemRoot", "WINDIR", "SYSTEMDRIVE"):
+            if name in os.environ:
+                env[name] = os.environ[name]
+    return env
+
+
 def run_smoke() -> None:
+    """Exercise an installed KeyLeak artifact against synthetic local fixtures."""
     checkout = Path(__file__).resolve().parents[1]
-    # Do not inherit KeyLeak settings, live auth material, or PYTHONPATH from
-    # the operator. Keep OS loader/PATH settings needed by the installed Python.
-    env = {k: v for k, v in os.environ.items()
-           if k not in {"PYTHONPATH", "PYTHONHOME"} and not k.startswith("KEYLEAK_")}
-    env.update({"KEYLEAK_MANAGED_INSTALL": "1",
-                "KEYLEAK_NO_DEFAULT_SUPPRESSIONS": "1",
-                "PYTHONSAFEPATH": "1"})
+    env = build_smoke_environment()
     with tempfile.TemporaryDirectory(prefix="keyleak-wheel-") as name:
         cwd = Path(name)
 
@@ -165,6 +184,7 @@ def run_smoke() -> None:
 
 
 def main() -> int:
+    """Run the smoke checks without printing sensitive subprocess output."""
     argparse.ArgumentParser(description=__doc__).parse_args()
     try:
         run_smoke()
