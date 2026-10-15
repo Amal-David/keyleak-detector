@@ -147,6 +147,7 @@ class Evidence:
     extraction: Optional[Dict[str, Any]] = None
 
     def to_dict(self) -> Dict[str, Any]:
+        """Omit unavailable binary locations while retaining extraction provenance when present."""
         payload = {
             "source": self.source,
             "snippet": self.snippet,
@@ -165,6 +166,7 @@ class Evidence:
 
     @classmethod
     def from_dict(cls, payload: Dict[str, Any]) -> "Evidence":
+        """Restore legacy evidence or binary spans without requiring optional extraction fields."""
         return cls(
             source=str(payload.get("source") or ""),
             snippet=str(payload.get("snippet") or ""),
@@ -199,6 +201,7 @@ class Finding:
     remediation_v2: Optional[Dict[str, Any]] = None
 
     def __post_init__(self) -> None:
+        """Normalize severity and distinguish occurrences by source, byte span, and decoded offset."""
         self.severity = normalize_severity(self.severity)
         if not self.id:
             identity = (
@@ -292,6 +295,7 @@ class ScanReport:
 
     @property
     def verdict(self) -> Dict[str, str]:
+        """Keep static findings distinct from active confirmation and reject incomplete coverage."""
         counts = self.summary
         blocking = counts["critical_severity"] + counts["high_severity"]
         if blocking:

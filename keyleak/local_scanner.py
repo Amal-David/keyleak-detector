@@ -74,6 +74,7 @@ def scan_path(
     _binary_budget: Optional[dict] = None,
     _expanded_archives: Sequence[Path] = (),
 ):
+    """Scan selected local files and retain replay options, byte identities, and coverage gaps."""
     requested_target = Path(path).expanduser()
     if requested_target.is_symlink():
         raise ValueError("scan target must not be a symlink")
@@ -239,6 +240,7 @@ def scan_file(
     source: Optional[str] = None,
     artifact_metadata: Optional[dict] = None,
 ) -> List[Finding]:
+    """Scan bounded text and local source maps using stable logical provenance."""
     try:
         if file_path.stat().st_size > MAX_FILE_BYTES:
             if coverage is not None:
@@ -368,6 +370,7 @@ def scan_text(
     max_findings: Optional[int] = None,
     extraction: Optional[dict] = None,
 ) -> List[Finding]:
+    """Apply detector gates and redact matches while mapping decoded evidence to its carrier."""
     findings: List[Finding] = []
     seen = set()
     safe_request_url = redact_url(request_url) if request_url else ""
@@ -497,6 +500,7 @@ def _iter_candidate_files(
     inventory: dict,
     expanded_archives: Sequence[Path] = (),
 ):
+    """Yield policy-selected files, distinguishing unsupported inputs from explicit exclusions."""
     if target_is_file:
         inventory["discovered"] += 1
         categories = _categories_for_file(target, includes)

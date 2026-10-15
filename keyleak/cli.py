@@ -34,6 +34,7 @@ DEFAULT_SERVER = "http://127.0.0.1:5002"
 
 
 def main(argv: Optional[List[str]] = None) -> int:
+    """Dispatch CLI commands after enforcing configured credential and network boundaries."""
     parser = build_parser()
     args = parser.parse_args(argv)
 
@@ -659,6 +660,7 @@ def _scan_request_payload(args: argparse.Namespace) -> Dict[str, Any]:
 
 
 def _emit_report(report, args: argparse.Namespace) -> int:
+    """Apply suppression policy, serialize results, and fail on threshold or incomplete coverage."""
     if not getattr(args, "suppressions_applied", False):
         try:
             report = apply_suppressions(

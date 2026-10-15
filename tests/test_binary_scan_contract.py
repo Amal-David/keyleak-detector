@@ -27,6 +27,7 @@ CANARY = ("AKIA" + "1234567890" + "ABCDEF").encode()
 
 class BinaryScanContractTests(unittest.TestCase):
     def test_decoding_preserves_original_spans_and_redacted_provenance(self):
+        """Recovered secrets retain outer carrier spans and transforms, never plaintext evidence."""
         variants = [("base64", base64.b64encode(CANARY)), ("hex", CANARY.hex().encode()),
                     ("percent", b"".join(("%%%02X" % c).encode() for c in CANARY)),
                     ("nested", base64.b64encode(CANARY.hex().encode()))]
@@ -46,6 +47,7 @@ class BinaryScanContractTests(unittest.TestCase):
                     self.assertEqual(report.extra["coverage"]["status"], "complete")
 
     def test_utf32_and_encoded_public_examples(self):
+        """Wide encodings preserve byte locations without reclassifying public examples as secrets."""
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "app.bin"
             for encoding in ("utf-32le", "utf-32be"):
@@ -59,6 +61,7 @@ class BinaryScanContractTests(unittest.TestCase):
             self.assertEqual(scan_path(str(path), scan_binaries=True).findings, [])
 
     def test_decode_budget_keeps_prior_findings_and_reports_partial_work(self):
+        """Resource and depth limits must remain visible without deleting earlier evidence."""
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "app.bin"
             path.write_bytes(CANARY + b"\x00" + base64.b64encode(CANARY))
@@ -72,6 +75,7 @@ class BinaryScanContractTests(unittest.TestCase):
             self.assertIn("depth limit", " ".join(report.extra["coverage"]["reasons"]))
 
     def test_exports_retain_coverage_and_extraction_evidence(self):
+        """Changing export format must not hide coverage gaps or expose recovered credentials."""
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             (root / "app.bin").write_bytes(base64.b64encode(CANARY))
@@ -90,7 +94,25 @@ class BinaryScanContractTests(unittest.TestCase):
             self.assertEqual(region, {"byteOffset": 0, "byteLength": len(base64.b64encode(CANARY))})
             self.assertEqual(sarif["results"][0]["properties"]["extraction"]["transforms"][0]["encoding"], "base64")
 
+    def test_decode_depth_limit_does_not_discard_later_runs(self):
+        """A benign depth-limited branch must not hide later raw or encoded secrets."""
+        benign = b"ordinary public text"
+        for _ in range(3):
+            benign = base64.b64encode(benign)
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "app.bin"
+            for later in (CANARY, base64.b64encode(CANARY)):
+                with self.subTest(encoded=later != CANARY):
+                    path.write_bytes(benign + b"\x00" + later)
+                    report = scan_path(str(path), scan_binaries=True)
+                    self.assertEqual(len(report.findings), 1)
+                    self.assertEqual(report.findings[0].evidence.byte_offset, len(benign) + 1)
+                    self.assertEqual(report.extra["coverage"]["status"], "incomplete")
+                    self.assertEqual(report.extra["coverage"]["reasons"], ["binary decoding depth limit reached"])
+                    self.assertNotIn(CANARY.decode(), json.dumps(report.to_dict()))
+
     def test_elf_sections_bind_file_offsets_without_confusing_virtual_addresses(self):
+        """Static ELF addresses must not replace file offsets or conceal malformed section bounds."""
         header = b"\x7fELF" + bytes([2, 1, 1]) + bytes(9)
         header += struct.pack("<HHIQQQIHHHHHH", 2, 62, 1, 0, 0, 64, 0, 64, 0, 0, 64, 2, 0)
         section = struct.pack("<IIQQQQIIQQ", 0, 1, 2, 0x401000, 192, len(CANARY), 0, 0, 1, 0)
@@ -107,6 +129,7 @@ class BinaryScanContractTests(unittest.TestCase):
             self.assertEqual(scan_path(str(path), scan_binaries=True).extra["coverage"]["status"], "incomplete")
 
     def test_generated_local_retest_preserves_detection_and_exit_policy(self):
+        """Replaying an unchanged artifact must preserve its detection scope and failure policy."""
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             artifact = root / "release with spaces.bin"
@@ -128,6 +151,7 @@ class BinaryScanContractTests(unittest.TestCase):
         self.assertNotIn(CANARY.decode(), json.dumps(repeated))
 
     def test_unsupported_binary_scope_never_reports_clean_success(self):
+        """Unsupported or empty requested scope requires review even when no detector ran."""
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             for name in ("classes.dex", "resource.xml", "unknown.resource"):
@@ -145,6 +169,7 @@ class BinaryScanContractTests(unittest.TestCase):
             self.assertIn("No eligible", " ".join(report.extra["coverage"]["reasons"]))
 
     def test_archive_retest_uses_original_input_and_binds_member_bytes(self):
+        """Archive replay must outlive temporary extraction and identify the bytes scanned."""
         with tempfile.TemporaryDirectory() as tmp:
             archive = Path(tmp) / "release.zip"
             with zipfile.ZipFile(archive, "w") as output:
@@ -164,6 +189,7 @@ class BinaryScanContractTests(unittest.TestCase):
             self.assertEqual(member["sha256"], hashlib.sha256(CANARY).hexdigest())
 
     def test_envelope_binds_metadata_and_rejects_unknown_versions(self):
+        """Report metadata and authentication mode must be covered by the versioned integrity check."""
         report = {"findings": [], "coverage": {"status": "incomplete"},
                   "input_artifact": {"sha256": "a" * 64}, "retest_command": "keyleak archive a.zip"}
         with patch.dict(os.environ, {"KEYLEAK_COC_KEY": "synthetic-test-key"}):
@@ -186,6 +212,7 @@ class BinaryScanContractTests(unittest.TestCase):
             self.assertFalse(verify_envelope(tampered))
 
     def test_shipped_v1_verification_and_required_authentication(self):
+        """Legacy verification remains available while authenticated consumers reject unsigned data."""
         report = {"findings": []}
         digest = findings_sha256(report)
         self_hash = hashlib.sha256(f"|{digest}|2026-01-01|tester".encode()).hexdigest()

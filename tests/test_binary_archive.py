@@ -31,6 +31,7 @@ class BinaryArchiveTests(unittest.TestCase):
         return path
 
     def extract(self, archive):
+        """Keep fixture extraction roots separate so duplicate-member checks remain meaningful."""
         dest = self.root / (archive.name + ".out")
         dest.mkdir(exist_ok=True)
         return _extract_binary_archive(archive, dest)
@@ -210,6 +211,7 @@ class BinaryArchiveTests(unittest.TestCase):
         self.assertEqual(exit_code, 2)
 
     def test_binary_scanning_remains_opt_in(self):
+        """Stable member provenance must not implicitly enable binary extraction."""
         archive = self.make_zip()
         report = type("Report", (), {"to_dict": lambda self: {"findings": []}})()
         with patch("keyleak.archive_scanner.scan_path", return_value=report) as scan:
@@ -225,6 +227,7 @@ class BinaryArchiveTests(unittest.TestCase):
         self.assertFalse(marker.exists())
 
     def test_nested_archives_preserve_provenance_and_share_limits(self):
+        """Nesting preserves logical member identities without resetting resource limits."""
         key = b"AKIA1234567890ABCDEF"
         inner = io.BytesIO()
         with zipfile.ZipFile(inner, "w") as zf:
@@ -248,6 +251,7 @@ class BinaryArchiveTests(unittest.TestCase):
                 self.assertEqual(limited["coverage"]["status"], "incomplete")
 
     def test_duplicate_and_malformed_nested_members_keep_prior_evidence(self):
+        """Rejected members must not overwrite or discard previously collected evidence."""
         key = b"AKIA1234567890ABCDEF"
         for entries in ([('first.bin', key), ('broken.zip', b'not a zip')],
                         [('first.bin', key), ('first.bin', b'overwritten')]):
@@ -258,6 +262,7 @@ class BinaryArchiveTests(unittest.TestCase):
                 self.assertEqual(report["coverage"]["status"], "incomplete")
 
     def test_oversized_input_returns_incomplete_instead_of_a_success_or_traceback(self):
+        """An input cap is an incomplete assessment and must produce the corresponding CLI exit."""
         archive = self.make_zip()
         with patch("keyleak.archive_scanner.MAX_ARCHIVE_INPUT_BYTES", 1):
             with contextlib.redirect_stdout(io.StringIO()):
@@ -268,6 +273,7 @@ class BinaryArchiveTests(unittest.TestCase):
         self.assertEqual(report["coverage"]["status"], "incomplete")
 
     def test_directory_nested_snapshots_share_a_copy_budget(self):
+        """Directory inputs must obey one aggregate snapshot budget across nested containers."""
         key = b"AKIA1234567890ABCDEF"
         directory = self.root / "release"
         directory.mkdir()
@@ -281,6 +287,7 @@ class BinaryArchiveTests(unittest.TestCase):
         self.assertEqual(report["coverage"]["status"], "incomplete")
 
     def test_input_digest_and_findings_describe_the_same_snapshot(self):
+        """Changing the original after copying must not change the bytes bound to the report."""
         import hashlib
         key = b"AKIA1234567890ABCDEF"
         archive = self.make_zip(entries=[("app.bin", key)])
@@ -288,6 +295,7 @@ class BinaryArchiveTests(unittest.TestCase):
         extract = _extract_binary_archive
 
         def replace_original(snapshot, dest, **kwargs):
+            """Mutate only the original input to test the snapshot's independence."""
             archive.write_bytes(b"changed after snapshot")
             return extract(snapshot, dest, **kwargs)
 
@@ -297,6 +305,7 @@ class BinaryArchiveTests(unittest.TestCase):
         self.assertEqual(len(report["findings"]), 1)
 
     def test_nested_expansion_respects_local_directory_exclusions(self):
+        """Container discovery cannot widen the directory scope selected by the local scanner."""
         key = b"AKIA1234567890ABCDEF"
         nested = io.BytesIO()
         with zipfile.ZipFile(nested, "w") as zf:
@@ -307,6 +316,64 @@ class BinaryArchiveTests(unittest.TestCase):
         self.assertEqual(report["scan_manifest"]["archives"], [])
         self.assertEqual(report["inventory"]["excluded_directories"], 1)
         self.assertEqual(report["coverage"]["status"], "complete")
+
+    def test_failed_member_does_not_reserve_unused_snapshot_budget(self):
+        """An oversized or unreadable first archive must not suppress a later valid one."""
+        key = b"AKIA1234567890ABCDEF"
+        contents = io.BytesIO()
+        with zipfile.ZipFile(contents, "w") as zf:
+            zf.writestr("app.bin", key)
+        from keyleak.archive_scanner import _snapshot_archive
+        for failure in ("oversized", "unreadable"):
+            with self.subTest(failure=failure):
+                directory = self.root / failure
+                directory.mkdir()
+                bad = (directory / "a-bad.zip").resolve()
+                bad.write_bytes(contents.getvalue() + (b"x" if failure == "oversized" else b""))
+                (directory / "b-good.zip").write_bytes(contents.getvalue())
+
+                def snapshot_or_fail(archive, snapshot, limit, **kwargs):
+                    """Inject a read failure without depending on host permission semantics."""
+                    if archive == bad and failure == "unreadable":
+                        raise PermissionError("synthetic read failure")
+                    return _snapshot_archive(archive, snapshot, limit, **kwargs)
+
+                with patch("keyleak.archive_scanner.MAX_BINARY_ARCHIVE_MEMBER_BYTES", len(contents.getvalue())), \
+                     patch("keyleak.archive_scanner._snapshot_archive", side_effect=snapshot_or_fail):
+                    report = scan_archive(str(directory), scan_binaries=True)["report"]
+                self.assertEqual(len(report["findings"]), 1)
+                self.assertTrue(report["findings"][0]["source"].endswith("b-good.zip!/app.bin"))
+                self.assertEqual(report["coverage"]["status"], "incomplete")
+
+    def test_partial_snapshot_charges_actual_bytes_and_preserves_remaining_budget(self):
+        """A failed copy consumes its written prefix, leaving only the true remaining budget."""
+        key = b"AKIA1234567890ABCDEF"
+        directory = self.root / "partial-copy"
+        directory.mkdir()
+        contents = io.BytesIO()
+        with zipfile.ZipFile(contents, "w") as zf:
+            zf.writestr("app.bin", key)
+        for name in ("a-bad.zip", "b-good.zip", "c-over-budget.zip"):
+            (directory / name).write_bytes(contents.getvalue())
+        bad = (directory / "a-bad.zip").resolve()
+        broken = io.BytesIO()
+        broken.read = unittest.mock.Mock(side_effect=[contents.getvalue()[:4], OSError("synthetic read failure")])
+        original_open = Path.open
+
+        def open_with_failure(path, *args, **kwargs):
+            """Fail after one copied prefix while using real files for all other I/O."""
+            if path == bad and args and args[0] == "rb":
+                return broken
+            return original_open(path, *args, **kwargs)
+
+        with patch.object(Path, "open", open_with_failure), \
+             patch("keyleak.archive_scanner.MAX_ARCHIVE_INPUT_BYTES", 2 * len(contents.getvalue()) + 3):
+            report = scan_archive(str(directory), scan_binaries=True)["report"]
+        self.assertEqual(len(report["findings"]), 1)
+        self.assertTrue(report["findings"][0]["source"].endswith("b-good.zip!/app.bin"))
+        self.assertEqual([item["status"] for item in report["scan_manifest"]["archives"]],
+                         ["unreadable", "expanded", "unreadable"])
+        self.assertEqual(report["coverage"]["status"], "incomplete")
 
 
 if __name__ == "__main__":

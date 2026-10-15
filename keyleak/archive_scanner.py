@@ -122,6 +122,7 @@ def _member_path(name: str, dest: Path, *, allow_root: bool = False) -> Path:
 def _copy_limited(
     source, target: Path, declared_size: int, compressed_size: int, total: int,
 ) -> int:
+    """Copy one new member within expansion limits; remove incomplete member output."""
     if declared_size < 0 or declared_size > MAX_BINARY_ARCHIVE_MEMBER_BYTES:
         raise ArchiveScanError("Archive member exceeds expanded size limit")
     if declared_size and (
@@ -242,6 +243,7 @@ def _preflight_binary_zip(archive_path: Path, *, remaining_entries: Optional[int
 
 
 def _extract_binary_zip(zf: zipfile.ZipFile, dest: Path, budget: dict) -> None:
+    """Extract normalized ZIP members while charging the shared entry and byte budget."""
     infos = zf.infolist()
     if len(infos) > MAX_BINARY_ARCHIVE_ENTRIES:
         raise ArchiveScanError("Archive exceeds entry count limit")
@@ -270,6 +272,7 @@ class _LimitedReader:
         self.bytes_read = 0
 
     def read(self, size: int = -1) -> bytes:
+        """Count consumed bytes, including the overflow probe, before reporting a limit."""
         remaining = self.max_bytes - self.bytes_read
         if remaining < 0:
             raise ArchiveScanError(self.message)
@@ -287,6 +290,7 @@ class _LimitedReader:
 
 
 def _extract_binary_tar(tf: tarfile.TarFile, dest: Path, budget: dict) -> None:
+    """Extract only directories and regular TAR members, rejecting links and special files."""
     for member in tf:
         budget["entries"] += 1
         if budget["entries"] > MAX_BINARY_ARCHIVE_ENTRIES:
@@ -307,6 +311,7 @@ def _extract_binary_tar(tf: tarfile.TarFile, dest: Path, budget: dict) -> None:
 
 
 def _extract_binary_archive(archive_path: Path, dest: Path, *, budget: Optional[dict] = None) -> Path:
+    """Expand a supported container without resetting a caller's shared extraction budget."""
     if budget is None:
         budget = {"bytes": 0, "entries": 0}
     if budget["bytes"] >= MAX_BINARY_ARCHIVE_TOTAL_BYTES:
@@ -347,20 +352,29 @@ def _extract_binary_archive(archive_path: Path, dest: Path, *, budget: Optional[
     raise ArchiveScanError(f"Unsupported archive format: {archive_path}")
 
 
-def _snapshot_archive(archive: Path, snapshot: Path, limit: int) -> dict:
+def _snapshot_archive(archive: Path, snapshot: Path, limit: int, *, copy_budget: Optional[dict] = None) -> dict:
+    """Hash a bounded snapshot and charge written bytes even when the copy later fails."""
     digest = hashlib.sha256()
     size = 0
-    with archive.open("rb") as original, snapshot.open("xb") as copied:
-        while chunk := original.read(1024 * 1024):
-            size += len(chunk)
-            if size > limit:
+    with archive.open("rb") as original, snapshot.open("xb", buffering=0) as copied:
+        while chunk := original.read(min(1024 * 1024, limit - size + 1)):
+            if len(chunk) > limit - size:
                 raise ArchiveScanError("Archive input exceeds snapshot byte limit")
-            digest.update(chunk)
-            copied.write(chunk)
+            pending = memoryview(chunk)
+            while pending:
+                written = copied.write(pending)
+                if not written:
+                    raise OSError("Archive snapshot write made no progress")
+                size += written
+                if copy_budget is not None:
+                    copy_budget["bytes"] += written
+                digest.update(pending[:written])
+                pending = pending[written:]
     return {"size_bytes": size, "sha256": digest.hexdigest()}
 
 
 def _scan_binary_members(archive: Path, source: str, staging: Path, profile: str) -> ScanReport:
+    """Scan nested snapshots with shared limits and retain findings from successful siblings."""
     pending = [(archive, source, 0, None)]
     extraction_budget = {"bytes": 0, "entries": 0}
     binary_budget = {"files": 0, "bytes": 0, "work_bytes": 0, "findings": 0}
@@ -369,7 +383,7 @@ def _scan_binary_members(archive: Path, source: str, staging: Path, profile: str
     containers = []
     reasons = []
     inspected = 0
-    snapshot_bytes = 0
+    copy_budget = {"bytes": 0}
     cursor = 0
     while cursor < len(pending):
         current, prefix, depth, container = pending[cursor]
@@ -387,6 +401,7 @@ def _scan_binary_members(archive: Path, source: str, staging: Path, profile: str
                 reasons.append("Archive extraction stopped before all entries could be scanned.")
         children = []
         def walk_error(_error):
+            """Keep unreadable member directories visible as incomplete coverage."""
             reasons.append("Archive member directory could not be read")
         for directory, dirs, files in os.walk(root, followlinks=False, onerror=walk_error):
             relative_parts = Path(directory).relative_to(root).parts
@@ -413,18 +428,16 @@ def _scan_binary_members(archive: Path, source: str, staging: Path, profile: str
                     reasons.append("Nested archive depth limit reached")
                     continue
                 try:
-                    remaining = min(MAX_BINARY_ARCHIVE_MEMBER_BYTES, MAX_ARCHIVE_INPUT_BYTES - snapshot_bytes)
+                    remaining = min(MAX_BINARY_ARCHIVE_MEMBER_BYTES, MAX_ARCHIVE_INPUT_BYTES - copy_budget["bytes"])
                     if member.stat().st_size > remaining:
                         raise ArchiveScanError("Nested archive input exceeds byte limit")
                     snapshot_dir = staging / f"input-{len(containers)}"
                     snapshot_dir.mkdir()
                     snapshot = snapshot_dir / member.name
-                    record.update(_snapshot_archive(member, snapshot, remaining))
-                    snapshot_bytes += record["size_bytes"]
+                    record.update(_snapshot_archive(member, snapshot, remaining, copy_budget=copy_budget))
                     record["status"] = "scheduled"
                     pending.append((snapshot, member_source, depth + 1, record))
                 except (OSError, ArchiveScanError):
-                    snapshot_bytes = MAX_ARCHIVE_INPUT_BYTES
                     record["status"] = "unreadable"
                     reasons.append("Nested archive input could not be inspected within its limit")
         reports.append(scan_path(

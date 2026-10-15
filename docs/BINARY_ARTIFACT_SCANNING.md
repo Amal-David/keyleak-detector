@@ -123,6 +123,10 @@ archives are not supported by this opt-in path. If a budget is reached, findings
 already collected are retained, coverage becomes incomplete, and the CLI
 returns exit `2`; do not treat that report as a complete clean scan.
 
+A decode-depth limit stops that branch while scanning continues through later
+strings. Failed archive snapshots charge only bytes actually copied, so an
+oversized or unreadable member does not consume the budget available to siblings.
+
 ## Fix and verify
 
 For this toy example, replace the synthetic string with benign test text, then rerun the same command:

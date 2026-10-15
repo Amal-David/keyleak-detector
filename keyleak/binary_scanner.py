@@ -56,6 +56,7 @@ class BinaryScanLimitError(ValueError):
 
 
 def binary_scan_limits() -> dict:
+    """Capture the active extraction and decoding limits for the scan manifest."""
     return {
         "binary_file_bytes": MAX_BINARY_FILE_BYTES, "binary_files": MAX_BINARY_FILES,
         "binary_total_bytes": MAX_BINARY_TOTAL_BYTES, "binary_total_work_bytes": MAX_BINARY_TOTAL_WORK_BYTES,
@@ -109,8 +110,10 @@ def extract_printable_runs(data: bytes) -> Iterator[Tuple[str, int, int]]:
 
 
 def _analysis_runs(data: bytes):
+    """Yield bounded recovery branches; defer depth gaps until other runs are scanned."""
     work = 0
     candidates = 0
+    depth_limited = False
     for text, offset, width in extract_printable_runs(data):
         encoding = "ascii" if width == 1 else f"utf-{width * 8}{'le' if data[offset] else 'be'}"
         queue = deque([(text, offset, width, {"encoding": encoding, "transforms": []})])
@@ -135,13 +138,16 @@ def _analysis_runs(data: bytes):
                     if len(decoded) < MIN_RUN_CHARS or not all(_printable(value) for value in decoded):
                         continue
                     if len(evidence["transforms"]) >= MAX_DECODE_DEPTH:
-                        raise BinaryScanLimitError("binary decoding depth limit reached")
+                        depth_limited = True
+                        continue
                     outer_offset = original_offset if evidence["transforms"] else offset + match.start() * width
                     outer_length = evidence.get("encoded_length", len(match[0]) * width)
                     step = {"encoding": transform, "input_offset": match.start(), "input_length": len(match[0])}
                     derived = {"encoding": encoding, "encoded_length": outer_length,
                                "transforms": [*evidence["transforms"], step]}
                     queue.append((decoded.decode("ascii"), outer_offset, 1, derived))
+    if depth_limited:
+        raise BinaryScanLimitError("binary decoding depth limit reached")
 
 
 def _elf_layout(data: bytes) -> dict:

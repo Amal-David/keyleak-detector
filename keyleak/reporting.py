@@ -48,6 +48,7 @@ def build_report(
     provenance: Optional[Dict[str, List[str]]] = None,
     scan_options: Optional[Dict[str, Any]] = None,
 ) -> ScanReport:
+    """Normalize findings and attach replay metadata without promoting static evidence to proof."""
     normalized = normalize_findings(findings)
     normalized.extend(_attack_vector_findings(attack_vectors or {}))
     normalized.sort(key=lambda finding: SEVERITY_ORDER.get(finding.severity, 0), reverse=True)
@@ -105,6 +106,7 @@ def format_json(report: ScanReport) -> str:
 
 
 def format_markdown(report: ScanReport) -> str:
+    """Render remediation and coverage alongside redacted findings and extraction locations."""
     payload = report.to_dict()
     lines = [
         f"# KeyLeak Report: {payload['verdict']['label']}",
@@ -201,6 +203,7 @@ def _remediation_details(item: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def _coverage_lines(payload: Dict[str, Any]) -> List[str]:
+    """Describe completed work, exclusions, and limits without treating an empty scope as proof."""
     coverage = payload.get("coverage")
     if not isinstance(coverage, dict):
         return []
@@ -221,6 +224,7 @@ def _coverage_lines(payload: Dict[str, Any]) -> List[str]:
 
 
 def _binary_location(evidence: Dict[str, Any]) -> str:
+    """Describe original byte spans separately from offsets within decoded text."""
     text = f"Byte offset {evidence['byte_offset']}"
     if evidence.get("byte_length") is not None:
         text += f", length {evidence['byte_length']}"
@@ -460,6 +464,7 @@ def format_html(report: ScanReport) -> str:
 
 
 def format_sarif(report: ScanReport) -> str:
+    """Export binary byte locations and run coverage without inventing source line positions."""
     rules = {}
     results = []
 
@@ -538,6 +543,7 @@ def format_sarif(report: ScanReport) -> str:
 
 
 def report_to_text(report: ScanReport) -> str:
+    """Summarize coverage and up to ten findings while retaining the total finding count."""
     payload = report.to_dict()
     summary = payload["summary"]
     lines = [
@@ -622,6 +628,7 @@ def _pack_summary(findings: Iterable[Finding], selected_packs: Iterable[str]) ->
 
 
 def _retest_command(target: str, scan_mode: str, scan_options: Optional[Dict[str, Any]] = None) -> str:
+    """Quote replay arguments and retain the effective local detector and extraction selection."""
     safe_target = shlex.quote(redact_url(target))
     if scan_mode == "local":
         if scan_options is not None:
