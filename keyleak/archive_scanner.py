@@ -150,6 +150,18 @@ def _preflight_binary_zip(archive_path: Path) -> None:
         if directory_offset > eocd_offset:
             raise ArchiveScanError("Invalid zip archive: central directory offset is out of bounds")
 
+        # ZipFile accounts for bytes prepended to a ZIP by locating its directory
+        # relative to EOCD. Preserve that compatibility without allocating an
+        # index first. If the reported offset already starts a directory, retain
+        # the full walk below so forged low size/count fields cannot hide it.
+        physical_directory_offset = eocd_offset - directory_size
+        if physical_directory_offset < directory_offset:
+            raise ArchiveScanError("Invalid zip archive: central directory size is out of bounds")
+        if physical_directory_offset != directory_offset:
+            archive.seek(directory_offset)
+            if archive.read(4) not in {b"PK\x01\x02", b"PK\x05\x05"}:
+                directory_offset = physical_directory_offset
+
         # Walk the bytes up to EOCD rather than trusting the EOCD count/size.
         # This also catches forged low EOCD values while ZipFile has not yet
         # been constructed and allocated its member index.
@@ -193,6 +205,8 @@ def _preflight_binary_zip(archive_path: Path) -> None:
 
         if position != eocd_offset or actual_entries != entry_count:
             raise ArchiveScanError("Invalid zip archive: central directory does not match its end record")
+        if eocd_offset - directory_offset != directory_size:
+            raise ArchiveScanError("Invalid zip archive: central directory size does not match its end record")
         if eocd_offset - directory_offset > MAX_BINARY_ARCHIVE_CENTRAL_DIRECTORY_BYTES:
             raise ArchiveScanError("Archive central directory exceeds byte limit")
 

@@ -70,6 +70,24 @@ class DefaultArchiveLimitTests(unittest.TestCase):
                 with self.assertRaisesRegex(ArchiveScanError, "Link in tar"):
                     scan_archive(str(archive))
 
+    def test_prefixed_zip_remains_scannable_with_metadata_limits(self):
+        """A benign prepended stub must not break ZIP offset accounting."""
+        buffer = io.BytesIO()
+        with zipfile.ZipFile(buffer, "w") as zf:
+            zf.writestr("hello.txt", "hello")
+            zf.writestr("second.txt", "second")
+        archive = self.root / "prefixed.zip"
+        archive.write_bytes(b"benign non-executable prefix\n" + buffer.getvalue())
+        destination = self.root / "prefixed-output"
+        destination.mkdir()
+        extract_archive(archive, destination)
+        self.assertEqual((destination / "hello.txt").read_text(), "hello")
+        with patch("keyleak.archive_scanner.MAX_BINARY_ARCHIVE_ENTRIES", 1), \
+             patch("keyleak.archive_scanner.zipfile.ZipFile") as constructor:
+            with self.assertRaisesRegex(ArchiveScanError, "entry count"):
+                extract_archive(archive, self.root / "rejected")
+        constructor.assert_not_called()
+
     def test_supported_archives_still_extract_regular_text(self):
         """Keep the existing ZIP, TAR, gzip, and bzip2 formats usable."""
         for suffix, mode in ((".zip", None), (".tar", "w"), (".tgz", "w:gz"), (".tar.bz2", "w:bz2")):
