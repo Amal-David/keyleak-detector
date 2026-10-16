@@ -143,8 +143,11 @@ class Evidence:
     response_status: Optional[int] = None
     redacted_value: str = ""
     byte_offset: Optional[int] = None
+    byte_length: Optional[int] = None
+    extraction: Optional[Dict[str, Any]] = None
 
     def to_dict(self) -> Dict[str, Any]:
+        """Omit unavailable binary locations while retaining extraction provenance when present."""
         payload = {
             "source": self.source,
             "snippet": self.snippet,
@@ -155,10 +158,15 @@ class Evidence:
         }
         if self.byte_offset is not None:
             payload["byte_offset"] = self.byte_offset
+        if self.byte_length is not None:
+            payload["byte_length"] = self.byte_length
+        if self.extraction is not None:
+            payload["extraction"] = self.extraction
         return payload
 
     @classmethod
     def from_dict(cls, payload: Dict[str, Any]) -> "Evidence":
+        """Restore legacy evidence or binary spans without requiring optional extraction fields."""
         return cls(
             source=str(payload.get("source") or ""),
             snippet=str(payload.get("snippet") or ""),
@@ -167,6 +175,8 @@ class Evidence:
             response_status=payload.get("response_status"),
             redacted_value=str(payload.get("redacted_value") or ""),
             byte_offset=payload.get("byte_offset"),
+            byte_length=payload.get("byte_length"),
+            extraction=payload.get("extraction"),
         )
 
 
@@ -191,6 +201,7 @@ class Finding:
     remediation_v2: Optional[Dict[str, Any]] = None
 
     def __post_init__(self) -> None:
+        """Normalize severity and distinguish occurrences by source, byte span, and decoded offset."""
         self.severity = normalize_severity(self.severity)
         if not self.id:
             identity = (
@@ -203,6 +214,8 @@ class Finding:
             )
             if self.evidence.byte_offset is not None:
                 identity += ("byte_offset", self.evidence.byte_offset)
+            if self.evidence.extraction and self.evidence.extraction.get("transforms"):
+                identity += ("decoded_offset", self.evidence.extraction.get("decoded_offset"))
             self.id = stable_id(*identity)
 
     def to_dict(self) -> Dict[str, Any]:
@@ -282,6 +295,7 @@ class ScanReport:
 
     @property
     def verdict(self) -> Dict[str, str]:
+        """Keep static findings distinct from active confirmation and reject incomplete coverage."""
         counts = self.summary
         blocking = counts["critical_severity"] + counts["high_severity"]
         if blocking:
@@ -333,7 +347,7 @@ class ScanReport:
             }
         return {
             "status": VERDICT_SAFE,
-            "label": "SAFE TO SHIP",
+            "label": ("LOW/INFO FINDINGS ONLY" if counts["total_findings"] else "NO FINDINGS IN SELECTED CHECKS") if self.extra.get("scan_manifest") else "SAFE TO SHIP",
             "reason": "No medium, high, or critical findings were detected in this scan.",
         }
 
