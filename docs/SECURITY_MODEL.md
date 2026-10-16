@@ -82,6 +82,25 @@ attack-surface panel, and exclude legacy raw-value records. Matched values are
 also masked when they occur in adjacent finding context or display text. Treat
 local logs, screenshots, and any deliberate reveal action as sensitive.
 
+## Local audit artifacts, archives, and redirects
+
+New audit report directories use owner-only permissions on POSIX systems, and
+report files are written privately and atomically replaced. Existing report-file
+symlinks are not followed. The default `.keyleak/audits` path rejects pre-existing
+symlink components; an explicit `--out-dir` rejects a final directory symlink.
+Keep output parent directories under operator control: these checks are not a
+general defense against concurrent filesystem replacement by another local user.
+
+Default ZIP and TAR-family scans enforce the same entry, member-size, expanded
+size, compression-ratio, and link restrictions as binary archive scans. These
+limits apply without `--scan-binaries`; an over-budget archive fails instead of
+being reported as completely scanned.
+
+Browser redirect handling scopes sensitive request headers to the scheme,
+hostname, and effective port. A redirect across any of those boundaries strips
+the headers, and returning to the original URL does not restore them. This is
+header scoping, not connection-time IP pinning or a general browser sandbox.
+
 ## Chrome Extension
 
 The extension uses powerful browser permissions because it passively observes web traffic in the active browser.

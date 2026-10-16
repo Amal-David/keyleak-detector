@@ -128,6 +128,15 @@ def browser_request_block_reason(
         return "Browser request target validation failed."
 
 
+def _http_origin(url: str) -> tuple[str, str, int]:
+    parsed = urlparse(url)
+    scheme = parsed.scheme.lower()
+    if scheme not in {"http", "https"} or not parsed.hostname:
+        raise ValueError("Redirect target must have an HTTP origin")
+    port = parsed.port if parsed.port is not None else (443 if scheme == "https" else 80)
+    return scheme, parsed.hostname.lower(), port
+
+
 def install_browser_egress_guards(
     context: Any,
     target_guard: Optional[Callable[[str], Optional[str]]] = None,
@@ -143,7 +152,7 @@ def install_browser_egress_guards(
         current_body = request.post_data_buffer
         headers = dict(request.headers)
         try:
-            for _ in range(21):
+            for hop in range(21):
                 reason = browser_request_block_reason(current_url, target_guard)
                 if reason:
                     if blocked_requests is not None:
@@ -157,16 +166,14 @@ def install_browser_egress_guards(
                         "method": current_method,
                         "post_data": current_body,
                         "headers": headers,
-                    } if current_url != request.url else {}),
+                    } if hop else {}),
                 )
                 location = response.headers.get("location")
                 if response.status not in (301, 302, 303, 307, 308) or not location:
                     route.fulfill(response=response)
                     return
                 next_url = urljoin(current_url, location)
-                next_host = (urlparse(next_url).hostname or "").lower()
-                current_host = (urlparse(current_url).hostname or "").lower()
-                if next_host != current_host:
+                if _http_origin(next_url) != _http_origin(current_url):
                     headers = {
                         key: value for key, value in headers.items()
                         if key.lower() not in {

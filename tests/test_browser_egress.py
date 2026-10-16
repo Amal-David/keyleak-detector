@@ -176,6 +176,46 @@ class BrowserEgressTests(unittest.TestCase):
         self.assertIsNotNone(route.fulfilled)
         self.assertEqual(checked_hosts, ["93.184.216.34", "8.8.8.8"])
 
+    def test_redirect_credentials_are_bound_to_scheme_host_and_port(self):
+        for destination, keep in (
+            ("https://app.example.test:443/final", True),
+            ("https://app.example.test:8443/final", False),
+            ("http://app.example.test/final", False),
+            ("https://other.example.test/final", False),
+        ):
+            with self.subTest(destination=destination):
+                context = _Context()
+                install_browser_egress_guards(context, target_guard=lambda _host: None)
+                sensitive = {
+                    "Authorization": "Bearer synthetic", "Cookie": "fixture=value",
+                    "Proxy-Authorization": "synthetic", "ApiKey": "synthetic",
+                    "X-API-Key": "synthetic",
+                }
+                route = _Route(
+                    "https://app.example.test/start",
+                    [_Response(302, {"location": destination}), _Response()],
+                    headers={**sensitive, "accept": "*/*"},
+                )
+                context.request_route[1](route)
+                forwarded = route.fetches[1]["headers"]
+                self.assertEqual(forwarded, {**sensitive, "accept": "*/*"} if keep else {"accept": "*/*"})
+                self.assertIsNotNone(route.fulfilled)
+
+    def test_redirect_return_to_original_url_does_not_restore_credentials(self):
+        context = _Context()
+        install_browser_egress_guards(context, target_guard=lambda _host: None)
+        start = "https://app.example.test/start"
+        route = _Route(
+            start,
+            [_Response(302, {"location": "https://other.example.test/next"}),
+             _Response(302, {"location": start}), _Response()],
+            headers={"authorization": "Bearer synthetic", "accept": "*/*"},
+        )
+        context.request_route[1](route)
+        self.assertEqual(route.fetches[2]["url"], start)
+        self.assertEqual(route.fetches[2]["headers"], {"accept": "*/*"})
+        self.assertIsNotNone(route.fulfilled)
+
     def test_redirect_limit_is_counted_before_abort(self):
         context = _Context()
         blocked = BlockedRequestSummary()

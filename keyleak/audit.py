@@ -11,6 +11,7 @@ import json
 import os
 import re
 import shlex
+import tempfile
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -889,7 +890,7 @@ def _find_phase(plan: Dict[str, Any], phase_id: str) -> Optional[Dict[str, Any]]
 
 
 def _write_artifacts(artifact_dir: Path, report: ScanReport) -> None:
-    artifact_dir.mkdir(parents=True, exist_ok=True)
+    artifact_dir.mkdir(mode=0o700, parents=True, exist_ok=True)
     payload = _scrub_payload(report.to_dict())
     _write_json(artifact_dir / "audit-plan.json", payload.get("audit_plan") or {})
     _write_json(artifact_dir / "report.json", payload)
@@ -897,15 +898,30 @@ def _write_artifacts(artifact_dir: Path, report: ScanReport) -> None:
     _write_json(artifact_dir / "evidence-ledger.json", _evidence_ledger(payload))
 
     findings_path = artifact_dir / "findings.jsonl"
-    findings_path.write_text(
+    _write_private_text(findings_path,
         "".join(json.dumps(_scrub_payload(item), sort_keys=True) + "\n" for item in payload.get("findings") or []),
-        encoding="utf-8",
     )
-    (artifact_dir / "summary.md").write_text(_summary_markdown(payload), encoding="utf-8")
+    _write_private_text(artifact_dir / "summary.md", _summary_markdown(payload))
+
+
+def _write_private_text(path: Path, content: str) -> None:
+    """Publish a private file atomically without following an existing file link."""
+    temporary = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="w", encoding="utf-8", dir=path.parent,
+            prefix=f".{path.name}.", delete=False,
+        ) as stream:
+            temporary = Path(stream.name)
+            stream.write(content)
+        os.replace(temporary, path)
+    finally:
+        if temporary is not None:
+            temporary.unlink(missing_ok=True)
 
 
 def _write_json(path: Path, payload: Any) -> None:
-    path.write_text(json.dumps(_scrub_payload(payload), indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    _write_private_text(path, json.dumps(_scrub_payload(payload), indent=2, sort_keys=True) + "\n")
 
 
 def _evidence_ledger(payload: Dict[str, Any]) -> Dict[str, Any]:
@@ -977,10 +993,17 @@ def _summary_markdown(payload: Dict[str, Any]) -> str:
 
 def _resolve_artifact_dir(options: AuditOptions) -> Path:
     if options.out_dir:
+        if Path(options.out_dir).expanduser().is_symlink():
+            raise AuditError("audit output directory must not be a symbolic link")
         return Path(options.out_dir).expanduser().resolve()
     stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     run_id = uuid4().hex[:8]
-    return (Path(".keyleak") / "audits" / f"{stamp}-{_target_slug(options.target)}-{run_id}").resolve()
+    managed_root = Path.cwd().resolve() / ".keyleak"
+    audit_root = managed_root / "audits"
+    artifact_dir = audit_root / f"{stamp}-{_target_slug(options.target)}-{run_id}"
+    if any(path.is_symlink() for path in (managed_root, audit_root, artifact_dir)):
+        raise AuditError("default audit output paths must not contain symbolic links")
+    return artifact_dir
 
 
 def _target_slug(target: str) -> str:
