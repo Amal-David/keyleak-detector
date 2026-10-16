@@ -1,0 +1,60 @@
+# Tests built artifacts, not editable/source-tree imports. No publishing rights.
+name: Distribution
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  installed-wheel:
+    name: Installed wheel (${{ matrix.os }}, Python 3.12)
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@0b93645e9fea7318ecaed2b359559ac225c90a2b # v5.3.0
+        with:
+          python-version: "3.12"
+      - name: Build release artifacts
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install "poetry==2.5.1"
+          poetry check --lock
+          poetry build
+      - name: Install and check wheel outside checkout
+        shell: bash
+        run: |
+          set -euo pipefail
+          wheels=(dist/*.whl)
+          test "${#wheels[@]}" -eq 1
+          python -m venv "$RUNNER_TEMP/keyleak-wheel"
+          py="$RUNNER_TEMP/keyleak-wheel/bin/python"
+          "$py" -m pip install "${wheels[0]}"
+          "$py" -m pip check
+          "$py" scripts/check_installed_distribution.py
+      - name: Rebuild and check source distribution
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          sdists=(dist/*.tar.gz)
+          test "${#sdists[@]}" -eq 1
+          python -m venv "$RUNNER_TEMP/keyleak-sdist"
+          py="$RUNNER_TEMP/keyleak-sdist/bin/python"
+          "$py" -m pip wheel --no-deps "${sdists[0]}" -w "$RUNNER_TEMP/rebuilt"
+          wheels=("$RUNNER_TEMP/rebuilt/"*.whl)
+          test "${#wheels[@]}" -eq 1
+          "$py" -m pip install "${wheels[0]}"
+          "$py" -m pip check
+          "$py" scripts/check_installed_distribution.py
