@@ -44,51 +44,19 @@ MAX_BINARY_ARCHIVE_CENTRAL_DIRECTORY_BYTES = 64 * 1024 * 1024
 
 
 def extract_archive(archive_path: Path, dest: Path) -> Path:
-    """Extract ``archive_path`` into ``dest``. Returns the directory used."""
+    """Extract supported archives within the shared size, entry, and link limits."""
 
     archive_path = Path(archive_path)
     if archive_path.is_dir():
         return archive_path
 
     suffixes = "".join(archive_path.suffixes).lower()
-    if archive_path.suffix.lower() == ".zip":
-        with zipfile.ZipFile(archive_path, "r") as zf:
-            _safe_extract_zip(zf, dest)
-        return dest
-
-    if archive_path.suffix.lower() in {".tar", ".tgz"} or suffixes.endswith(".tar.gz") or suffixes.endswith(".tar.bz2"):
-        with tarfile.open(archive_path) as tf:
-            _safe_extract_tar(tf, dest)
-        return dest
+    if archive_path.suffix.lower() in {".zip", ".tar", ".tgz"} or suffixes.endswith((".tar.gz", ".tar.bz2")):
+        # Resource and filesystem protections must not depend on opting into
+        # binary detection. The default CLI and agentic audit use this path.
+        return _extract_binary_archive(archive_path, dest)
 
     raise ArchiveScanError(f"Unsupported archive format: {archive_path}")
-
-
-def _safe_extract_zip(zf: zipfile.ZipFile, dest: Path) -> None:
-    dest = dest.resolve()
-    for info in zf.infolist():
-        target = (dest / info.filename).resolve()
-        try:
-            target.relative_to(dest)
-        except ValueError:
-            raise ArchiveScanError(f"Path traversal in zip entry: {info.filename}")
-    zf.extractall(dest)
-
-
-def _safe_extract_tar(tf: tarfile.TarFile, dest: Path) -> None:
-    dest = dest.resolve()
-    for member in tf.getmembers():
-        target = (dest / member.name).resolve()
-        try:
-            target.relative_to(dest)
-        except ValueError:
-            raise ArchiveScanError(f"Path traversal in tar entry: {member.name}")
-    # Python 3.12+: pass filter='data' for additional safety. We resolve paths
-    # ourselves above; the filter argument is a defense-in-depth.
-    try:
-        tf.extractall(dest, filter="data")
-    except TypeError:
-        tf.extractall(dest)
 
 
 def _member_path(name: str, dest: Path, *, allow_root: bool = False) -> Path:
