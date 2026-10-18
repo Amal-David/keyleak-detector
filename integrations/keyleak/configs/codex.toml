@@ -1,0 +1,5 @@
+[mcp_servers.keyleak_local]
+command = "/ABSOLUTE/PATH/TO/keyleak/.venv/bin/python"
+args = ["-I", "-m", "keyleak.ai", "--stdio"]
+startup_timeout_sec = 20
+tool_timeout_sec = 10

@@ -174,3 +174,11 @@ require a separate submission.
 ## License
 
 MIT. See [LICENSE](LICENSE).
+
+## Local AI integrations
+
+Use KeyLeak's bounded, read-only tools from OpenAI Responses, Claude, Vercel AI
+SDK, or local MCP clients. A portable OpenAI/Agent Plugins package, Claude Code
+plugin template, and client-specific configurations share the same redacted
+static scanner. Files require explicit host grants; no live credential checks
+or network scanning are exposed. See [setup and safety boundaries](integrations/keyleak/README.md).

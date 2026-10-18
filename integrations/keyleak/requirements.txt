@@ -1,0 +1,2 @@
+# Optional transport, kept separate from the base scanner dependency lock.
+mcp==2.3.0

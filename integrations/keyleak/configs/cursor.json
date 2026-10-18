@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "keyleak-local": {
+      "command": "/ABSOLUTE/PATH/TO/keyleak/.venv/bin/python",
+      "args": [
+        "-I",
+        "-m",
+        "keyleak.ai",
+        "--stdio"
+      ]
+    }
+  }
+}

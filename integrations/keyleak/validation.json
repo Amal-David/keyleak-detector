@@ -1,0 +1,75 @@
+{
+  "checked_at": "2026-10-16",
+  "base_commit": "ae62056e4ff9bb11d13585714806b114ce6abfec",
+  "scope": "Local synthetic tests only; no provider calls, real credentials, remote scans, account installation, or publishing.",
+  "tests": {
+    "core_ai": {
+      "passed": 29
+    },
+    "mcp_interoperability": {
+      "passed": 11
+    },
+    "vercel_ai_sdk": {
+      "passed": 2
+    },
+    "existing_extension": {
+      "passed": 49
+    },
+    "full_python": {
+      "ran": 472,
+      "passed": 470,
+      "errors": 1,
+      "skipped": 1
+    },
+    "baseline_python": {
+      "ran": 443,
+      "passed": 441,
+      "errors": 1,
+      "skipped": 1
+    }
+  },
+  "unchanged_error": "test_browser_egress.BrowserEgressTests.test_local_page_cannot_egress_to_blocked_subresources_or_redirects: Playwright bundled Chromium unavailable.",
+  "unchanged_skip": "Existing real Chromium/CDP integration skips because bundled Chromium is unavailable.",
+  "browser_install_attempts": "Official Chromium and headless-shell downloads both returned invalid/truncated ZIP payloads. No tests were weakened.",
+  "build": "Wheel and source distribution passed; fresh installed-wheel native, granted-file helper, and MCP initialization smoke passed. Optional MCP transport dependencies installed separately.",
+  "launch_gate": "Clean source export: zero critical, high, medium or low findings.",
+  "manifests": {
+    "plugin_schema_sha256": "0a4aad95ce337878ad38802ebf0daa3fde76abe3f65400c86bcbb1ec0b3ab883",
+    "mcp_schema_sha256": "6539175bfcdf43085855183e86da40ea94b166547a72b47ae9a0a390516d3acb",
+    "schema_source": "https://agent-plugins.org/schemas/1.0.0/"
+  },
+  "review": "Independent read-only review identified malformed-frame handling and cancellation gaps in stdin and file reads. Fixed with explicit protocol errors, cancellation-aware pipes, bounded subprocess snapshots, and regression tests. Also removed default SDK telemetry.",
+  "not_verified": [
+    "Live OpenAI/Anthropic model API calls",
+    "Desktop client UI installation",
+    "Claude CLI plugin validator (CLI not installed)",
+    "Hosted web/remote ChatGPT integration",
+    "Marketplace approval",
+    "Windows stdio hosts"
+  ],
+  "revalidation_2026_10_18": {
+    "source_base": "ae62056e4ff9bb11d13585714806b114ce6abfec",
+    "environment": "Linux, CPython 3.12.14, Node 24.19.0",
+    "core_ai_passed": 29,
+    "mcp_interoperability_passed": 11,
+    "vercel_ai_sdk_passed": 2,
+    "existing_extension_passed": 49,
+    "full_python": {
+      "ran": 472,
+      "passed": 470,
+      "errors": 1,
+      "skipped": 1
+    },
+    "baseline_python": {
+      "ran": 443,
+      "passed": 441,
+      "errors": 1,
+      "skipped": 1
+    },
+    "unchanged_error": "test_browser_egress.BrowserEgressTests.test_local_page_cannot_egress_to_blocked_subresources_or_redirects: Playwright bundled Chromium unavailable.",
+    "unchanged_skip": "Existing real Chromium/CDP integration skips because bundled Chromium is unavailable.",
+    "browser_install": "Official Playwright Chromium download retried by its installer; each response was an invalid/truncated ZIP. No tests changed.",
+    "packaging": "Wheel and sdist rebuilt; isolated installed-wheel schemas and granted-file scan passed.",
+    "scope": "Synthetic local inputs only. No provider/model calls, remote scan, credentials, marketplace submission, deployment, or release."
+  }
+}

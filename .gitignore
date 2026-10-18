@@ -55,3 +55,7 @@ tmp/
 # Pattern cache
 patterns_cache.json
 patterns_sample.json
+
+# Optional AI integrations
+integrations/**/node_modules/
+!integrations/**/SKILL.md

@@ -369,7 +369,13 @@ def scan_text(
     byte_offset_base: Optional[int] = None,
     byte_offset_width: int = 1,
     max_findings: Optional[int] = None,
+    minimal_evidence: bool = False,
 ) -> List[Finding]:
+    """Scan supplied text; minimal evidence omits context and keyed fingerprints.
+
+    AI adapters use minimal evidence to avoid retaining adjacent private text or
+    reading fingerprint configuration. Existing report callers keep defaults.
+    """
     findings: List[Finding] = []
     seen = set()
     safe_request_url = redact_url(request_url) if request_url else ""
@@ -419,7 +425,7 @@ def scan_text(
                 continue
             line += content.count("\n", line_offset, match.start())
             line_offset = match.start()
-            snippet = _snippet_for(content, match.start(), match.end())
+            snippet = "" if minimal_evidence else _snippet_for(content, match.start(), match.end())
             # Q.6 + Q.9 — AIza referrer-restricted keys: Google's Firebase /
             # Maps / Analytics keys are designed to live in client code.
             # Downgrade severity if ANY client-side marker (firebaseConfig,
@@ -439,7 +445,7 @@ def scan_text(
             if key in seen:
                 continue
             seen.add(key)
-            if byte_offset_base is None:
+            if byte_offset_base is None and not minimal_evidence:
                 redacted_snippet = redact_snippet(snippet, raw_value, run_salt=run_salt)
                 redacted_snippet = pii_scrub_snippet(redacted_snippet, redacted_value)
             else:
@@ -472,7 +478,7 @@ def scan_text(
                         request_url=safe_request_url,
                         line=line,
                         byte_offset=byte_offset,
-                    ),
+                    ) if not minimal_evidence else "",
                     remediation_v2=detector.get_remediation().to_dict(),
                 )
             )

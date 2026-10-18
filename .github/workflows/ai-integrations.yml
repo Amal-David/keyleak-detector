@@ -1,0 +1,33 @@
+name: Local AI integrations
+on:
+  pull_request:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  interoperability:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@0b93645e9fea7318ecaed2b359559ac225c90a2b # v5.3.0
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@39370e3970a6d050c480ffad4ff0ed4d3fdee5af
+        with:
+          node-version: '22'
+      - name: Install scanner and optional transport
+        run: |
+          python -m venv .venv
+          .venv/bin/python -m pip install . -r integrations/keyleak/requirements.txt jsonschema==4.26.0
+      - name: Run synthetic Python and MCP contracts
+        run: |
+          .venv/bin/python -m unittest tests.test_ai_integrations -v
+          .venv/bin/python -m unittest discover -s integrations/keyleak/tests -v
+      - name: Run real Vercel MCP client
+        working-directory: integrations/keyleak/vercel
+        run: |
+          npm ci --ignore-scripts --no-audit --no-fund
+          npm test

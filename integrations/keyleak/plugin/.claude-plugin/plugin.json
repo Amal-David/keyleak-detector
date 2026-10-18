@@ -1,0 +1,16 @@
+{
+  "name": "keyleak-local",
+  "version": "0.1.0",
+  "description": "Local, read-only secret-exposure checks with fully redacted findings and explicit file grants.",
+  "author": {
+    "name": "Amal David"
+  },
+  "repository": "https://github.com/Amal-David/keyleak-detector",
+  "license": "MIT",
+  "keywords": [
+    "security",
+    "local",
+    "secrets",
+    "read-only"
+  ]
+}
