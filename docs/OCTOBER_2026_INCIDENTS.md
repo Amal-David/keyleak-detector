@@ -352,3 +352,12 @@ final canonical URL. Temporary fixtures are shut down after final verification.
 
 False-positive dispositions require the above evidence; no CodeQL rule or check
 is disabled and no branch-protection bypass is used for merge.
+
+Fresh analysis then identified a real polynomial-time regex in the shared URL
+redactor (alert 12). It was replaced with a forward-only parser preserving raw
+URL spelling and existing redaction semantics. The replacement matched the
+previous behavior on 22,000 bounded differential cases; formatting and long-input
+regressions cover the change. This alert was repaired rather than dismissed.
+The subsequent Unicode-path review comment was also valid: paths are now
+percent-encoded while preserving existing escapes and URI delimiters, with an
+exact outgoing-request regression test.

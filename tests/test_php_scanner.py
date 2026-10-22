@@ -116,3 +116,14 @@ class PhpScannerTests(unittest.TestCase):
                 response.status = 200
                 scan_php_url(url)
                 self.assertEqual(connection_type.return_value.request.call_args.kwargs["headers"]["Host"], host)
+
+    def test_unicode_path_is_encoded_without_changing_existing_escapes(self):
+        addresses = [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("93.184.216.34", 80))]
+        with mock.patch("keyleak.php_scanner.socket.getaddrinfo", return_value=addresses), \
+                mock.patch("keyleak.php_scanner.socket.socket"), \
+                mock.patch("keyleak.php_scanner.http.client.HTTPConnection") as connection_type:
+            response = connection_type.return_value.getresponse.return_value
+            response.getheaders.return_value = []
+            response.status = 200
+            scan_php_url("http://example.com/café/%2F;a=b")
+            self.assertEqual(connection_type.return_value.request.call_args.args[:2], ("GET", "/caf%C3%A9/%2F;a=b"))

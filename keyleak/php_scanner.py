@@ -9,7 +9,7 @@ import ipaddress
 import socket
 import ssl
 import threading
-from urllib.parse import urlsplit
+from urllib.parse import quote, urlsplit
 
 import certifi
 
@@ -60,7 +60,8 @@ def _fetch_public_headers(url):
         authority = "[" + hostname + "]" if ":" in hostname else hostname
         if port != (443 if parsed.scheme == "https" else 80):
             authority += ":" + str(port)
-        connection.request("GET", parsed.path or "/", headers={"Host": authority, "User-Agent": "KeyLeak-PHP-Assessment/1"})
+        path = quote(parsed.path or "/", safe="/%:@!$&'()*+,;=")
+        connection.request("GET", path, headers={"Host": authority, "User-Agent": "KeyLeak-PHP-Assessment/1"})
         response = connection.getresponse()
         headers = {}
         for name, value in response.getheaders():
