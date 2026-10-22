@@ -51,6 +51,8 @@ Use `--json`, `--sarif`, `--markdown`, or `--html` for machine-readable or share
 
 ## Choose a scan
 
+- **PHP patch assessment:** `keyleak php-check URL --authorized` checks ordinary response headers for the October 2026 PHP advisories. The local web bridge includes a URL form at `/php-check`. Hidden versions remain unknown; a patched banner does not prove a site is safe.
+- **Incident inputs:** `keyleak incident-check .` checks selected manifests for compromised dependencies and outdated trust packages. Add `--ca-bundle FILE` for fingerprint checks or `--railway` for operator-requested recovery guidance. See [incident checks and limits](docs/OCTOBER_2026_INCIDENTS.md).
 - **Local project:** `keyleak local .` scans supported configuration, CI, Docker, MCP, source-map, and log files. Source files in `node_modules` and root `dist/` are opt-in.
 - **Binary release:** add `--scan-binaries` to scan printable strings in recognized native files. Use `keyleak archive release.zip --scan-binaries` for ZIP/tar archives, including APK/IPA ZIP containers.
 - **Web app:** `keyleak browser-scan URL` scans one authorized target; `keyleak site-scan DOMAIN` discovers and crawls an authorized site.

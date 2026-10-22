@@ -1580,6 +1580,36 @@ def index():
     return render_template('index.html')
 
 
+@app.route('/php-check', methods=['GET', 'POST'])
+@_active_scans.track
+async def php_check():
+    # The shared hostname guard is not a connection-time DNS pin; keep this form local.
+    if (request.remote_addr not in {'127.0.0.1', '::1'} or
+            urlparse(request.host_url).hostname not in {'localhost', '127.0.0.1', '::1'}):
+        return jsonify({'error': 'The PHP assessment form is available only on loopback.'}), 403
+    request.max_content_length = 8192
+    result, error = None, None
+    if request.method == 'POST':
+        origin = request.headers.get('Origin')
+        if request.headers.get('Sec-Fetch-Site') == 'cross-site' or (origin and origin != request.host_url.rstrip('/')):
+            return jsonify({'error': 'Cross-origin assessment requests are refused.'}), 403
+        if request.form.get('authorized') != 'yes':
+            error = 'Confirm that you own or have permission to check the URL.'
+        else:
+            from keyleak.php_scanner import scan_php_url
+
+            try:
+                report = await asyncio.to_thread(scan_php_url, request.form.get('url', ''))
+                result = report.extra['php_assessment']
+            except ValueError as exc:
+                error = str(exc)
+    response = app.make_response(render_template('php_check.html', result=result, error=error))
+    response.headers['Cache-Control'] = 'no-store'
+    response.headers['Content-Security-Policy'] = "default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'"
+    response.headers['Referrer-Policy'] = 'same-origin'
+    return response, 400 if error else 200
+
+
 @app.route('/healthz')
 def healthz():
     """Identify the loopback scanner process for extension startup checks."""
