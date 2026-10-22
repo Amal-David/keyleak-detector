@@ -81,6 +81,12 @@ def main(argv: Optional[List[str]] = None) -> int:
         return 1
 
     offline = getattr(args, "offline", False)
+    if args.command == "php-check" and proxy:
+        print("PHP checks do not support --proxy because the destination IP must be pinned directly.", file=sys.stderr)
+        return 1
+    if offline and args.command == "php-check":
+        print("PHP URL assessment requires network access and cannot run with --offline.", file=sys.stderr)
+        return 1
     if offline and proxy and not is_loopback_proxy(proxy):
         print(
             f"--offline allows only loopback proxies. Refusing {proxy!r}. "
@@ -111,6 +117,23 @@ def main(argv: Optional[List[str]] = None) -> int:
             packs=packs, scan_node_modules=args.scan_node_modules, scan_dist=args.scan_dist,
             scan_binaries=args.scan_binaries,
         )
+        return _emit_report(report, args)
+
+    if args.command in {"php-check", "incident-check"}:
+        try:
+            if args.command == "php-check":
+                from .php_scanner import scan_php_url
+
+                report = scan_php_url(args.url, proxy=proxy, offline=offline)
+            else:
+                from .incident_scanner import scan_incidents
+
+                report = scan_incidents(args.path, ca_bundle=args.ca_bundle, railway=args.railway)
+        except ValueError as exc:
+            print(str(exc), file=sys.stderr)
+            return 1
+        # These limited assessments must retain their uncertainty and recovery guidance.
+        args.suppressions_applied = True
         return _emit_report(report, args)
 
     if args.command == "audit":
@@ -372,6 +395,20 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     subparsers = parser.add_subparsers(dest="command")
+
+    php_check = subparsers.add_parser("php-check", help="Assess PHP banners over a direct connection (no proxy); never an exploit test.")
+    php_check.add_argument("url")
+    php_check.add_argument("--authorized", action="store_true", required=True,
+                           help="Confirm you own or have permission to check this URL.")
+    php_check.add_argument("--fail-on", default="high", choices=["low", "medium", "high", "critical"])
+    _add_format_flags(php_check)
+
+    incidents = subparsers.add_parser("incident-check", help="Check selected manifests and an optional PEM bundle against the October 2026 incident snapshot.")
+    incidents.add_argument("path")
+    incidents.add_argument("--ca-bundle", default="", help="Explicit PEM trust bundle to inspect without modifying it.")
+    incidents.add_argument("--railway", action="store_true", help="Include recovery guidance for operator-declared Railway usage.")
+    incidents.add_argument("--fail-on", default="high", choices=["low", "medium", "high", "critical"])
+    _add_format_flags(incidents)
 
     subparsers.add_parser("bundles", help="List scan bundles (named groups of detector packs + scan phases).")
 

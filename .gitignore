@@ -50,6 +50,8 @@ tmp/
 !.claude/skills/**/SKILL.md
 !.codex/skills/**/SKILL.md
 !docs/BINARY_ARTIFACT_SCANNING.md
+!docs/OCTOBER_2026_INCIDENTS.md
+!tasks/lessons.md
 !docs/audit/maintenance/*.md
 
 # Pattern cache

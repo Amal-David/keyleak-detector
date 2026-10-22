@@ -5,7 +5,6 @@ from __future__ import annotations
 import hashlib
 import hmac
 import os
-import re
 from typing import Optional
 
 
@@ -97,15 +96,31 @@ def redact_url(url: object) -> str:
 
     text = str(url)
 
-    def replace_secret(match: re.Match[str]) -> str:
-        separator = match.group(1)
-        key = match.group(2)
-        value = match.group(3)
-        if key.lower() in SECRET_QUERY_KEYS:
-            return f"{separator}{key}={redact_value(value)}"
-        return match.group(0)
-
-    return re.sub(r"([?&])([^=&]+)=([^&#]+)", replace_secret, text)
+    output = []
+    # Preserve raw URL spelling and the existing treatment of fragments and keys
+    # containing '?', without retrying an overlapping regex at each separator.
+    for index, piece in enumerate(text.split("&")):
+        part = "&" + piece if index else piece
+        start = 0 if index else part.find("?")
+        consumed = 0
+        while start >= 0:
+            equals = part.find("=", start + 1)
+            if equals < 0:
+                break
+            value_start = equals + 1
+            if equals == start + 1 or value_start == len(part) or part[value_start] == "#":
+                start = part.find("?", value_start)
+                continue
+            value_end = part.find("#", value_start)
+            if value_end < 0:
+                value_end = len(part)
+            key, value = part[start + 1:equals], part[value_start:value_end]
+            output.append(part[consumed:value_start])
+            output.append(redact_value(value) if key.lower() in SECRET_QUERY_KEYS else value)
+            consumed = value_end
+            start = part.find("?", value_end)
+        output.append(part[consumed:])
+    return "".join(output)
 
 
 def redact_snippet(

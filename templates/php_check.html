@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>PHP security assessment · KeyLeak</title>
+    <style>
+        body { color: #e2e8f0; background: #0f172a; font: 17px/1.6 system-ui, sans-serif; margin: 0; }
+        main { max-width: 720px; margin: 7vh auto; padding: 24px; }
+        a { color: #6ee7b7; } h1 { line-height: 1.2; }
+        label { display: block; margin-top: 20px; }
+        input[type=url] { box-sizing: border-box; width: 100%; padding: 14px; margin-top: 8px; border: 1px solid #94a3b8; border-radius: 6px; font: inherit; }
+        button { margin-top: 24px; padding: 12px 24px; background: #6ee7b7; color: #0f172a; border: 0; border-radius: 6px; font: inherit; font-weight: 700; cursor: pointer; }
+        section { margin-top: 28px; padding: 20px; border: 1px solid #64748b; border-radius: 8px; }
+        .error { color: #fda4af; } small { color: #cbd5e1; }
+    </style>
+</head>
+<body>
+<main>
+    <a href="/">← KeyLeak</a>
+    <h1>Check a website’s reported PHP version</h1>
+    <p>Assess CVE-2026-109618 and CVE-2026-109619 using ordinary response headers. This check cannot prove whether a website is vulnerable or safe.</p>
+    <form method="post" action="/php-check">
+        <label for="url">Website URL</label>
+        <input id="url" name="url" type="url" value="{{ request.form.get('url', '') if result else '' }}" placeholder="https://your-website.example/" maxlength="2048" required aria-describedby="request-scope">
+        <small id="request-scope">One public URL. No query strings, credentials, redirects, or exploit payloads. Hidden versions and vendor builds require further verification.</small>
+        <label><input name="authorized" type="checkbox" value="yes" required> I own this website or have permission to check it.</label>
+        <button type="submit">Assess PHP version</button>
+    </form>
+    {% if error %}<p class="error" role="alert">{{ error }}</p>{% endif %}
+    {% if result %}
+    <section aria-live="polite">
+        <h2>{{ {'potentially_affected': 'Potentially affected', 'patched_version_reported': 'Patched version reported', 'unknown': 'Patch status unknown'}[result.status] }}</h2>
+        {% if result.version %}<p>Advertised PHP version: <strong>{{ result.version }}</strong></p>{% endif %}
+        <p>{{ result.reason }}</p>
+        <p>Verify the PHP runtime serving the site and every worker. Apply PHP 8.2.35, 8.3.36, 8.4.27, 8.5.12 or a vendor-confirmed backport, then restart workers.</p>
+        <a href="https://www.php.net/archive/2026.php#2026-10-21-5" rel="noreferrer">Read the PHP security advisory</a>
+    </section>
+    {% endif %}
+    <p><small>Local assessment · Advisory snapshot: 22 October 2026 · No exploit testing</small></p>
+</main>
+</body>
+</html>

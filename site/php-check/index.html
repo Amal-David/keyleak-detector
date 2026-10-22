@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>PHP security checker · KeyLeak</title>
+<meta name="description" content="Check a website's advertised PHP version against the October 2026 PHP security fixes. No exploit payloads. Hidden versions remain unknown.">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; connect-src 'self' https://keyleak-php-check.onrender.com; style-src 'self' 'unsafe-inline'; base-uri 'none'; object-src 'none'; form-action 'none'">
+<link rel="canonical" href="https://keyleakdetector.com/php-check/">
+<style>
+body{margin:0;background:#0f172a;color:#e2e8f0;font:17px/1.6 system-ui,sans-serif}main{max-width:760px;margin:5vh auto;padding:24px}h1{font-size:clamp(32px,6vw,48px);line-height:1.15}a{color:#6ee7b7}label{display:block;margin:16px 0 8px}input[type=url],input[type=text]{box-sizing:border-box;width:100%;padding:14px;border:1px solid #94a3b8;border-radius:6px;font:inherit}button{padding:12px 22px;background:#6ee7b7;color:#0f172a;border:0;border-radius:6px;font:inherit;font-weight:700;cursor:pointer;margin-top:20px}button:disabled{opacity:.6;cursor:wait}section,details{border:1px solid #64748b;border-radius:8px;padding:20px;margin-top:28px}small,.muted{color:#cbd5e1}code{overflow-wrap:anywhere}.error{color:#fda4af}summary{cursor:pointer;font-weight:600}h2{line-height:1.25}
+</style>
+<script src="checker.js" defer></script>
+</head>
+<body><main>
+<a href="https://keyleakdetector.com/">← KeyLeak</a>
+<h1>Does your website report an affected PHP version?</h1>
+<p>Check the version advertised by your website against CVE-2026-109618 and CVE-2026-109619. We send one ordinary request. We never send exploit payloads.</p>
+<p class="muted">A website can hide its PHP version or use a vendor backport. An unknown result is not a pass; a patched banner does not verify every server.</p>
+<form id="url-form">
+<label for="url">Your website URL</label><input id="url" type="url" placeholder="https://your-website.example/" maxlength="2048" required>
+<small>Public HTTP(S) URLs only. No passwords, query strings or private servers.</small>
+<label><input id="authorized" type="checkbox" required> I own this website or have permission to check it.</label>
+<button id="check-url" type="submit">Check PHP version</button>
+</form>
+<section id="result" hidden aria-live="polite"><h2 id="result-title"></h2><p id="result-version"></p><p id="result-reason"></p><p>Verify the runtime serving requests. Update to PHP 8.2.35, 8.3.36, 8.4.27, 8.5.12 or a vendor-confirmed fixed package, then restart every worker.</p><a href="https://www.php.net/archive/2026.php#2026-10-21-5" rel="noreferrer">Read the PHP security advisory</a></section>
+<p id="error" class="error" role="alert"></p>
+<details><summary>Already know your PHP version?</summary>
+<p>Enter the version from your hosting panel or serving runtime. This comparison runs in your browser. Avoid publishing a phpinfo page.</p>
+<form id="version-form"><label for="version">PHP version</label><input id="version" type="text" placeholder="8.3.35" maxlength="60" required><button type="submit">Compare version</button></form>
+</details>
+<details><summary>What this check can and cannot tell you</summary><p>The URL checker examines response headers. It does not prove exploitability, detect every PHP installation, bypass a CDN, follow redirects or scan other paths. A high-risk version is a reason to verify and patch, not evidence that your site was hacked.</p><p>The URL is sent to our Render backend for one request. It is not intentionally logged or stored; an in-memory hostname hash limits repeated checks. Render and GitHub may retain ordinary service access metadata. Do not submit sensitive paths. Version-only input stays in your browser.</p></details>
+<p><small>Advisory snapshot: 22 October 2026 · Open source · <a href="https://github.com/Amal-David/keyleak-detector">Source and local scanner</a></small></p>
+<noscript><p>This checker requires JavaScript. You can also compare your PHP version with the official advisory linked above.</p></noscript>
+</main></body></html>
