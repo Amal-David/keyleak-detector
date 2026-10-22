@@ -17,10 +17,11 @@ class IncidentCliTests(unittest.TestCase):
         session.assert_not_called()
 
     def test_offline_php_refuses_before_installing_global_socket_block(self):
-        with mock.patch("keyleak.cli.install_socket_block"), mock.patch("requests.Session") as session:
+        with mock.patch("keyleak.cli.install_socket_block") as block, mock.patch("requests.Session") as session:
             with contextlib.redirect_stderr(io.StringIO()):
                 self.assertEqual(main(["--offline", "php-check", "https://example.com", "--authorized"]), 1)
         session.assert_not_called()
+        block.assert_not_called()
 
     def test_local_critical_result_uses_existing_reports_and_failure_status(self):
         with tempfile.TemporaryDirectory() as directory:

@@ -81,6 +81,9 @@ def main(argv: Optional[List[str]] = None) -> int:
         return 1
 
     offline = getattr(args, "offline", False)
+    if offline and args.command == "php-check":
+        print("PHP URL assessment requires network access and cannot run with --offline.", file=sys.stderr)
+        return 1
     if offline and proxy and not is_loopback_proxy(proxy):
         print(
             f"--offline allows only loopback proxies. Refusing {proxy!r}. "

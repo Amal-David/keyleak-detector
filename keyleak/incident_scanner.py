@@ -107,10 +107,14 @@ def _manifest_dependencies(path, text):
     else:
         data = json.loads(text)
         if path.name == "package.json":
-            for group in ("dependencies", "devDependencies", "optionalDependencies"):
+            for group in ("dependencies", "devDependencies", "optionalDependencies", "peerDependencies"):
                 for name, version in data.get(group, {}).items():
                     yield _npm_dependency(name, version)
         else:
+            if not any(key in data for key in ("packages", "dependencies")):
+                raise ValueError("unsupported npm lockfile structure")
+            if any(not isinstance(data[key], dict) for key in ("packages", "dependencies") if key in data):
+                raise ValueError("invalid npm lockfile structure")
             # npm v2/v3 retain the install path even when the name field is absent.
             for location, package in data.get("packages", {}).items():
                 if "node_modules/" in location:
@@ -156,11 +160,12 @@ def scan_incidents(path: str, *, ca_bundle=None, railway=False):
     if target.is_symlink() or not target.exists():
         raise ValueError("Supply an existing regular manifest or project directory, not a symlink.")
     files = [target / name for name in MANIFESTS if (target / name).exists()] if target.is_dir() else [target]
+    manifests_found = bool(files)
     if ca_bundle:
         files.append(Path(ca_bundle).expanduser())
     findings, reasons = [], []
     completed = 0
-    if not files:
+    if not manifests_found:
         reasons.append("No supported root manifests were found; nested projects are outside this check.")
     for file in files:
         try:

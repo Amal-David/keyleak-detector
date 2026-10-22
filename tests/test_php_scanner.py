@@ -105,4 +105,20 @@ class PhpScannerTests(unittest.TestCase):
             report = scan_php_url("https://example.com")
             context.return_value.wrap_socket.assert_called_once_with(socket_type.return_value, server_hostname="example.com")
             self.assertEqual(context.return_value.minimum_version, ssl.TLSVersion.TLSv1_2)
+            self.assertEqual(connection_type.return_value.request.call_args.kwargs["headers"]["Host"], "example.com")
             self.assertEqual(report.extra["php_assessment"]["status"], "unknown")
+
+    def test_request_authority_preserves_nondefault_ports_and_ipv6_brackets(self):
+        for url, host in (("http://example.com:443/", "example.com:443"),
+                          ("https://example.com:80/", "example.com:80"),
+                          ("http://[2606:4700:4700::1111]/", "[2606:4700:4700::1111]")):
+            addresses = [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("93.184.216.34", 80))]
+            with self.subTest(url=url), mock.patch("keyleak.php_scanner.socket.getaddrinfo", return_value=addresses), \
+                    mock.patch("keyleak.php_scanner.socket.socket"), \
+                    mock.patch("keyleak.php_scanner.ssl.create_default_context"), \
+                    mock.patch("keyleak.php_scanner.http.client.HTTPConnection") as connection_type:
+                response = connection_type.return_value.getresponse.return_value
+                response.getheaders.return_value = []
+                response.status = 200
+                scan_php_url(url)
+                self.assertEqual(connection_type.return_value.request.call_args.kwargs["headers"]["Host"], host)

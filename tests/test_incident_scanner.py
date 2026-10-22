@@ -36,6 +36,7 @@ class IncidentScannerTests(unittest.TestCase):
 
     def test_npm_manifest_and_v1_lock(self):
         for name, data in [("package.json", {"devDependencies": {"claude-desktop-setup": "*"}}),
+                           ("package.json", {"peerDependencies": {"claude-desktop-setup": "*"}}),
                            ("package-lock.json", {"dependencies": {"parent": {"version": "1", "dependencies": {
                                "@decoopus/claude-setup": {"version": "1"}}}}})]:
             with self.subTest(name=name):
@@ -74,6 +75,9 @@ class IncidentScannerTests(unittest.TestCase):
         link.symlink_to(path)
         with self.assertRaises(ValueError):
             scan_incidents(str(link))
+        path = self.root / "package-lock.json"
+        path.write_text("{}")
+        self.assertEqual(scan_incidents(str(path)).extra["coverage"]["status"], "incomplete")
 
     def test_npm_aliases_and_continued_hash_pins_preserve_malware_identity(self):
         manifest = self.root / "package.json"
@@ -101,6 +105,8 @@ class IncidentScannerTests(unittest.TestCase):
     def test_real_incident_roots_match_by_fingerprint_and_bundle_is_unchanged(self):
         bundle = Path(__file__).parent / "fixtures" / "emudhra-incident-roots.pem"
         original = bundle.read_bytes()
+        self.assertEqual(scan_incidents(str(self.root), ca_bundle=str(bundle)).extra["coverage"]["status"], "incomplete")
+        (self.root / "requirements.txt").write_text("certifi==2026.10.19\n")
         report = scan_incidents(str(self.root), ca_bundle=str(bundle))
         anchors = [f for f in report.findings if f.detector_id == "incident:emudhra-anchor"]
         self.assertEqual(len(anchors), 4)
@@ -109,6 +115,7 @@ class IncidentScannerTests(unittest.TestCase):
         self.assertEqual(bundle.read_bytes(), original)
 
     def test_unrelated_certificate_is_not_an_incident_anchor(self):
+        (self.root / "requirements.txt").write_text("certifi==2026.10.19\n")
         bundle = self.root / "unrelated.pem"
         cert = ssl.create_default_context().get_ca_certs(binary_form=True)[0]
         bundle.write_text(ssl.DER_cert_to_PEM_cert(cert))

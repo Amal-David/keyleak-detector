@@ -59,7 +59,10 @@ def _fetch_public_headers(url):
             context.minimum_version = ssl.TLSVersion.TLSv1_2
             sock = context.wrap_socket(sock, server_hostname=hostname)
         connection.sock = sock
-        connection.request("GET", parsed.path or "/", headers={"User-Agent": "KeyLeak-PHP-Assessment/1"})
+        authority = "[" + hostname + "]" if ":" in hostname else hostname
+        if port != (443 if parsed.scheme == "https" else 80):
+            authority += ":" + str(port)
+        connection.request("GET", parsed.path or "/", headers={"Host": authority, "User-Agent": "KeyLeak-PHP-Assessment/1"})
         response = connection.getresponse()
         headers = {}
         for name, value in response.getheaders():
@@ -113,10 +116,8 @@ def assess_php_headers(headers, status_code=200):
     return result
 
 
-def scan_php_url(url: str, *, proxy=None, offline=False):
-    """Fetch one supplied public URL, without cookies, redirects, or body reads."""
-    if offline:
-        raise ValueError("PHP URL assessment requires network access and cannot run with --offline.")
+def validate_php_url(url):
+    """Validate syntax before quota admission or any network work."""
     if not isinstance(url, str) or len(url) > 2048 or any(ord(c) < 33 for c in url):
         raise ValueError("Supply an HTTP(S) URL without whitespace.")
     try:
@@ -128,6 +129,14 @@ def scan_php_url(url: str, *, proxy=None, offline=False):
         valid = False
     if not valid:
         raise ValueError("Supply an HTTP(S) URL on port 80 or 443 without credentials, query, or fragment.")
+    return parsed
+
+
+def scan_php_url(url: str, *, proxy=None, offline=False):
+    """Fetch one supplied public URL, without cookies, redirects, or body reads."""
+    if offline:
+        raise ValueError("PHP URL assessment requires network access and cannot run with --offline.")
+    validate_php_url(url)
     target = redact_url(url)
     try:
         if proxy:

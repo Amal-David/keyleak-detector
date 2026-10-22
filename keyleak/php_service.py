@@ -7,11 +7,10 @@ import secrets
 from pathlib import Path
 import threading
 import time
-from urllib.parse import urlsplit
 
 from flask import Flask, jsonify, request, send_from_directory
 
-from .php_scanner import scan_php_url
+from .php_scanner import scan_php_url, validate_php_url
 
 
 app = Flask(__name__)
@@ -66,14 +65,10 @@ def check():
     if not isinstance(payload, dict) or payload.get("authorized") is not True or not isinstance(payload.get("url"), str):
         return jsonify(error="Provide a URL and confirm ownership or permission."), 400
     url = payload["url"].strip()
-    if len(url) > 2048:
-        return jsonify(error="URL is too long."), 400
     try:
-        target = urlsplit(url).hostname
+        target = validate_php_url(url).hostname
     except ValueError:
-        target = None
-    if not target:
-        return jsonify(error="Provide a valid HTTP(S) URL."), 400
+        return jsonify(error="Provide a public HTTP(S) URL without credentials or query strings."), 400
     target = hmac.digest(_limiter_key, target.encode(), hashlib.sha256)
     now = time.monotonic()
     with _lock:

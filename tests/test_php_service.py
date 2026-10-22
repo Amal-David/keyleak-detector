@@ -30,6 +30,10 @@ class PhpServiceTests(unittest.TestCase):
         with mock.patch("keyleak.php_service.scan_php_url") as scan:
             for payload in ({}, [], {"url": "https://example.com", "authorized": "true"}):
                 self.assertEqual(self.client.post("/api/check", json=payload).status_code, 400)
+            for url in ("ftp://example.com", "https://user:password@example.com", "https://example.com/?key=x", "https://example.com:8080"):
+                self.assertEqual(self.client.post("/api/check", json={"url": url, "authorized": True}).status_code, 400)
+            self.assertEqual(len(php_service._requests), 0)
+            self.assertEqual(len(php_service._targets), 0)
             self.assertEqual(self.client.post("/api/check", data="x" * 5000, content_type="application/json").status_code, 413)
             with php_service._lock:
                 php_service._requests.extend([php_service.time.monotonic()] * 120)
