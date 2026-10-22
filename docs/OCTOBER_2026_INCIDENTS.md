@@ -24,7 +24,9 @@ The checker sends one ordinary streaming GET to the supplied URL and examines
 only `Server` and `X-Powered-By`. It reads no response body, sends no ambient
 cookies or netrc credentials, and follows no redirects. It accepts public
 HTTP(S) targets on ports 80/443 without URL credentials, queries or fragments.
-The CLI respects an explicit `--proxy`; `--offline` refuses URL assessment.
+PHP checks refuse `--proxy` before network work because an independently
+resolving proxy cannot preserve the validated numeric destination. Other scan
+modes retain their existing proxy support. `--offline` refuses URL assessment.
 
 Results:
 
@@ -47,9 +49,9 @@ Hiding the PHP banner or updating application code does not patch the runtime.
 Direct PHP checks now resolve and validate all returned addresses, then connect
 to a validated numeric address with the original TLS hostname. They refuse
 private/reserved targets, send no ambient credentials, follow no redirects and
-close the socket after ten seconds. An explicitly requested CLI proxy delegates
-connection/DNS handling to that trusted proxy and retains the hostname guard.
-The public service does not accept a proxy setting or expose the legacy scanner.
+close the socket after ten seconds. Only native global IPv6 destinations are
+accepted; translation/transition addresses are refused. Neither the public PHP
+service nor its CLI assessment accepts a proxy or exposes the legacy scanner.
 
 ## Local incident inputs
 
@@ -134,7 +136,7 @@ preserved. Existing mechanisms were reused rather than replaced:
 | `feeds.py`, `detectors_dynamic.py` | IOC manifest generation/loading code exists | Not a general, verified resolved-dependency advisory matcher. |
 | `js_library_cves.py` | Small browser-library version table | Does not establish origin PHP patch status. |
 | `models.py`, `reporting.py` | Shared findings, evidence, coverage and output formats | Reused by both new CLI commands. |
-| `net_guard.py`, `proxy.py` | Address guard and explicit proxy mapping | Direct PHP transport now pins the validated address; explicit proxies are trusted operator inputs. |
+| `net_guard.py`, `proxy.py` | Existing address guard and proxy mapping for other scan modes | PHP transport pins the validated address and refuses independently resolving proxies. |
 
 No dedicated PHP, Railway, eMudhra or named new malware checks were found in
 those baseline paths. This update adds bounded incident-specific checks, not
@@ -260,7 +262,93 @@ deliberately pinned to the tested PR revision with automatic deploys disabled.
 
 Automated CodeQL review flagged the intentional user-URL fetch sinks and the
 synthetic credential fixture. The former use validated numeric-address pinning
-(or an explicitly requested CLI proxy), and the fixture contains no real secret.
+and the test fixture contains no real secret. The independently resolving CLI
+proxy path has since been removed rather than exempted from the IP-pinning rule.
 These alerts were not dismissed. An explicit TLS 1.2 minimum was added and tested
 alongside certificate verification and original-hostname SNI preservation.
 Further GitHub checks/reviews may remain queued; local proof is not a CI pass.
+
+## Controlled QA and remaining-alert review — 23 October 2026
+
+The purpose of this round was to verify detection, rather than to find or probe
+unconsenting vulnerable websites. No exploit payload was used, and no claim of
+personal-system compromise was made.
+
+### Research boundaries
+
+- [PHP's advisory](https://www.php.net/archive/2026.php#2026-10-21-5) covers web-serving
+  PHP runtimes and defines the upstream fixed versions. A domain alone does not
+  reveal whether its serving runtime has the fixes.
+- [AWS's bulletin](https://aws.amazon.com/security/security-bulletins/2026-143-aws/)
+  documents affected PHP workloads and update actions for Elastic Beanstalk,
+  Amazon Linux and Lightsail. It is not permission to test customer domains.
+- [Six Apart](https://www.sixapart.jp/movabletype/news/amp/2026/10/22-0020.html)
+  reports upgrading Movable Type Cloud to PHP 8.3.36 on 22 October. Its managed
+  environments were reported patched; they were not treated as vulnerable test sites.
+- [Ubuntu's notice](https://ubuntu.com/security/notices/USN-8948-1) lists the fixed
+  backport `8.3.6-0ubuntu0.24.04.13`. This is why vendor-suffixed or hidden versions
+  remain unknown rather than being labelled definitely vulnerable or safe.
+
+### Reproducible actual-runtime QA
+
+Run `python -m scripts.qa_php_runtime_banners` from an installed checkout with
+Docker available. It builds only a tiny version-response page on official PHP
+images, executes ordinary loopback HTTP requests, classifies their real headers,
+and removes its containers and temporary image tags. It does not expose a port,
+mount host directories, forward credentials or give the runtimes network access.
+Each container is non-root, read-only, capability-free, and resource-limited.
+
+The official base image digests tested were:
+
+- PHP 8.3.35: `sha256:b62d1f1ff98037e7ec8ee5e5ed382bfe2d88d054b05e0d09bcc851e3342072c2`.
+- PHP 8.3.36: `sha256:74caa458ad8d6c5e401eb9f8841a62faeab9b7be42b54cd37986d7685f857618`.
+
+| Controlled response | Expected and observed result |
+| --- | --- |
+| Actual PHP 8.3.35, version exposed | `potentially_affected` |
+| Actual PHP 8.3.36, version exposed | `patched_version_reported` |
+| Actual PHP 8.3.35, version hidden | `unknown` |
+
+### Deployed browser/backend QA
+
+A temporary owned Python server replayed frozen response headers from the above
+runtimes. Only that header-only server was exposed through a temporary tunnel;
+the old PHP runtime was never public. Real Chrome submitted these owned URLs
+through `keyleakdetector.com/php-check/` and its production Render API, respecting
+the target rate limit. All six cases passed:
+
+| Header-only fixture | Observed result |
+| --- | --- |
+| Old upstream version | `potentially_affected` |
+| Patched upstream version | `patched_version_reported` |
+| Hidden version | `unknown` |
+| Vendor backport suffix | `unknown` |
+| Redirect response | `unknown` |
+| HTTP error response | `unknown` |
+
+The mobile layout also passed without overflow or page JavaScript errors.
+Redirect/error results now explain the cause; redirect users are asked for the
+final canonical URL. Temporary fixtures are shut down after final verification.
+
+### Security review disposition
+
+- The insecure-TLS alert's instance was already marked fixed; TLS 1.2 remains
+  the explicit minimum and original-hostname certificate verification is retained.
+- The independently resolving CLI proxy path was a real pinning gap. It was
+  removed; PHP proxy requests fail before preflight, and the dedicated service
+  no longer depends on Requests. Other scanner modes retain their proxy policy.
+- Native public IPv6 is required, additionally rejecting NAT64 and transition
+  forms that could otherwise translate an apparently global address to a private
+  destination. Mixed public/private DNS replies remain refused.
+- The direct HTTP-sink alert is reviewed against validated numeric socket
+  connections, no second hostname resolution, no redirects and no proxy path.
+  Controlled HTTPS QA and private/translated-address regressions verify that
+  policy. The tainted hostname is used for Host/SNI, not a second connection.
+- The clear-text-storage alert refers to a literal fake credential in a temporary
+  unit-test input whose purpose is to verify report redaction. It is not a stored
+  production credential; the test is retained.
+- The canonical Pages-path comment is satisfied by the published `gh-pages/php-check/`
+  route and its live browser tests. Previously repaired comment cases remain covered.
+
+False-positive dispositions require the above evidence; no CodeQL rule or check
+is disabled and no branch-protection bypass is used for merge.

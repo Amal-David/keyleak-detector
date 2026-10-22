@@ -23,6 +23,13 @@ class IncidentCliTests(unittest.TestCase):
         session.assert_not_called()
         block.assert_not_called()
 
+    def test_php_proxy_refuses_before_preflight_or_fetch(self):
+        with mock.patch("keyleak.cli.preflight") as preflight, mock.patch("keyleak.php_scanner._fetch_public_headers") as fetch:
+            with contextlib.redirect_stderr(io.StringIO()):
+                self.assertEqual(main(["--proxy", "http://127.0.0.1:8888", "php-check", "https://example.com", "--authorized"]), 1)
+            preflight.assert_not_called()
+            fetch.assert_not_called()
+
     def test_local_critical_result_uses_existing_reports_and_failure_status(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "requirements.txt"

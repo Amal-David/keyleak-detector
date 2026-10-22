@@ -81,6 +81,9 @@ def main(argv: Optional[List[str]] = None) -> int:
         return 1
 
     offline = getattr(args, "offline", False)
+    if args.command == "php-check" and proxy:
+        print("PHP checks do not support --proxy because the destination IP must be pinned directly.", file=sys.stderr)
+        return 1
     if offline and args.command == "php-check":
         print("PHP URL assessment requires network access and cannot run with --offline.", file=sys.stderr)
         return 1
@@ -393,7 +396,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     subparsers = parser.add_subparsers(dest="command")
 
-    php_check = subparsers.add_parser("php-check", help="Assess PHP banners with one ordinary HTTP request; never an exploit test.")
+    php_check = subparsers.add_parser("php-check", help="Assess PHP banners over a direct connection (no proxy); never an exploit test.")
     php_check.add_argument("url")
     php_check.add_argument("--authorized", action="store_true", required=True,
                            help="Confirm you own or have permission to check this URL.")

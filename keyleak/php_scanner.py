@@ -11,12 +11,9 @@ import ssl
 import threading
 from urllib.parse import urlsplit
 
-import requests
 import certifi
 
 from .models import Evidence, Finding, build_coverage
-from .net_guard import url_block_reason
-from .proxy import requests_proxies
 from .redaction import redact_url
 from .reporting import build_report
 
@@ -36,7 +33,8 @@ def _fetch_public_headers(url):
     for address in addresses:
         ip = ipaddress.ip_address(address[4][0])
         if (not ip.is_global or ip.is_multicast or
-                (isinstance(ip, ipaddress.IPv6Address) and (ip.sixtofour or ip.teredo))):
+                (isinstance(ip, ipaddress.IPv6Address) and (
+                    ip not in ipaddress.IPv6Network("2000::/3") or ip.sixtofour or ip.teredo))):
             raise ValueError("Only public internet addresses are permitted.")
     family, _, _, _, endpoint = addresses[0]
     connection = http.client.HTTPConnection(hostname, port, timeout=5)
@@ -88,7 +86,10 @@ def assess_php_headers(headers, status_code=200):
     result = {"status": "unknown", "version": "", "cves": PHP_CVES,
               "reason": "No unambiguous PHP patch version was advertised. PHP may still be present."}
     if not 200 <= status_code < 300:
-        result["reason"] = "The response was a redirect or error; the origin PHP patch level is unknown."
+        if 300 <= status_code < 400:
+            result["reason"] = "The site redirected this URL. Enter its final canonical URL; redirects are not followed."
+        else:
+            result["reason"] = f"The site returned HTTP {status_code}; this response cannot establish the origin PHP patch level."
         return result
     if len(versions) != 1:
         if len(versions) > 1:
@@ -136,22 +137,14 @@ def scan_php_url(url: str, *, proxy=None, offline=False):
     """Fetch one supplied public URL, without cookies, redirects, or body reads."""
     if offline:
         raise ValueError("PHP URL assessment requires network access and cannot run with --offline.")
+    if proxy:
+        raise ValueError("PHP checks do not support --proxy because the destination IP must be pinned directly.")
     validate_php_url(url)
     target = redact_url(url)
     try:
-        if proxy:
-            if url_block_reason(url, allow_private=False):
-                raise ValueError("The PHP checker requires a resolvable public HTTP(S) target.")
-            with requests.Session() as session:
-                session.trust_env = False
-                with session.get(url, allow_redirects=False, stream=True, timeout=(5, 10),
-                                 proxies=requests_proxies(proxy),
-                                 headers={"User-Agent": "KeyLeak-PHP-Assessment/1"}) as response:
-                    result = assess_php_headers(response.headers, response.status_code)
-        else:
-            headers, status_code = _fetch_public_headers(url)
-            result = assess_php_headers(headers, status_code)
-    except (requests.RequestException, OSError, http.client.HTTPException):
+        headers, status_code = _fetch_public_headers(url)
+        result = assess_php_headers(headers, status_code)
+    except (OSError, http.client.HTTPException):
         result = {"status": "unknown", "version": "", "cves": PHP_CVES,
                   "reason": "The HTTP/TLS request failed; no patch status could be established."}
     potential = result["status"] == "potentially_affected"

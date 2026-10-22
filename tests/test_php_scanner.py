@@ -3,7 +3,6 @@ import socket
 import ssl
 from unittest import mock
 
-import requests
 
 from keyleak.php_scanner import assess_php_headers, scan_php_url
 
@@ -24,32 +23,23 @@ class PhpScannerTests(unittest.TestCase):
                 self.assertEqual(assess_php_headers(headers)["status"], "unknown")
         self.assertEqual(assess_php_headers({"Set-Cookie": "PHP/8.4.27"})["status"], "unknown")
         self.assertEqual(assess_php_headers({"Server": "PHP/8.4.27"}, 403)["status"], "unknown")
+        self.assertIn("403", assess_php_headers({"Server": "PHP/8.4.27"}, 403)["reason"])
 
     def test_unsupported_old_branch_is_only_potentially_affected(self):
         result = assess_php_headers({"Server": "Apache PHP/7.4.33"})
         self.assertEqual(result["status"], "potentially_affected")
         self.assertIn("backports", result["reason"])
 
-    @mock.patch("keyleak.php_scanner.url_block_reason", return_value=None)
-    @mock.patch("keyleak.php_scanner.requests.Session")
-    def test_fetch_is_bounded_credential_free_and_never_says_safe(self, session_type, guard):
-        session = session_type.return_value.__enter__.return_value
-        response = session.get.return_value.__enter__.return_value
-        response.headers = {"X-Powered-By": "PHP/8.4.27", "Set-Cookie": "secret-cookie"}
-        response.status_code = 200
-        report = scan_php_url("https://example.com/", proxy="http://127.0.0.1:8888")
-        self.assertFalse(session.trust_env)
-        kwargs = session.get.call_args.kwargs
-        self.assertFalse(kwargs["allow_redirects"])
-        self.assertTrue(kwargs["stream"])
-        self.assertEqual(kwargs["proxies"]["https"], "http://127.0.0.1:8888")
+    @mock.patch("keyleak.php_scanner._fetch_public_headers", return_value=({"X-Powered-By": "PHP/8.4.27", "Set-Cookie": "secret-cookie"}, 200))
+    def test_fetch_never_says_safe_or_exports_cookies(self, fetch):
+        report = scan_php_url("https://example.com/")
         self.assertNotEqual(report.verdict["status"], "SAFE_TO_SHIP")
         self.assertNotIn("secret-cookie", str(report.to_dict()))
         self.assertEqual(report.findings[0].validation_status, "lead")
-        guard.assert_called_once_with("https://example.com/", allow_private=False)
+        fetch.assert_called_once_with("https://example.com/")
 
-    @mock.patch("keyleak.php_scanner.requests.Session")
-    def test_invalid_offline_and_internal_inputs_never_fetch(self, session):
+    @mock.patch("keyleak.php_scanner.socket.socket")
+    def test_invalid_offline_and_internal_inputs_never_fetch(self, socket_type):
         for url in ["file:///etc/passwd", "https://u:p@example.com", "https://example.com/?token=x",
                     "https://@example.com", "https://:secret@example.com",
                     "https://example.com/#secret", "https://example.com:8080", "https://example.com/\n"]:
@@ -57,10 +47,12 @@ class PhpScannerTests(unittest.TestCase):
                 scan_php_url(url)
         with self.assertRaises(ValueError):
             scan_php_url("https://example.com", offline=True)
+        with self.assertRaises(ValueError):
+            scan_php_url("https://example.com", proxy="http://127.0.0.1:8888")
         with mock.patch("keyleak.php_scanner.socket.getaddrinfo", return_value=[
                 (socket.AF_INET, socket.SOCK_STREAM, 6, "", ("127.0.0.1", 80))]), self.assertRaises(ValueError):
             scan_php_url("http://127.0.0.1")
-        session.assert_not_called()
+        socket_type.assert_not_called()
 
     @mock.patch("keyleak.php_scanner._fetch_public_headers", side_effect=OSError("sensitive internal error"))
     def test_failures_and_redirects_remain_unknown(self, fetch):
@@ -69,6 +61,7 @@ class PhpScannerTests(unittest.TestCase):
         self.assertEqual(report.extra["coverage"]["status"], "incomplete")
         self.assertNotIn("sensitive internal error", str(report.to_dict()))
         self.assertEqual(assess_php_headers({"Server": "PHP/8.4.27"}, 302)["status"], "unknown")
+        self.assertIn("canonical URL", assess_php_headers({"Server": "PHP/8.4.27"}, 302)["reason"])
 
     def test_numeric_connection_is_pinned_after_public_dns_validation(self):
         addresses = [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("93.184.216.34", 80))]
@@ -85,7 +78,8 @@ class PhpScannerTests(unittest.TestCase):
             connection_type.return_value.close.assert_called_once()
 
     def test_reserved_or_mixed_dns_answers_never_create_a_socket(self):
-        for ip in ("100.64.0.1", "169.254.169.254", "10.0.0.1", "224.0.0.1", "::1"):
+        for ip in ("100.64.0.1", "169.254.169.254", "10.0.0.1", "224.0.0.1", "::1",
+                   "64:ff9b::a9fe:a9fe", "::ffff:127.0.0.1", "2002:7f00:1::"):
             addresses = [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("93.184.216.34", 80)),
                          (socket.AF_INET, socket.SOCK_STREAM, 6, "", (ip, 80))]
             with self.subTest(ip=ip), mock.patch("keyleak.php_scanner.socket.getaddrinfo", return_value=addresses), \
