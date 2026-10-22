@@ -1583,7 +1583,7 @@ def index():
 @app.route('/php-check', methods=['GET', 'POST'])
 @_active_scans.track
 async def php_check():
-    # The shared hostname guard is not a connection-time DNS pin; keep this form local.
+    # Public traffic uses the dedicated php_service; keep the full scanner bridge local.
     if (request.remote_addr not in {'127.0.0.1', '::1'} or
             urlparse(request.host_url).hostname not in {'localhost', '127.0.0.1', '::1'}):
         return jsonify({'error': 'The PHP assessment form is available only on loopback.'}), 403

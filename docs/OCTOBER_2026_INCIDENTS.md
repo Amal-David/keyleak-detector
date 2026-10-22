@@ -215,3 +215,28 @@ load over throughput during a Hacker News spike.
 Primary hosting references: [Render pricing](https://render.com/pricing),
 [Blueprint specification](https://render.com/docs/blueprint-spec),
 [GitHub Pages](https://docs.github.com/en/pages/getting-started-with-github-pages/what-is-github-pages).
+
+### Delivery status
+
+Ready-for-review PR: https://github.com/Amal-David/keyleak-detector/pull/32.
+The Pages configuration was verified through GitHub: the custom domain is
+`keyleakdetector.com`, HTTPS is enforced, and the publishing source is the
+`gh-pages` branch. Frontend files are prepared in `site/php-check/`; the separate
+Pages checkout has not been changed or published.
+
+Render CLI authentication and blueprint validation succeeded. Automatic approval
+review rejected paid service creation because the architecture discussion was
+not explicit authorization to provision an ongoing paid resource. No Render
+checker service was created. Provisioning and publication await explicit approval
+of one $25/month compute instance plus applicable bandwidth/workspace charges.
+After approval: create the service from the reviewed branch with auto-deploy off,
+verify its `/healthz` and public-IP refusal behavior, confirm its actual Render
+URL, then copy the reviewed frontend to `gh-pages/php-check/` and verify the
+custom-domain form against the live API. Do not publish an unconnected URL form.
+
+Automated CodeQL review flagged the intentional user-URL fetch sinks and the
+synthetic credential fixture. The former use validated numeric-address pinning
+(or an explicitly requested CLI proxy), and the fixture contains no real secret.
+These alerts were not dismissed. An explicit TLS 1.2 minimum was added and tested
+alongside certificate verification and original-hostname SNI preservation.
+Further GitHub checks/reviews may remain queued; local proof is not a CI pass.

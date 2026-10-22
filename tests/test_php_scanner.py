@@ -1,5 +1,6 @@
 import unittest
 import socket
+import ssl
 from unittest import mock
 
 import requests
@@ -103,4 +104,5 @@ class PhpScannerTests(unittest.TestCase):
             response.status = 200
             report = scan_php_url("https://example.com")
             context.return_value.wrap_socket.assert_called_once_with(socket_type.return_value, server_hostname="example.com")
+            self.assertEqual(context.return_value.minimum_version, ssl.TLSVersion.TLSv1_2)
             self.assertEqual(report.extra["php_assessment"]["status"], "unknown")

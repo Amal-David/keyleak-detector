@@ -56,6 +56,7 @@ def _fetch_public_headers(url):
         sock.connect(endpoint)  # Connect to the validated numeric address, without a second DNS lookup.
         if parsed.scheme == "https":
             context = ssl.create_default_context(cafile=certifi.where())
+            context.minimum_version = ssl.TLSVersion.TLSv1_2
             sock = context.wrap_socket(sock, server_hostname=hostname)
         connection.sock = sock
         connection.request("GET", parsed.path or "/", headers={"User-Agent": "KeyLeak-PHP-Assessment/1"})
