@@ -44,10 +44,12 @@ CVE-2026-109618 and CVE-2026-109619 and fixes in 8.2.35, 8.3.36, 8.4.27 and
 serving requests, deploy a supported fixed package, and restart every worker.
 Hiding the PHP banner or updating application code does not patch the runtime.
 
-The shared `net_guard.url_block_reason` validates resolved addresses before
-connection. It does not pin the connection IP against DNS rebinding. This is
-why the form remains local; public hosting needs connection-time address
-enforcement, abuse controls and a separate deployment review.
+Direct PHP checks now resolve and validate all returned addresses, then connect
+to a validated numeric address with the original TLS hostname. They refuse
+private/reserved targets, send no ambient credentials, follow no redirects and
+close the socket after ten seconds. An explicitly requested CLI proxy delegates
+connection/DNS handling to that trusted proxy and retains the hostname guard.
+The public service does not accept a proxy setting or expose the legacy scanner.
 
 ## Local incident inputs
 
@@ -121,6 +123,7 @@ Replacing a local `.env` file alone does not revoke an exposed credential.
 ## Verified coverage and implementation boundary
 
 Baseline inspected: origin/main `d97d8c82f28fc924fafb63fb833d7ab5b3ec9025`.
+The PR was rebased onto `ae62056`, preserving the subsequent mainline security updates.
 The dirty primary checkout was also searched for the incident identifiers and
 preserved. Existing mechanisms were reused rather than replaced:
 
@@ -131,11 +134,11 @@ preserved. Existing mechanisms were reused rather than replaced:
 | `feeds.py`, `detectors_dynamic.py` | IOC manifest generation/loading code exists | Not a general, verified resolved-dependency advisory matcher. |
 | `js_library_cves.py` | Small browser-library version table | Does not establish origin PHP patch status. |
 | `models.py`, `reporting.py` | Shared findings, evidence, coverage and output formats | Reused by both new CLI commands. |
-| `net_guard.py`, `proxy.py` | Address guard and explicit proxy mapping | DNS rebinding caveat remains documented above. |
+| `net_guard.py`, `proxy.py` | Address guard and explicit proxy mapping | Direct PHP transport now pins the validated address; explicit proxies are trusted operator inputs. |
 
 No dedicated PHP, Railway, eMudhra or named new malware checks were found in
 those baseline paths. This update adds bounded incident-specific checks, not
-general SCA, EDR, certificate-chain validation or a public scanner service.
+general SCA, EDR or certificate-chain validation.
 
 The new check found KeyLeak's own Poetry lockfile still pinned certifi
 2026.6.17. This update pins certifi 2026.10.19 across Poetry, PEP 621 and
@@ -150,8 +153,8 @@ rotation. None is claimed as implemented by this update.
 ## Validation
 
 - Focused incident, PHP, web-boundary, shared-reporting and dependency tests:
-  **95 passed, 43 subtests passed** after the final browser-policy correction.
-- Broad Python run: **449 passed, 27 failed, 1 skipped, 58 subtests passed**.
+  **105 passed, 53 subtests passed** after the public API and transport review.
+- Broad Python run: **471 passed, 27 failed, 1 skipped, 82 subtests passed**.
   All 27 failure identities reproduced against untouched baseline code: the
   GitHub Action tests encounter macOS Bash empty-array behavior and the browser
   egress test lacks its expected Playwright browser binary. This is not a green
@@ -176,5 +179,39 @@ rotation. None is claimed as implemented by this update.
 
 These results do not establish live PHP exploitability, acceptance/rejection of
 compromised TLS chains by every runtime, or account-specific Railway exposure.
-No package publication, deployment, credential rotation or system trust change
-was performed.
+No package publication, credential rotation, personal exposure audit or system
+trust change is part of this work.
+
+## Public launch architecture
+
+The user's goal is a checker for other people's PHP projects, not an audit of
+their own infrastructure. Keep the existing GitHub Pages domain,
+`keyleakdetector.com`, and serve the frontend at `/php-check/`. GitHub Pages
+cannot run Python or fetch arbitrary origin headers on behalf of browsers.
+The frontend therefore calls a dedicated Render API; a version-only comparison
+runs in the browser, with parity tests against the Python advisory policy.
+
+`render.yaml` defines one `1c-2g` service (1 CPU / 2 GB RAM), currently listed
+at **$25/month compute**. Workspace subscriptions and bandwidth usage are
+separate charges: this is not a guaranteed $25 total bill. Autoscaling and
+automatic deployments are disabled. No database, browser runtime or proxy
+scanner is installed. Build dependencies are in `deploy/php-check/requirements.txt`.
+
+The public application is `keyleak.php_service:app`, served by one Gunicorn
+worker with eight threads. It exposes only the checker, JavaScript, `/healthz`
+and `/api/check`. It caps request bodies at 4 KiB, concurrent assessments at
+four, total admitted assessments at 120/minute, and repeated target hostnames
+at one per 30 seconds. Target identifiers in the bounded in-memory limiter are
+salted hashes. The endpoint takes a permission acknowledgement and does not
+log submitted URLs, headers or bodies. Provider access metadata may still exist.
+CORS permits the existing KeyLeak domain; it is not treated as authentication.
+
+A URL result is banner evidence, never a remote proof of vulnerability or
+safety. Redirects, hidden versions, vendor suffixes, conflicting banners and
+request failures remain unknown. The tool does not bypass CDNs, probe phpinfo
+paths or send malformed/OOM payloads. Rate limits favor bounded cost and target
+load over throughput during a Hacker News spike.
+
+Primary hosting references: [Render pricing](https://render.com/pricing),
+[Blueprint specification](https://render.com/docs/blueprint-spec),
+[GitHub Pages](https://docs.github.com/en/pages/getting-started-with-github-pages/what-is-github-pages).

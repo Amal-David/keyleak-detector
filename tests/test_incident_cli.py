@@ -35,10 +35,7 @@ class IncidentCliTests(unittest.TestCase):
             self.assertTrue(any(f["detector_id"] == "incident:railway-rotation" for f in payload["findings"]))
 
     def test_unknown_php_is_not_success(self):
-        with mock.patch("keyleak.php_scanner.url_block_reason", return_value=None), mock.patch("requests.Session") as session:
-            response = session.return_value.__enter__.return_value.get.return_value.__enter__.return_value
-            response.headers = {}
-            response.status_code = 200
+        with mock.patch("keyleak.php_scanner._fetch_public_headers", return_value=({}, 200)):
             report = scan_php_url("https://example.com")
         output = io.StringIO()
         with mock.patch("keyleak.php_scanner.scan_php_url", return_value=report), contextlib.redirect_stdout(output):

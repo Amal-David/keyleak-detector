@@ -4,9 +4,15 @@ from __future__ import annotations
 
 import re
 import shlex
+import http.client
+import ipaddress
+import socket
+import ssl
+import threading
 from urllib.parse import urlsplit
 
 import requests
+import certifi
 
 from .models import Evidence, Finding, build_coverage
 from .net_guard import url_block_reason
@@ -18,6 +24,51 @@ from .reporting import build_report
 PHP_REFERENCE = "https://www.php.net/archive/2026.php#2026-10-21-5"
 PHP_CVES = ["CVE-2026-109618", "CVE-2026-109619"]
 PHP_FIXED = {(8, 2): 35, (8, 3): 36, (8, 4): 27, (8, 5): 12}
+
+
+def _fetch_public_headers(url):
+    parsed = urlsplit(url)
+    hostname = parsed.hostname.encode("idna").decode("ascii")
+    port = parsed.port or (443 if parsed.scheme == "https" else 80)
+    addresses = socket.getaddrinfo(hostname, port, type=socket.SOCK_STREAM)
+    if not addresses:
+        raise ValueError("The target did not resolve to a public address.")
+    for address in addresses:
+        ip = ipaddress.ip_address(address[4][0])
+        if (not ip.is_global or ip.is_multicast or
+                (isinstance(ip, ipaddress.IPv6Address) and (ip.sixtofour or ip.teredo))):
+            raise ValueError("Only public internet addresses are permitted.")
+    family, _, _, _, endpoint = addresses[0]
+    connection = http.client.HTTPConnection(hostname, port, timeout=5)
+    sock = socket.socket(family, socket.SOCK_STREAM)
+
+    def expire():
+        try:
+            sock.shutdown(socket.SHUT_RDWR)
+        except OSError:
+            pass
+
+    deadline = threading.Timer(10, expire)
+    deadline.daemon = True
+    deadline.start()
+    try:
+        sock.settimeout(5)
+        sock.connect(endpoint)  # Connect to the validated numeric address, without a second DNS lookup.
+        if parsed.scheme == "https":
+            context = ssl.create_default_context(cafile=certifi.where())
+            sock = context.wrap_socket(sock, server_hostname=hostname)
+        connection.sock = sock
+        connection.request("GET", parsed.path or "/", headers={"User-Agent": "KeyLeak-PHP-Assessment/1"})
+        response = connection.getresponse()
+        headers = {}
+        for name, value in response.getheaders():
+            name = name.lower()
+            headers[name] = headers[name] + ", " + value if name in headers else value
+        return headers, response.status
+    finally:
+        deadline.cancel()
+        connection.close()
+        sock.close()
 
 
 def assess_php_headers(headers, status_code=200):
@@ -76,17 +127,21 @@ def scan_php_url(url: str, *, proxy=None, offline=False):
         valid = False
     if not valid:
         raise ValueError("Supply an HTTP(S) URL on port 80 or 443 without credentials, query, or fragment.")
-    if url_block_reason(url, allow_private=False):
-        raise ValueError("The PHP checker requires a resolvable public HTTP(S) target.")
     target = redact_url(url)
     try:
-        with requests.Session() as session:
-            session.trust_env = False  # Do not send ambient proxy settings or .netrc credentials.
-            with session.get(url, allow_redirects=False, stream=True, timeout=(5, 10),
-                             proxies=requests_proxies(proxy),
-                             headers={"User-Agent": "KeyLeak-PHP-Assessment/1"}) as response:
-                result = assess_php_headers(response.headers, response.status_code)
-    except requests.RequestException:
+        if proxy:
+            if url_block_reason(url, allow_private=False):
+                raise ValueError("The PHP checker requires a resolvable public HTTP(S) target.")
+            with requests.Session() as session:
+                session.trust_env = False
+                with session.get(url, allow_redirects=False, stream=True, timeout=(5, 10),
+                                 proxies=requests_proxies(proxy),
+                                 headers={"User-Agent": "KeyLeak-PHP-Assessment/1"}) as response:
+                    result = assess_php_headers(response.headers, response.status_code)
+        else:
+            headers, status_code = _fetch_public_headers(url)
+            result = assess_php_headers(headers, status_code)
+    except (requests.RequestException, OSError, http.client.HTTPException):
         result = {"status": "unknown", "version": "", "cves": PHP_CVES,
                   "reason": "The HTTP/TLS request failed; no patch status could be established."}
     potential = result["status"] == "potentially_affected"

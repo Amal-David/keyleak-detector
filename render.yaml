@@ -1,0 +1,14 @@
+services:
+  - type: web
+    name: keyleak-php-check
+    runtime: python
+    plan: 1c-2g
+    numInstances: 1
+    region: oregon
+    autoDeployTrigger: off
+    buildCommand: pip install --no-cache-dir -r deploy/php-check/requirements.txt
+    startCommand: gunicorn keyleak.php_service:app --bind 0.0.0.0:$PORT --workers 1 --threads 8 --timeout 20 --backlog 32 --limit-request-line 4096 --limit-request-fields 30 --limit-request-field_size 4096 --no-control-socket
+    healthCheckPath: /healthz
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.15
