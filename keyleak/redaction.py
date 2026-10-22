@@ -6,6 +6,7 @@ import hashlib
 import hmac
 import os
 from typing import Optional
+from urllib.parse import unquote_plus
 
 
 SECRET_QUERY_KEYS = {
@@ -116,7 +117,7 @@ def redact_url(url: object) -> str:
                 value_end = len(part)
             key, value = part[start + 1:equals], part[value_start:value_end]
             output.append(part[consumed:value_start])
-            output.append(redact_value(value) if key.lower() in SECRET_QUERY_KEYS else value)
+            output.append(redact_value(value) if unquote_plus(key).lower() in SECRET_QUERY_KEYS else value)
             consumed = value_end
             start = part.find("?", value_end)
         output.append(part[consumed:])
