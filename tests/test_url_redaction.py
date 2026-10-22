@@ -16,7 +16,9 @@ class UrlRedactionTests(unittest.TestCase):
             f"https://example.com/?={marker}?token={marker}": f"https://example.com/?={marker}?token={masked}",
             "https://example.com/?token=&page=2&&end": "https://example.com/?token=&page=2&&end",
             f"https://example.com/?token={marker}?nested=1": "https://example.com/?token=" + redact_value(marker + "?nested=1"),
-            "https://example.com/?page=a%2Bb+z&%74oken=x": "https://example.com/?page=a%2Bb+z&%74oken=x",
+            "https://example.com/?page=a%2Bb+z&%74oken=x": "https://example.com/?page=a%2Bb+z&%74oken=[redacted]",
+            f"https://example.com/?%54oKeN={marker}": f"https://example.com/?%54oKeN={masked}",
+            f"https://example.com/?%61pi%5Fkey={marker}&%70age=a%2Bb+z": f"https://example.com/?%61pi%5Fkey={masked}&%70age=a%2Bb+z",
         }
         for original, expected in cases.items():
             with self.subTest(original=original):
