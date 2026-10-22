@@ -155,8 +155,8 @@ rotation. None is claimed as implemented by this update.
 ## Validation
 
 - Focused incident, PHP, web-boundary, shared-reporting and dependency tests:
-  **106 passed, 57 subtests passed** after the public API and transport review.
-- Broad Python run: **472 passed, 27 failed, 1 skipped, 86 subtests passed**.
+  **110 passed, 68 subtests passed** after final alert and Unicode-path repairs.
+- Broad Python run: **476 passed, 27 failed, 1 skipped, 97 subtests passed**.
   All 27 failure identities reproduced against untouched baseline code: the
   GitHub Action tests encounter macOS Bash empty-array behavior and the browser
   egress test lacks its expected Playwright browser binary. This is not a green
@@ -361,3 +361,11 @@ regressions cover the change. This alert was repaired rather than dismissed.
 The subsequent Unicode-path review comment was also valid: paths are now
 percent-encoded while preserving existing escapes and URI delimiters, with an
 exact outgoing-request regression test.
+
+Final alert dispositions: 12 (URL-redaction work), 19 (old fetch fingerprint),
+20 (proxy fetch), and 21 (TLS minimum) were fixed through code/analysis. Alerts
+22 (literal synthetic test credential) and 23/24 (the same IP-pinned fetch sink
+before/after URI encoding) were individually marked false positive with the
+specific QA evidence. The test credential and all CodeQL rules remain in place.
+GitHub default-setup analysis does not permit an explicit workflow retry here;
+the normal analysis of this evidence commit refreshes its alert-summary check.
