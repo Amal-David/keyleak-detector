@@ -153,8 +153,8 @@ rotation. None is claimed as implemented by this update.
 ## Validation
 
 - Focused incident, PHP, web-boundary, shared-reporting and dependency tests:
-  **105 passed, 53 subtests passed** after the public API and transport review.
-- Broad Python run: **471 passed, 27 failed, 1 skipped, 82 subtests passed**.
+  **106 passed, 57 subtests passed** after the public API and transport review.
+- Broad Python run: **472 passed, 27 failed, 1 skipped, 86 subtests passed**.
   All 27 failure identities reproduced against untouched baseline code: the
   GitHub Action tests encounter macOS Bash empty-array behavior and the browser
   egress test lacks its expected Playwright browser binary. This is not a green
@@ -219,20 +219,44 @@ Primary hosting references: [Render pricing](https://render.com/pricing),
 ### Delivery status
 
 Ready-for-review PR: https://github.com/Amal-David/keyleak-detector/pull/32.
-The Pages configuration was verified through GitHub: the custom domain is
-`keyleakdetector.com`, HTTPS is enforced, and the publishing source is the
-`gh-pages` branch. Frontend files are prepared in `site/php-check/`; the separate
-Pages checkout has not been changed or published.
+The user explicitly approved the paid Render service on 22 October 2026. The
+checker is live at https://keyleakdetector.com/php-check/ with its backend at
+https://keyleak-php-check.onrender.com. The domain remains on the existing
+`gh-pages` publishing source with HTTPS enforced; no DNS migration was needed.
 
-Render CLI authentication and blueprint validation succeeded. Automatic approval
-review rejected paid service creation because the architecture discussion was
-not explicit authorization to provision an ongoing paid resource. No Render
-checker service was created. Provisioning and publication await explicit approval
-of one $25/month compute instance plus applicable bandwidth/workspace charges.
-After approval: create the service from the reviewed branch with auto-deploy off,
-verify its `/healthz` and public-IP refusal behavior, confirm its actual Render
-URL, then copy the reviewed frontend to `gh-pages/php-check/` and verify the
-custom-domain form against the live API. Do not publish an unconnected URL form.
+Deployment receipt:
+
+- Render service: `srv-dbd42b7avr4c73ca78tg`; one `1c-2g` instance in Oregon,
+  automatic deployments off, no autoscaling configured. Compute is USD 25/month;
+  the approved applicable bandwidth/workspace fees remain separate.
+- Verified backend code: `f3395dcc80d432002cd0ff05f8477bdbd90c0822`, deployment
+  `dep-dbd44m3rjlhs73d341cg`, status `live`. The initial service deployment was
+  replaced by this revision after the final review fixes.
+- Published Pages commit: `cbfdc9fb7796e2d19fce67c886a8ee8082d7e31b`. It adds
+  `/php-check/`, a homepage navigation link and a sitemap entry while preserving
+  the existing `CNAME`. The build API reported `built` for that commit.
+- Live HTML and JavaScript bytes exactly matched `site/php-check/` in the reviewed
+  source. HTML SHA-256: `e2de9bf99a64ab92fa7e7498bc079a84f2f7297609482d5d0150f4d906864bbf`;
+  JavaScript SHA-256: `1f59c5c9303022a4999725f97c758843d90cbbdacdc3823a7afb4123a8c52d08`.
+- Live checks passed: health 200, no legacy `/scan` route (404), Pages CORS
+  preflight 204, missing permission 400, invalid scheme 400 without consuming the
+  target quota, private target 400, foreign origin 403, ordinary owned-target
+  HTTPS assessment 200, and repeated-target limit 429 with Retry-After.
+- Real Chrome passed the custom-domain URL flow with its live API, desktop and
+  390px mobile layouts, and browser-side version comparisons for 8.3.35,
+  8.4.27 and a vendor-suffixed version. No page JavaScript errors occurred.
+  Only the user's own public site was used as a live scan target. It correctly
+  returned unknown; no vulnerable third-party site or exploit was tested.
+
+Final review repairs also cover HTTPS Host authority formatting, URL validation
+before target-quota reservation, peer dependencies, unsupported npm lockfile
+structures, missing root manifests when a CA bundle is supplied, and offline
+CLI rejection before process-wide socket changes. All have regression coverage.
+
+Rollback: suspend this new service in its Render dashboard and revert Pages
+commit `cbfdc9f` with a normal revert. Do not change unrelated services or force
+push the publishing branch. The source PR remains unmerged; the backend is
+deliberately pinned to the tested PR revision with automatic deploys disabled.
 
 Automated CodeQL review flagged the intentional user-URL fetch sinks and the
 synthetic credential fixture. The former use validated numeric-address pinning
