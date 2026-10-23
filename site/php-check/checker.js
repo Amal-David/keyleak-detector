@@ -21,6 +21,7 @@ if (typeof document !== "undefined") {
     const titles = {unknown: "Patch status unknown", potentially_affected: "Potentially affected", patched_version_reported: "Patched version reported"};
     const result = document.getElementById("result");
     const error = document.getElementById("error");
+    let activeController = null;
     function show(assessment) {
         if (!titles[assessment.status]) throw new Error("The checker returned an invalid result.");
         result.hidden = false;
@@ -31,17 +32,24 @@ if (typeof document !== "undefined") {
     }
     document.getElementById("version-form").addEventListener("submit", event => {
         event.preventDefault();
+        if (activeController) activeController.abort();
+        activeController = null;
+        const button = document.getElementById("check-url");
+        button.disabled = false;
+        button.textContent = "Check PHP version";
         error.textContent = "";
         show(assessPHPVersion(document.getElementById("version").value));
     });
     document.getElementById("url-form").addEventListener("submit", async event => {
         event.preventDefault();
         const button = document.getElementById("check-url");
+        if (activeController) activeController.abort();
         button.disabled = true;
         button.textContent = "Checking response headers…";
         result.hidden = true;
         error.textContent = "";
         const controller = new AbortController();
+        activeController = controller;
         const deadline = setTimeout(() => controller.abort(), 15000);
         const endpoint = location.hostname.endsWith(".onrender.com") ? "/api/check" : "https://keyleak-php-check.onrender.com/api/check";
         try {
@@ -49,15 +57,21 @@ if (typeof document !== "undefined") {
                 headers: {"Content-Type": "application/json"},
                 body: JSON.stringify({url: document.getElementById("url").value, authorized: document.getElementById("authorized").checked})});
             const assessment = await response.json().catch(() => ({error: "The checker is temporarily unavailable. Try the version comparison below."}));
+            if (activeController !== controller) return;
             if (!response.ok) throw new Error(assessment.error || "The checker could not complete this request.");
             if (assessment.error) throw new Error(assessment.error);
             show(assessment);
         } catch (failure) {
-            error.textContent = failure.name === "AbortError" ? "The check timed out. Patch status is unknown; try the version comparison below." : failure.message;
+            if (activeController === controller) {
+                error.textContent = failure.name === "AbortError" ? "The check timed out. Patch status is unknown; try the version comparison below." : failure.message;
+            }
         } finally {
             clearTimeout(deadline);
-            button.disabled = false;
-            button.textContent = "Check PHP version";
+            if (activeController === controller) {
+                activeController = null;
+                button.disabled = false;
+                button.textContent = "Check PHP version";
+            }
         }
     });
 }
