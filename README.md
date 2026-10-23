@@ -4,7 +4,7 @@
 [![GitHub](https://img.shields.io/github/stars/Amal-David/keyleak-detector?style=flat&logo=github)](https://github.com/Amal-David/keyleak-detector)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![GitHub Action](https://img.shields.io/badge/GitHub_Action-available-2088FF?logo=githubactions&logoColor=white)](docs/github-action.md)
-[![Chrome Extension](https://img.shields.io/badge/Chrome-Extension-4285F4?logo=googlechrome&logoColor=white)](extension/)
+[![Chrome Extension](https://img.shields.io/badge/Chrome-Extension-4288FF?logo=googlechrome&logoColor=white)](extension/)
 [![Python](https://img.shields.io/badge/Python-3.12%2B-3776AB?logo=python&logoColor=white)](https://www.python.org/)
 
 KeyLeak finds exposed credentials in browser traffic, local projects, build
@@ -85,10 +85,13 @@ artifacts; encrypted and runtime-assembled secrets can be missed. Limits and uns
 as incomplete coverage, never as a clean result. See the [binary guide](docs/BINARY_ARTIFACT_SCANNING.md)
 for supported formats, caps, and output examples.
 
-Full site scans can use crt.sh, DNS, and pinned `subfinder` for subdomain
-discovery. If you do not want automatic tool installation, pass
-`--no-auto-install` or set `KEYLEAK_NO_AUTO_INSTALL=1`. `keyleak doctor`
-reports which discovery tools are available.
+Full site scans can use crt.sh, DNS, and installed `subfinder` / `amass` for
+subdomain discovery. They do **not** install missing tools by default. Operators
+can explicitly opt in with `--auto-install`; `--no-auto-install` remains
+supported. `KEYLEAK_NO_AUTO_INSTALL=1` or `KEYLEAK_MANAGED_INSTALL=1` vetoes
+installation even with explicit consent. `keyleak doctor` reports available
+discovery tools. See [distribution readiness](docs/DISTRIBUTION.md) for the
+migration note and package-manager contract.
 
 ## Findings and safe use
 
@@ -178,6 +181,14 @@ require a separate submission.
 - [Binary artifact scanning](docs/BINARY_ARTIFACT_SCANNING.md)
 - [Security model](docs/SECURITY_MODEL.md)
 - [Agent scan runbook](docs/AGENT_SCAN_HOWTO.md)
+
+## Security and maintenance
+
+Amal David (`@Amal-David`) is the project and security maintainer. See
+[SECURITY.md](SECURITY.md#security-maintainer) for responsibilities and private
+vulnerability reporting, and [MAINTAINERS.md](MAINTAINERS.md) for review ownership.
+[Distribution readiness](docs/DISTRIBUTION.md) tracks packaging checks and
+remaining work; it does not imply official distribution or program acceptance.
 
 ## License
 
