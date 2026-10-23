@@ -244,8 +244,7 @@ class WebScanSecurityTests(unittest.TestCase):
             result = asyncio.run(web_app.scan())
             response, status = result if isinstance(result, tuple) else (result, 200)
             payload = response.get_json()
-            events = ""
-            if status == 200:
+            with mock.patch.object(web_app, "_SSE_IDLE_TIMEOUT", 0):
                 events = web_app.scan_events("fixture-scan").get_data(as_text=True)
         return payload, status, events, playwright, browser
 
@@ -313,6 +312,29 @@ class WebScanSecurityTests(unittest.TestCase):
             self.assertNotIn("/srv/internal", output)
         self.assertIn("/srv/internal", "\n".join(captured.output))
 
+    def test_legacy_scan_failures_finish_sse_with_the_public_error(self):
+        for phase, failure, expected_status in (
+            ("context", asyncio.TimeoutError(), 408),
+            ("context", web_app.requests.exceptions.ConnectionError("private network diagnostic"), 400),
+            ("context", RuntimeError("private context diagnostic"), 500),
+            ("page", RuntimeError("private page diagnostic"), 500),
+        ):
+            with self.subTest(phase=phase, failure=type(failure).__name__):
+                manager, playwright, browser = self._browser()
+                if phase == "context":
+                    browser.new_context.side_effect = failure
+                else:
+                    browser.new_context.return_value.new_page.return_value.content.side_effect = failure
+                with mock.patch.object(self, "_browser", return_value=(manager, playwright, browser)):
+                    payload, status, events, *_ = self._scan()
+                self.assertEqual(status, expected_status)
+                messages = [json.loads(line.removeprefix("data: "))
+                            for line in events.splitlines() if line.startswith("data: ")]
+                self.assertEqual(messages[-1], {"type": "error", "message": payload["error"]})
+                self.assertNotIn("private", events)
+                self.assertEqual(self.handler._auth_scopes, {})
+                self.assertFalse(web_app._legacy_scan_lock.locked())
+
     def test_stop_proxy_failure_does_not_expose_exception_text(self):
         thread = SimpleNamespace(is_alive=lambda: True, join=mock.Mock(
             side_effect=RuntimeError("private proxy path /srv/internal/fixture.py")))
@@ -325,6 +347,21 @@ class WebScanSecurityTests(unittest.TestCase):
         self.assertEqual(status, 500)
         self.assertEqual(response.get_json()["error"], "Unable to stop the proxy. Check the server logs for details.")
         self.assertNotIn("/srv/internal", response.get_data(as_text=True))
+
+    def test_scan_failure_without_a_stream_still_returns_json(self):
+        with (
+            mock.patch.object(web_app, "mitm_running", False),
+            mock.patch.object(web_app, "start_proxy_in_thread", side_effect=RuntimeError("private proxy diagnostic")),
+            self.assertLogs(web_app.logger, level="ERROR"),
+            web_app.app.test_request_context("/scan", method="POST", json={"url": TARGET}),
+        ):
+            response, status = asyncio.run(web_app.scan())
+        self.assertEqual(status, 500)
+        self.assertEqual(response.get_json(), {
+            "error": "An unexpected error occurred. Check the server logs for details.",
+            "status": "error",
+        })
+        self.assertFalse(web_app._legacy_scan_lock.locked())
 
     def test_normalized_auth_values_are_redacted_from_errors(self):
         with self.assertLogs(web_app.logger, level="ERROR") as captured:

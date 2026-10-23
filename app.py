@@ -1548,6 +1548,13 @@ def _emit_progress(scan_id: Optional[str], message: str):
     if scan_id and scan_id in _scan_queues:
         _scan_queues[scan_id].put({'type': 'progress', 'message': message})
 
+
+def _scan_error_response(scan_id: Optional[str], payload: Dict[str, Any], status_code: int):
+    if scan_id and scan_id in _scan_queues:
+        _scan_queues[scan_id].put({'type': 'error', 'message': payload['error']})
+    return jsonify(payload), status_code
+
+
 @app.route('/scan/events/<scan_id>')
 def scan_events(scan_id):
     """SSE endpoint for real-time scan progress."""
@@ -1906,9 +1913,9 @@ async def scan():
             except Exception as e:
                 safe_error = _safe_scan_error(e, auth_config, auth_scope)
                 logger.error("Error during page interaction: %s", safe_error)
-                return jsonify({
+                return _scan_error_response(scan_id, {
                     'error': 'Failed to load page. The website may be unreachable or blocking automated access.'
-                }), 500
+                }, 500)
                 
             finally:
                 try:
@@ -2044,17 +2051,17 @@ async def scan():
         return jsonify(response_data)
 
     except asyncio.TimeoutError:
-        return jsonify({
+        return _scan_error_response(scan_id, {
             'error': 'Scan timeout: The website took too long to respond. Please try again or scan a different URL.',
             'status': 'error'
-        }), 408
+        }, 408)
         
     except requests.exceptions.RequestException as e:
         logger.error("Network error during scan: %s", _safe_scan_error(e, auth_config, auth_scope))
-        return jsonify({
+        return _scan_error_response(scan_id, {
             'error': f'Network error: Unable to reach {_safe_scan_error(url, auth_config, auth_scope)}. Please check the URL and try again.',
             'status': 'error'
-        }), 400
+        }, 400)
         
     except Exception as e:
         error_message = _safe_scan_error(e, auth_config, auth_scope)
@@ -2070,10 +2077,10 @@ async def scan():
         else:
             error_message = 'An unexpected error occurred. Check the server logs for details.'
             
-        return jsonify({
+        return _scan_error_response(scan_id, {
             'error': error_message,
             'status': 'error'
-        }), 500
+        }, 500)
     finally:
         try:
             request_handler.release_auth_scope(auth_scope)
