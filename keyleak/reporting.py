@@ -11,6 +11,7 @@ from .attack_chains import correlate
 from .models import Finding, ScanReport, SEVERITY_ORDER, finding_from_legacy
 from .privacy_filter import scrub_snippet
 from .redaction import redact_url
+from . import __version__
 
 
 def _scrub_finding_pii(finding: Finding) -> Finding:
@@ -45,7 +46,9 @@ def build_report(
     profile: str = "launch-gate",
     packs: Optional[Iterable[str]] = None,
     provenance: Optional[Dict[str, List[str]]] = None,
+    scan_options: Optional[Dict[str, Any]] = None,
 ) -> ScanReport:
+    """Normalize findings and attach replay metadata without promoting static evidence to proof."""
     normalized = normalize_findings(findings)
     normalized.extend(_attack_vector_findings(attack_vectors or {}))
     normalized.sort(key=lambda finding: SEVERITY_ORDER.get(finding.severity, 0), reverse=True)
@@ -64,12 +67,19 @@ def build_report(
     }
     if chains:
         extra["attack_chains"] = [vector.to_dict() for vector in chains]
+    if scan_options is not None:
+        extra["scan_manifest"] = {"schema_version": 1, "scanner_version": __version__, "options": scan_options,
+                                  "artifacts": [], "limitations": []}
+        if scan_options.get("scan_binaries"):
+            from .binary_scanner import binary_scan_limits
+            extra["scan_manifest"]["limits"] = binary_scan_limits()
+            extra["scan_manifest"]["limitations"] = ["Static extraction only; encrypted and runtime-constructed values can be missed."]
 
     return ScanReport(
         target=target,
         scan_mode=scan_mode,
         findings=normalized,
-        retest_command=_retest_command(target, scan_mode),
+        retest_command=_retest_command(target, scan_mode, scan_options),
         extra=extra,
     )
 
@@ -96,6 +106,7 @@ def format_json(report: ScanReport) -> str:
 
 
 def format_markdown(report: ScanReport) -> str:
+    """Render remediation and coverage alongside redacted findings and extraction locations."""
     payload = report.to_dict()
     lines = [
         f"# KeyLeak Report: {payload['verdict']['label']}",
@@ -109,6 +120,7 @@ def format_markdown(report: ScanReport) -> str:
         "",
     ]
 
+    lines.extend(_coverage_lines(payload))
     chains = payload.get("attack_chains") or []
     if chains:
         lines.append("## Attack chains")
@@ -149,6 +161,8 @@ def format_markdown(report: ScanReport) -> str:
                 f"- Evidence: `{item['evidence']['redacted_value']}`",
             ]
         )
+        if item["evidence"].get("byte_offset") is not None:
+            lines.append(f"- Extraction: {_binary_location(item['evidence'])}")
         remediation = _remediation_details(item)
         if remediation["structured"]:
             lines.extend(
@@ -188,6 +202,41 @@ def _remediation_details(item: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
+def _coverage_lines(payload: Dict[str, Any]) -> List[str]:
+    """Describe completed work, exclusions, and limits without treating an empty scope as proof."""
+    coverage = payload.get("coverage")
+    if not isinstance(coverage, dict):
+        return []
+    lines = [f"Coverage: {coverage.get('status', 'unknown')}; {coverage.get('completed', 0)}/{coverage.get('attempted', 0)} checks completed; "
+             f"{coverage.get('skipped', 0)} skipped, {coverage.get('failed', 0)} failed."]
+    inventory = payload.get("inventory")
+    if isinstance(inventory, dict):
+        lines.append(f"Inventory: {inventory.get('discovered', 0)} discovered files; {inventory.get('selected', 0)} selected; "
+                     f"{inventory.get('unsupported', 0)} unsupported; {inventory.get('excluded', 0)} excluded; "
+                     f"{inventory.get('excluded_directories', 0)} excluded directories.")
+    reasons = coverage.get("reasons", [])
+    if isinstance(reasons, list):
+        lines.extend(str(reason) for reason in reasons)
+    manifest = payload.get("scan_manifest")
+    if isinstance(manifest, dict) and isinstance(manifest.get("limitations", []), list):
+        lines.extend(str(reason) for reason in manifest.get("limitations", []))
+    return lines
+
+
+def _binary_location(evidence: Dict[str, Any]) -> str:
+    """Describe original byte spans separately from offsets within decoded text."""
+    text = f"Byte offset {evidence['byte_offset']}"
+    if evidence.get("byte_length") is not None:
+        text += f", length {evidence['byte_length']}"
+    extraction = evidence.get("extraction") or {}
+    if extraction:
+        text += f"; {extraction.get('encoding', 'unknown encoding')}"
+        transforms = [step["encoding"] for step in extraction.get("transforms", [])]
+        if transforms:
+            text += f"; decoded via {' -> '.join(transforms)} (decoded offset {extraction.get('decoded_offset', 0)})"
+    return text
+
+
 def format_html(report: ScanReport) -> str:
     """Return a self-contained HTML vulnerability report."""
     payload = report.to_dict()
@@ -207,7 +256,7 @@ def format_html(report: ScanReport) -> str:
         verdict_badge = "Review"
     else:
         verdict_cls = "safe"
-        verdict_badge = "Safe to Ship"
+        verdict_badge = "Safe to Ship" if verdict["label"] == "SAFE TO SHIP" else verdict["label"].capitalize()
 
     # --- findings cards ---
     finding_cards = []
@@ -218,6 +267,8 @@ def format_html(report: ScanReport) -> str:
         finding_type = e(item["type"])
         risk = e(item["risk_reason"])
         evidence_text = e(item["evidence"]["redacted_value"])
+        if item["evidence"].get("byte_offset") is not None:
+            evidence_text += "<br>" + e(_binary_location(item["evidence"]))
         remediation = _remediation_details(item)
         if remediation["structured"]:
             remediation_html = (
@@ -394,6 +445,8 @@ def format_html(report: ScanReport) -> str:
     <div class="stat"><div class="stat-num low">{summary["low_severity"]}</div><div class="stat-label">Low</div></div>
   </div>
 
+  <div class="section">{''.join('<p>' + e(line) + '</p>' for line in _coverage_lines(payload))}</div>
+
 {chains_section}  <div class="section">
     <div class="section-title">Findings</div>
 
@@ -411,6 +464,7 @@ def format_html(report: ScanReport) -> str:
 
 
 def format_sarif(report: ScanReport) -> str:
+    """Export binary byte locations and run coverage without inventing source line positions."""
     rules = {}
     results = []
 
@@ -446,11 +500,11 @@ def format_sarif(report: ScanReport) -> str:
                         "physicalLocation": {
                             "artifactLocation": {"uri": item["source"]},
                             "region": {
-                                "startLine": item["evidence"].get("line") or 1,
                                 **(
-                                    {"byteOffset": item["evidence"]["byte_offset"]}
+                                    {"byteOffset": item["evidence"]["byte_offset"],
+                                     **({"byteLength": item["evidence"]["byte_length"]} if item["evidence"].get("byte_length") is not None else {})}
                                     if item["evidence"].get("byte_offset") is not None
-                                    else {}
+                                    else {"startLine": item["evidence"].get("line") or 1}
                                 ),
                             },
                         }
@@ -462,6 +516,7 @@ def format_sarif(report: ScanReport) -> str:
                 },
                 "properties": {
                     "category": item.get("category") or "",
+                    **({"extraction": item["evidence"]["extraction"]} if item["evidence"].get("extraction") else {}),
                     **({"remediation_v2": sarif_remediation} if sarif_remediation is not None else {}),
                 },
             }
@@ -480,6 +535,7 @@ def format_sarif(report: ScanReport) -> str:
                     }
                 },
                 "results": results,
+                "properties": {key: report.extra[key] for key in ("coverage", "inventory", "scan_manifest") if key in report.extra},
             }
         ],
     }
@@ -487,6 +543,7 @@ def format_sarif(report: ScanReport) -> str:
 
 
 def report_to_text(report: ScanReport) -> str:
+    """Summarize coverage and up to ten findings while retaining the total finding count."""
     payload = report.to_dict()
     summary = payload["summary"]
     lines = [
@@ -498,11 +555,14 @@ def report_to_text(report: ScanReport) -> str:
         f"Packs: {', '.join(payload.get('packs') or []) or 'none'}",
     ]
 
+    lines.extend(_coverage_lines(payload))
     for finding in payload["findings"][:10]:
         lines.append(
             f"- {finding['severity'].upper()} {finding['type']} at {finding['source']}: "
             f"{finding['evidence']['redacted_value']}"
         )
+        if finding["evidence"].get("byte_offset") is not None:
+            lines.append("  " + _binary_location(finding["evidence"]))
     if len(payload["findings"]) > 10:
         lines.append(f"... {len(payload['findings']) - 10} more findings")
     return "\n".join(lines)
@@ -567,9 +627,15 @@ def _pack_summary(findings: Iterable[Finding], selected_packs: Iterable[str]) ->
     return summary
 
 
-def _retest_command(target: str, scan_mode: str) -> str:
+def _retest_command(target: str, scan_mode: str, scan_options: Optional[Dict[str, Any]] = None) -> str:
+    """Quote replay arguments and retain the effective local detector and extraction selection."""
     safe_target = shlex.quote(redact_url(target))
     if scan_mode == "local":
+        if scan_options is not None:
+            command = ["keyleak", "local", target, "--include", ",".join(scan_options["include"]),
+                       "--launch-profile", scan_options["launch_profile"], "--packs", ",".join(scan_options["packs"])]
+            command.extend("--" + name.replace("_", "-") for name in ("scan_node_modules", "scan_dist", "scan_binaries") if scan_options[name])
+            return shlex.join(command)
         return f"keyleak local {safe_target}"
     if scan_mode == "browser":
         return f"keyleak browser-scan {safe_target}"

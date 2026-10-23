@@ -182,6 +182,29 @@ Honest record of every field KeyLeak captures, where it lives, how long, and why
 - Apart from the explicit redacted `keyleak audit` artifact directory, findings are not persisted to disk by KeyLeak. Delete the audit output directory to erase that local record; do not place it in shared storage without an appropriate retention policy.
 - No outbound network call is made under `--offline` mode (Wave 1.5).
 
+### Local artifact evidence
+
+Binary scans remain local and do not execute analyzed files. Common decoding and
+nested archive traversal share explicit work limits; unsupported members and
+exhausted scope are reported as incomplete. Extraction evidence identifies original
+byte spans and transforms without retaining decoded values. ELF section addresses
+are declared static metadata, not proof of runtime use.
+
+Archive inputs and nested containers are copied into bounded temporary snapshots,
+hashed, and scanned from those snapshots. Temporary snapshots and extracted files
+are removed when the scan exits. Reports retain member digests, effective scan
+options, limits, coverage, and redacted findings. Retest commands preserve scope;
+changed artifacts, suppression files, environment settings, or scanner versions
+can produce different results.
+
+Version-2 envelopes bind the complete report and envelope metadata. With
+`KEYLEAK_COC_KEY`, HMAC authenticates the envelope; without it, hashes provide
+integrity checking only. Consumers requiring authentication must call
+`verify_envelope(..., require_signature=True)`. Version-1 verification remains
+available for shipped reports and only binds findings plus the original envelope
+fields. It does not protect coverage or other report metadata. Neither format proves
+external provenance or legal admissibility.
+
 ### Right to erasure
 
 Deleting a captured scan is the operator's responsibility. Remove redirected report files and delete `.keyleak/audits/<timestamp>-<target>-<run-id>/` or the configured `--out-dir` to erase durable audit artifacts. The Chrome extension's `chrome.storage.local` data is cleared by uninstalling the extension or via the popup's "clear" control.

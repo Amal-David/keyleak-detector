@@ -23,6 +23,7 @@ def finding_fingerprint(
     request_url: object = "",
     line: Optional[object] = None,
     byte_offset: Optional[object] = None,
+    decoded_offset: Optional[int] = None,
 ) -> str:
     """Return a stable report fingerprint without storing the raw value.
 
@@ -44,6 +45,8 @@ def finding_fingerprint(
     ]
     if byte_offset is not None:
         parts.extend(("byte_offset", str(byte_offset)))
+    if decoded_offset is not None:
+        parts.extend(("decoded_offset", str(decoded_offset)))
     payload = "\0".join(parts).encode("utf-8", errors="replace")
     key = os.environ.get(FINDING_FINGERPRINT_HMAC_KEY_ENV)
     if not key:

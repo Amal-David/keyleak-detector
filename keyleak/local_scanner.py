@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import math
+import hashlib
 import os
 import re
 import stat
@@ -42,9 +43,6 @@ MAX_FILE_BYTES = 5 * 1024 * 1024
 MAX_OPT_IN_FILES = 1000
 MAX_OPT_IN_BYTES = 50 * 1024 * 1024
 MAX_OPT_IN_DIRECTORIES = 5000
-MAX_BINARY_FILES = 1000
-MAX_BINARY_TOTAL_BYTES = 100 * 1024 * 1024
-MAX_BINARY_TOTAL_WORK_BYTES = 500 * 1024 * 1024
 SKIP_DIRS = {
     ".git",
     ".hg",
@@ -73,11 +71,15 @@ def scan_path(
     scan_dist: bool = False,
     scan_binaries: bool = False,
     binary_source_prefix: Optional[str] = None,
+    _binary_budget: Optional[dict] = None,
+    _expanded_archives: Sequence[Path] = (),
 ):
+    """Scan selected local files and retain replay options, byte identities, and coverage gaps."""
     requested_target = Path(path).expanduser()
     if requested_target.is_symlink():
         raise ValueError("scan target must not be a symlink")
     target = requested_target.resolve()
+    _expanded_archives = {path.resolve() for path in _expanded_archives}
     findings: List[Finding] = []
     active_packs = normalize_packs(packs, profile=profile)
     active_includes = _effective_includes(includes, active_packs)
@@ -85,6 +87,8 @@ def scan_path(
         run_salt = new_run_salt()
 
     coverage_state = {"attempted": 0, "completed": 0, "skipped": 0, "failed": 0, "reasons": []}
+    inventory = {"discovered": 0, "selected": 0, "excluded": 0, "unsupported": 0, "containers": 0, "excluded_directories": 0}
+    artifacts = []
     try:
         root_mode = target.stat().st_mode
     except OSError:
@@ -99,59 +103,37 @@ def scan_path(
 
     scan_root = target.parent if target_is_file else target
     code_files: List[Path] = []
-    binary_budget = {"files": 0, "bytes": 0, "work_bytes": 0, "findings": 0}
+    binary_budget = _binary_budget if _binary_budget is not None else {"files": 0, "bytes": 0, "work_bytes": 0, "findings": 0}
     for file_path, categories in _iter_candidate_files(
         target, active_includes, scan_node_modules=scan_node_modules,
         scan_dist=scan_dist, scan_binaries=scan_binaries,
         coverage=coverage_state, target_is_file=target_is_file,
+        inventory=inventory,
+        expanded_archives=_expanded_archives,
     ):
         coverage_state["attempted"] += 1
+        relative = file_path.name if target_is_file else file_path.relative_to(target).as_posix()
+        source = f"{binary_source_prefix.rstrip('/!')}!/{relative}" if binary_source_prefix is not None else str(file_path)
+        artifact = {"source": source, "status": "not_scanned"}
+        artifacts.append(artifact)
         if scan_binaries:
             from .binary_scanner import (
                 BinaryScanLimitError,
-                MAX_BINARY_FILE_BYTES,
-                MAX_BINARY_FINDINGS,
                 is_binary_candidate,
                 scan_binary_file,
             )
             if is_binary_candidate(file_path):
                 try:
-                    size = file_path.stat().st_size
-                except OSError:
-                    _record_coverage(coverage_state, "failed", "binary file could not be inspected")
-                    continue
-                if size > MAX_BINARY_FILE_BYTES:
-                    _record_coverage(coverage_state, "skipped", "binary file exceeds per-file size limit")
-                    continue
-                if (
-                    binary_budget["files"] >= MAX_BINARY_FILES
-                    or binary_budget["bytes"] + size > MAX_BINARY_TOTAL_BYTES
-                    or binary_budget["work_bytes"] + size * 5 > MAX_BINARY_TOTAL_WORK_BYTES
-                ):
-                    _record_coverage(coverage_state, "skipped", "bounded binary scan file or byte limit reached")
-                    continue
-                binary_budget["files"] += 1
-                binary_budget["bytes"] += size
-                binary_budget["work_bytes"] += size * 5
-                if binary_budget["findings"] >= MAX_BINARY_FINDINGS:
-                    _record_coverage(coverage_state, "skipped", "bounded binary finding limit reached")
-                    continue
-                if binary_source_prefix is not None:
-                    relative = file_path.name if target_is_file else file_path.relative_to(target).as_posix()
-                    source = f"{binary_source_prefix.rstrip('/!')}!/{relative}"
-                else:
-                    source = str(file_path)
-                try:
                     binary_findings = scan_binary_file(
                         file_path, detectors_for_categories(categories, active_packs),
                         source=source, run_salt=run_salt,
-                        max_findings=MAX_BINARY_FINDINGS - binary_budget["findings"],
+                        artifact_metadata=artifact, budget=binary_budget,
                     )
                     findings.extend(binary_findings)
-                    binary_budget["findings"] += len(binary_findings)
+                    artifact["status"] = "scanned"
                 except BinaryScanLimitError as exc:
+                    artifact["status"] = "partial"
                     findings.extend(exc.findings)
-                    binary_budget["findings"] += len(exc.findings)
                     _record_coverage(coverage_state, "skipped", str(exc))
                     continue
                 except ValueError as exc:
@@ -166,6 +148,7 @@ def scan_path(
             scan_file(
                 file_path, detectors_for_categories(categories, active_packs),
                 run_salt=run_salt, coverage=coverage_state, scan_root=scan_root,
+                source=source, artifact_metadata=artifact,
             )
         )
         if file_path.suffix.lower() in {".js", ".mjs", ".cjs", ".ts", ".tsx", ".jsx", ".py"}:
@@ -193,15 +176,25 @@ def scan_path(
         from .lifecycle_audit import audit_node_dependencies
         findings.extend(audit_node_dependencies(str(target)))
 
-    report = build_report(str(target), findings, scan_mode="local", profile=profile, packs=active_packs)
+    options = {"include": list(active_includes), "launch_profile": profile, "packs": list(active_packs),
+               "scan_node_modules": scan_node_modules, "scan_dist": scan_dist, "scan_binaries": scan_binaries}
+    report = build_report(str(target), findings, scan_mode="local", profile=profile, packs=active_packs,
+                          scan_options=options)
     scopes = ["local files"]
     if scan_node_modules:
         scopes.append("node_modules sources")
     if scan_dist:
         scopes.append("root dist artifacts")
+    if scan_binaries:
+        scopes.append("binary strings")
+        if coverage_state["attempted"] == 0 and not _expanded_archives:
+            coverage_state["attempted"] = 1
+            _record_coverage(coverage_state, "skipped", "No eligible files in the requested binary scan scope")
     report.extra["coverage"] = build_coverage(
         ", ".join(scopes), **coverage_state,
     )
+    report.extra["inventory"] = inventory
+    report.extra["scan_manifest"]["artifacts"] = artifacts
     return report
 
 
@@ -244,24 +237,33 @@ def scan_file(
     run_salt: Optional[bytes] = None,
     coverage: Optional[dict] = None,
     scan_root: Optional[Path] = None,
+    source: Optional[str] = None,
+    artifact_metadata: Optional[dict] = None,
 ) -> List[Finding]:
+    """Scan bounded text and local source maps using stable logical provenance."""
     try:
         if file_path.stat().st_size > MAX_FILE_BYTES:
             if coverage is not None:
                 _record_coverage(coverage, "skipped", "file exceeds per-file size limit")
             return []
-        content = file_path.read_text(encoding="utf-8", errors="ignore")
+        with file_path.open("rb") as input_file:
+            data = input_file.read(MAX_FILE_BYTES + 1)
+        if len(data) > MAX_FILE_BYTES:
+            if coverage is not None:
+                _record_coverage(coverage, "skipped", "file exceeds per-file size limit")
+            return []
+        content = data.decode("utf-8", errors="ignore")
     except OSError:
         if coverage is not None:
             _record_coverage(coverage, "failed", "file could not be read")
         return []
 
+    source = source or str(file_path)
+    if artifact_metadata is not None:
+        artifact_metadata.update(size_bytes=len(data), sha256=hashlib.sha256(data).hexdigest(), status="scanned")
     detectors_list = list(detectors)
-    findings = scan_text(content, str(file_path), detectors_list, run_salt=run_salt)
-    # Wave 2.1 — if this is a JS bundle with a sibling .map or inline source map,
-    # re-run detectors against the reconstructed *original* sources so the PR
-    # comment surfaces src/components/Auth.tsx:42 instead of a minified
-    # one-line bundle. Skip the deobfuscation step for non-JS files.
+    findings = scan_text(content, source, detectors_list, run_salt=run_salt)
+    # Missing source maps are coverage gaps even when the carrier is readable.
     if file_path.suffix.lower() in {".js", ".mjs", ".cjs", ".html", ".htm"}:
         def record_map_gap(reason: str) -> None:
             if coverage is not None:
@@ -273,22 +275,19 @@ def scan_file(
             on_incomplete=record_map_gap if coverage is not None else None,
         )
         for entry in originals:
-            # Tag the reconstructed source with both the original logical name
-            # (so the developer can find the line) and the bundle path (so
-            # they know which deploy artifact carried it).
-            source_id = f"{file_path}#{entry.source_path}"
+            source_id = f"{source}#{entry.source_path}"
             findings.extend(scan_text(entry.content, source_id, detectors_list, run_salt=run_salt))
     # Wave 2.2 — capability-triad worm-shape scan on install scripts and
     # node_modules sources. Independent of the regex pack; pure behavioral.
     if is_worm_shape_target(file_path):
-        match = detect_worm_shape(content, str(file_path))
+        match = detect_worm_shape(content, source)
         if match is not None:
             findings.append(_worm_shape_finding(match, run_salt=run_salt))
         # Wave 2.3 — fuzzy-hash fingerprint scan on the same targets.
         corpus = _get_fingerprint_corpus()
         if corpus:
             for hit in match_fingerprints(content, corpus):
-                findings.append(_fingerprint_finding(str(file_path), hit))
+                findings.append(_fingerprint_finding(source, hit))
     if coverage is not None:
         coverage["completed"] += 1
     return findings
@@ -369,7 +368,9 @@ def scan_text(
     byte_offset_base: Optional[int] = None,
     byte_offset_width: int = 1,
     max_findings: Optional[int] = None,
+    extraction: Optional[dict] = None,
 ) -> List[Finding]:
+    """Apply detector gates and redact matches while mapping decoded evidence to its carrier."""
     findings: List[Finding] = []
     seen = set()
     safe_request_url = redact_url(request_url) if request_url else ""
@@ -435,7 +436,12 @@ def scan_text(
                 if byte_offset_base is not None
                 else None
             )
-            key = (detector.canonical_id, source, redacted_value, line, byte_offset)
+            decoded = bool(extraction and extraction.get("transforms"))
+            extraction_evidence = dict(extraction) if extraction is not None else None
+            if decoded:
+                byte_offset = byte_offset_base
+                extraction_evidence["decoded_offset"] = token_start
+            key = (detector.canonical_id, source, redacted_value, line, byte_offset, token_start if decoded else None)
             if key in seen:
                 continue
             seen.add(key)
@@ -451,6 +457,8 @@ def scan_text(
                 request_url=safe_request_url,
                 redacted_value=redacted_value,
                 byte_offset=byte_offset,
+                byte_length=(extraction["encoded_length"] if decoded else len(raw_value) * byte_offset_width) if byte_offset is not None else None,
+                extraction=extraction_evidence,
             )
             findings.append(
                 Finding(
@@ -472,6 +480,7 @@ def scan_text(
                         request_url=safe_request_url,
                         line=line,
                         byte_offset=byte_offset,
+                        decoded_offset=token_start if decoded else None,
                     ),
                     remediation_v2=detector.get_remediation().to_dict(),
                 )
@@ -488,11 +497,22 @@ def _iter_candidate_files(
     coverage: Optional[dict] = None,
     target_is_file: bool = False,
     scan_binaries: bool = False,
+    inventory: dict,
+    expanded_archives: Sequence[Path] = (),
 ):
+    """Yield policy-selected files, distinguishing unsupported inputs from explicit exclusions."""
     if target_is_file:
+        inventory["discovered"] += 1
         categories = _categories_for_file(target, includes)
         if categories or (scan_binaries and _binary_candidate(target)):
+            inventory["selected"] += 1
             yield target, categories
+        elif scan_binaries and coverage is not None:
+            coverage["attempted"] += 1
+            _record_coverage(coverage, "skipped", "Unsupported file in requested binary scan scope")
+            inventory["unsupported"] += 1
+        else:
+            inventory["excluded"] += 1
         return
 
     budgets = {
@@ -535,6 +555,7 @@ def _iter_candidate_files(
                 or (in_node_modules and directory == "dist")
             )
             if directory in SKIP_DIRS and not selected_scope:
+                inventory["excluded_directories"] += 1
                 continue
             if directory_path.is_symlink():
                 if coverage is not None:
@@ -542,16 +563,31 @@ def _iter_candidate_files(
                     _record_coverage(coverage, "skipped", "directory symlink was not traversed")
                 continue
             kept_dirs.append(directory)
-        dirs[:] = kept_dirs
-        for filename in files:
+        dirs[:] = sorted(kept_dirs)
+        for filename in sorted(files):
             file_path = root_path / filename
+            inventory["discovered"] += 1
+            if file_path in expanded_archives:
+                inventory["containers"] += 1
+                continue
+            before_attempted = coverage["attempted"] if coverage is not None else 0
             candidate = _candidate_for_local_scan(
                 file_path, target, includes, scan_node_modules, scan_dist,
                 budgets, capped, coverage,
                 scan_binaries,
             )
             if candidate is not None:
+                inventory["selected"] += 1
                 yield candidate
+            elif (scan_binaries and coverage is not None and coverage["attempted"] == before_attempted
+                  and not _is_generated_file(file_path)
+                  and not (in_node_modules and not scan_node_modules)
+                  and not (in_root_dist and not scan_dist)):
+                coverage["attempted"] += 1
+                _record_coverage(coverage, "skipped", "Unsupported file in requested binary scan scope")
+                inventory["unsupported"] += 1
+            else:
+                inventory["excluded"] += 1
 
 
 def _candidate_for_local_scan(
