@@ -24,7 +24,7 @@ No CodeQL rule, workflow, security check or branch protection is disabled. False
 - Related web, TLS, reporting, BaaS and PHP suites: 137 tests and 55 subtests passed.
 - Full local suite: 482 passed, 27 failed, 1 skipped, 103 subtests passed. The 27 failure identities exactly match the previously reproduced baseline: macOS Bash action tests and an unavailable Playwright browser binary. No new failure identity appeared; the local full suite is not green.
 - Local launch gate: no findings. Self-audit passed the high-severity threshold with the existing medium missing-CODEOWNERS warning.
-- Reuse, quality, efficiency and maintainability reviews ran sequentially. Existing `_safe_scan_error`, browser mocks, report and SSE paths were reused; no new error abstraction was added. There is no configured project-wide lint or typecheck command.
+- Reuse, quality, efficiency and maintainability reviews ran sequentially. Existing `_safe_scan_error`, browser mocks, report and SSE paths were reused. `_scan_error_response` owns JSON/SSE failure completion for four handlers. There is no configured project-wide lint or typecheck command.
 - Hosted CI, CodeQL and review outcomes must be checked on the final PR head before merging.
 
 CodeRabbit identified a related failure-path defect during review: legacy scan errors returned JSON without terminating their SSE stream. Timeout, request, page-interaction and unexpected-error handlers now share `_scan_error_response`, which sends the same public error to both callers. The regression first reproduced all four misleading idle-timeout events, then proved they terminate with the scan error. JSON-only callers retain their error payload and status.
