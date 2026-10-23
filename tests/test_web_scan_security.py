@@ -272,12 +272,59 @@ class WebScanSecurityTests(unittest.TestCase):
         with self.assertLogs(web_app.logger, level="ERROR") as captured:
             payload, status, _events, _playwright, browser = self._scan(fail_context=True)
         self.assertEqual(status, 500)
+        self.assertEqual(payload["error"], "An unexpected error occurred. Check the server logs for details.")
+        self.assertNotIn("fixture context failed", json.dumps(payload))
+        self.assertIn("fixture context failed", "\n".join(captured.output))
         scope = browser.new_context.call_args.kwargs["extra_http_headers"][web_app._SCAN_SCOPE_HEADER]
         self.assertEqual(self.handler._auth_scopes, {})
         self.assertFalse(web_app._legacy_scan_lock.locked())
         for sensitive in ("operator-fixture", "cookie-fixture", "user-fixture", scope):
             self.assertNotIn(sensitive, json.dumps(payload))
             self.assertNotIn(sensitive, "\n".join(captured.output))
+
+    def test_page_interaction_error_keeps_internal_details_in_scrubbed_logs(self):
+        manager, playwright, browser = self._browser()
+        page = browser.new_context.return_value.new_page.return_value
+        page.content.side_effect = RuntimeError("private browser path /srv/internal/fixture.py")
+        with (
+            mock.patch.object(self, "_browser", return_value=(manager, playwright, browser)),
+            self.assertLogs(web_app.logger, level="ERROR") as captured,
+        ):
+            payload, status, *_ = self._scan()
+        self.assertEqual(status, 500)
+        self.assertEqual(payload["error"], "Failed to load page. The website may be unreachable or blocking automated access.")
+        self.assertNotIn("/srv/internal", json.dumps(payload))
+        self.assertIn("/srv/internal", "\n".join(captured.output))
+        browser.close.assert_awaited_once()
+        self.assertEqual(self.handler._auth_scopes, {})
+        self.assertFalse(web_app._legacy_scan_lock.locked())
+
+    def test_attack_scan_error_does_not_leak_in_json_or_sse(self):
+        with (
+            mock.patch.object(web_app.asyncio, "to_thread", new=mock.AsyncMock(
+                side_effect=RuntimeError("private scanner path /srv/internal/fixture.py"))),
+            self.assertLogs(web_app.logger, level="WARNING") as captured,
+        ):
+            payload, status, events, *_ = self._scan()
+        self.assertEqual(status, 200)
+        self.assertEqual(payload["attack_vectors"]["status"], "error")
+        self.assertEqual(payload["attack_vectors"]["error"], "Attack vector scan failed. Check the server logs for details.")
+        for output in (json.dumps(payload), events):
+            self.assertNotIn("/srv/internal", output)
+        self.assertIn("/srv/internal", "\n".join(captured.output))
+
+    def test_stop_proxy_failure_does_not_expose_exception_text(self):
+        thread = SimpleNamespace(is_alive=lambda: True, join=mock.Mock(
+            side_effect=RuntimeError("private proxy path /srv/internal/fixture.py")))
+        with (
+            mock.patch.object(web_app, "mitm_running", True),
+            mock.patch.object(web_app, "mitm_thread", thread),
+            web_app.app.test_request_context("/stop-proxy", method="POST"),
+        ):
+            response, status = web_app.stop_proxy()
+        self.assertEqual(status, 500)
+        self.assertEqual(response.get_json()["error"], "Unable to stop the proxy. Check the server logs for details.")
+        self.assertNotIn("/srv/internal", response.get_data(as_text=True))
 
     def test_normalized_auth_values_are_redacted_from_errors(self):
         with self.assertLogs(web_app.logger, level="ERROR") as captured:

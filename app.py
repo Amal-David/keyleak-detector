@@ -1907,7 +1907,7 @@ async def scan():
                 safe_error = _safe_scan_error(e, auth_config, auth_scope)
                 logger.error("Error during page interaction: %s", safe_error)
                 return jsonify({
-                    'error': f'Failed to load page: {safe_error}. The website may be unreachable or blocking automated access.'
+                    'error': 'Failed to load page. The website may be unreachable or blocking automated access.'
                 }), 500
                 
             finally:
@@ -1989,7 +1989,7 @@ async def scan():
             logger.warning("Attack vector scan failed: %s", safe_error)
             attack_vectors = {
                 "status": "error",
-                "error": safe_error,
+                "error": "Attack vector scan failed. Check the server logs for details.",
                 "summary": {
                     "total_findings": 0,
                     "critical_severity": 0,
@@ -2068,7 +2068,7 @@ async def scan():
         elif 'timeout' in error_message.lower():
             error_message = 'The scan timed out. The website may be slow or unresponsive.'
         else:
-            error_message = f'An unexpected error occurred: {error_message}'
+            error_message = 'An unexpected error occurred. Check the server logs for details.'
             
         return jsonify({
             'error': error_message,
@@ -2107,7 +2107,8 @@ def stop_proxy():
                 mitm_thread.join(timeout=5)
             return jsonify({'status': 'stopped'})
         except Exception as e:
-            return jsonify({'error': str(e)}), 500
+            logger.error("Unable to stop proxy (%s)", type(e).__name__)
+            return jsonify({'error': 'Unable to stop the proxy. Check the server logs for details.'}), 500
     else:
         return jsonify({'status': 'not_running'})
 

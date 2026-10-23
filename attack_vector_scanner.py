@@ -418,6 +418,8 @@ def _check_tls_posture(host: str, base_url: str) -> List[Dict[str, Any]]:
     findings: List[Dict[str, Any]] = []
     try:
         context = ssl.create_default_context()
+        if context.minimum_version < ssl.TLSVersion.TLSv1_2:
+            context.minimum_version = ssl.TLSVersion.TLSv1_2
         with socket.create_connection((host, 443), timeout=5) as sock:
             with context.wrap_socket(sock, server_hostname=host) as ssock:
                 cert = ssock.getpeercert()
