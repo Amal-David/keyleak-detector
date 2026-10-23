@@ -1,0 +1,44 @@
+{
+  "checked_at": "2026-10-23T04:54:00+00:00",
+  "baseline": "5bf2ce537551aa1881cdee37bf18c2f9c94e2c0a",
+  "poetry_lock_sha256": "b3d55a2f71ebf390bd41c7428a079c00413b4c8da640564f356d0e1ae94d93ce",
+  "npm_lock_sha256": "ebff70b5e6453661df8ac7ec4eec71fd38dd251c95b912ae8dbc12279c7e8177",
+  "python_lock_entries": 28,
+  "npm_lock_entries": 143,
+  "deployment_only_entries": 1,
+  "registry_artifact_hashes_matched": true,
+  "yanked_or_deprecated_selected_releases": [],
+  "selected_install_scripts": [],
+  "python_advisory_matches": [],
+  "npm_advisory_matches_before_fix": [
+    {
+      "package": "@modelcontextprotocol/client",
+      "version": "2.2.0",
+      "ids": ["GHSA-6prh-2h8m-c8cw"]
+    },
+    {
+      "package": "@modelcontextprotocol/server",
+      "version": "2.0.0",
+      "ids": [
+        "GHSA-46jr-4wx8-v453",
+        "GHSA-jm63-cq47-j5jp",
+        "GHSA-rvq5-wwqv-78pq"
+      ]
+    }
+  ],
+  "selected_mcp_packages_after_fix": [
+    {"package": "@modelcontextprotocol/client", "version": "2.3.0"},
+    {"package": "@modelcontextprotocol/server", "version": "2.3.0"},
+    {"package": "@modelcontextprotocol/core", "version": "2.3.0"}
+  ],
+  "npm_audit_after_fix": {
+    "total": 0,
+    "registry_signatures_verified": 137,
+    "provenance_attestations_verified": 27
+  },
+  "notes": [
+    "Registry and advisory results are a point-in-time review, not proof that upstream code is benign.",
+    "The MCP advisories affect HTTP client or server paths; KeyLeak's local REA/Ghidra evaluation was not shown to expose those paths.",
+    "The deployment-only entry is gunicorn 26.2.0; Flask and certifi are already represented in poetry.lock."
+  ]
+}

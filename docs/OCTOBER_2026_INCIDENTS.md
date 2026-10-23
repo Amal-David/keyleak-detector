@@ -93,7 +93,8 @@ relevant revocations. Browser protection does not establish protection for
 Python, Node, containers, pip or other independent clients.
 
 Checks flag pinned versions older than the [Python packaging guidance](https://discuss.python.org/t/information-for-python-users-regarding-emudhra-emsign-ca-certificate-security-incident/109576):
-certifi 2026.10.19, pip 26.2.2, uv 0.13.4, sigstore 4.5.1 and pixi 0.82.1.
+certifi 2026.10.19, pip 26.2.2, uv 0.13.4, sigstore 4.5.1, conda 26.9.4
+and pixi 0.82.1.
 This is version evidence, not a live TLS acceptance test; vendor backports need
 separate confirmation.
 

@@ -20,7 +20,7 @@ TRUST_REFERENCE = "https://discuss.python.org/t/information-for-python-users-reg
 RAILWAY_REFERENCE = "https://blog.railway.com/p/security-disclosure-wednesday-october-21st"
 ROOTS_REFERENCE = "https://emudhra.we-have-a-problem.com/roots.json"
 TRUST_MINIMUMS = {"certifi": (2026, 10, 19), "pip": (26, 2, 2), "uv": (0, 13, 4),
-                  "sigstore": (4, 5, 1), "pixi": (0, 82, 1)}
+                  "sigstore": (4, 5, 1), "conda": (26, 9, 4), "pixi": (0, 82, 1)}
 MALICIOUS_NPM = {
     "claude-desktop-setup": "https://github.com/advisories/GHSA-f4mf-vhm8-xxqc",
     "@decoopus/claude-setup": "https://osv.dev/vulnerability/MAL-2026-18054",

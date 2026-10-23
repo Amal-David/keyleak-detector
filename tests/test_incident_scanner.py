@@ -22,6 +22,18 @@ class IncidentScannerTests(unittest.TestCase):
         self.assertEqual(sum(f.severity == "critical" for f in report.findings), 1)
         self.assertEqual(sum(f.detector_id == "incident:emudhra-package" for f in report.findings), 2)
 
+    def test_conda_trust_floor_matches_published_incident_guidance(self):
+        path = self.root / "requirements.txt"
+        path.write_text("conda==26.9.3\n")
+        report = scan_incidents(str(path))
+        finding = next(f for f in report.findings if f.detector_id == "incident:emudhra-package")
+        self.assertEqual(finding.evidence.snippet, "conda==26.9.3")
+        self.assertIn("26.9.4", finding.remediation)
+
+        path.write_text("conda==26.9.4\n")
+        report = scan_incidents(str(path))
+        self.assertFalse(any(f.detector_id == "incident:emudhra-package" for f in report.findings))
+
     def test_toml_and_npm_lockfile_resolved_dependencies(self):
         for name in ("poetry.lock", "uv.lock"):
             (self.root / name).write_text('[[package]]\nname = "litellm"\nversion = "1.107.0"\n')
