@@ -52,6 +52,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     if args.command == "bundles":
         return _print_bundles()
 
+
     if args.command == "audit" and args.plan:
         from .audit import AuditError, plan_audit
 
@@ -102,12 +103,34 @@ def main(argv: Optional[List[str]] = None) -> int:
         install_socket_block()
         print_egress_banner()
 
-    if proxy:
+    if proxy and args.command != "database-audit":
         try:
             preflight(proxy)
         except ProxyError as exc:
             print(str(exc), file=sys.stderr)
             return 1
+
+    if args.command == "database-audit":
+        from importlib.resources import files
+        from .database_audit import audit_supabase_catalog, load_catalog
+
+        if args.export_sql:
+            print(files("keyleak").joinpath("supabase_catalog.sql").read_text(encoding="utf-8"), end="")
+            return 0
+        if not args.path:
+            print("database-audit requires a catalog path or --export-sql", file=sys.stderr)
+            return 1
+        try:
+            findings, audit_status = audit_supabase_catalog(load_catalog(Path(args.path).expanduser()), args.path)
+        except (OSError, ValueError):
+            print("Database metadata could not be read or was incomplete/invalid. Re-export with --export-sql.", file=sys.stderr)
+            return 1
+        report = build_report(args.path, findings, scan_mode="database-audit", packs=["baas"],
+                              database_audits=[audit_status])
+        if not any((args.json, args.html, args.sarif, args.markdown)):
+            args.markdown = True
+        return _emit_report(report, args)
+
 
     if args.command == "local":
         try:
@@ -456,6 +479,12 @@ def build_parser() -> argparse.ArgumentParser:
     local.add_argument("--baseline", default="", help="Suppress findings already present in a previous KeyLeak JSON report.")
     local.add_argument("--allowlist", default="", help="Suppress known findings from a JSON or line-based allowlist.")
     _add_format_flags(local)
+
+    database_audit = subparsers.add_parser("database-audit", help="Read-only Supabase catalog audit with SQL fixes for review; Convex source checks run automatically in local scans.")
+    database_audit.add_argument("path", nargs="?", help="Owner-exported catalog JSON. Local scans automatically read .keyleak/database-audit.json.")
+    database_audit.add_argument("--export-sql", action="store_true", help="Print the read-only Supabase catalog collector without executing SQL.")
+    database_audit.add_argument("--fail-on", default="high", choices=["low", "medium", "high", "critical"])
+    _add_format_flags(database_audit)
 
     audit = subparsers.add_parser(
         "audit",
