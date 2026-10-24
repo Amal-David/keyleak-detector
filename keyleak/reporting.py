@@ -47,6 +47,7 @@ def build_report(
     packs: Optional[Iterable[str]] = None,
     provenance: Optional[Dict[str, List[str]]] = None,
     scan_options: Optional[Dict[str, Any]] = None,
+    database_audits: Optional[List[Dict[str, Any]]] = None,
 ) -> ScanReport:
     """Normalize findings and attach replay metadata without promoting static evidence to proof."""
     normalized = normalize_findings(findings)
@@ -65,6 +66,10 @@ def build_report(
         "packs": selected_packs,
         "pack_summary": _pack_summary(normalized, selected_packs),
     }
+    from .database_audit import database_audit_status
+    audit_status = database_audit_status(normalized, database_audits)
+    if audit_status:
+        extra["database_audits"] = audit_status
     if chains:
         extra["attack_chains"] = [vector.to_dict() for vector in chains]
     if scan_options is not None:
@@ -204,9 +209,13 @@ def _remediation_details(item: Dict[str, Any]) -> Dict[str, Any]:
 
 def _coverage_lines(payload: Dict[str, Any]) -> List[str]:
     """Describe completed work, exclusions, and limits without treating an empty scope as proof."""
+    database_lines = [
+        f"Database audit ({audit['provider']}): {audit['status']} — {audit.get('message') or audit.get('scope') or ''}"
+        for audit in payload.get("database_audits") or []
+    ]
     coverage = payload.get("coverage")
     if not isinstance(coverage, dict):
-        return []
+        return database_lines
     lines = [f"Coverage: {coverage.get('status', 'unknown')}; {coverage.get('completed', 0)}/{coverage.get('attempted', 0)} checks completed; "
              f"{coverage.get('skipped', 0)} skipped, {coverage.get('failed', 0)} failed."]
     inventory = payload.get("inventory")
@@ -220,7 +229,7 @@ def _coverage_lines(payload: Dict[str, Any]) -> List[str]:
     manifest = payload.get("scan_manifest")
     if isinstance(manifest, dict) and isinstance(manifest.get("limitations", []), list):
         lines.extend(str(reason) for reason in manifest.get("limitations", []))
-    return lines
+    return lines + database_lines
 
 
 def _binary_location(evidence: Dict[str, Any]) -> str:
@@ -414,7 +423,7 @@ def format_html(report: ScanReport) -> str:
   .finding-detail {{ font-size: 13px; color: var(--text2); margin-bottom: 6px; }}
   .finding-evidence {{ font-family: var(--mono); font-size: 12px; background: var(--surface2); padding: 8px 12px; border-radius: 6px; color: var(--text); margin: 8px 0; overflow-x: auto; white-space: nowrap; }}
   .finding-fix {{ font-size: 12px; color: var(--text2); margin-top: 8px; }}
-  .finding-fix code {{ font-family: var(--mono); font-size: 11px; background: var(--surface2); padding: 2px 6px; border-radius: 3px; color: var(--yellow); }}
+  .finding-fix code {{ font-family: var(--mono); font-size: 11px; background: var(--surface2); padding: 2px 6px; border-radius: 3px; color: var(--yellow); white-space: pre-wrap; overflow-wrap: anywhere; }}
 
   /* Footer */
   .footer {{ margin-top: 40px; padding-top: 20px; border-top: 1px solid var(--border); font-size: 12px; color: var(--text2); display: flex; justify-content: space-between; }}
@@ -535,7 +544,7 @@ def format_sarif(report: ScanReport) -> str:
                     }
                 },
                 "results": results,
-                "properties": {key: report.extra[key] for key in ("coverage", "inventory", "scan_manifest") if key in report.extra},
+                "properties": {key: report.extra[key] for key in ("coverage", "inventory", "scan_manifest", "database_audits") if key in report.extra},
             }
         ],
     }
@@ -630,6 +639,8 @@ def _pack_summary(findings: Iterable[Finding], selected_packs: Iterable[str]) ->
 def _retest_command(target: str, scan_mode: str, scan_options: Optional[Dict[str, Any]] = None) -> str:
     """Quote replay arguments and retain the effective local detector and extraction selection."""
     safe_target = shlex.quote(redact_url(target))
+    if scan_mode == "database-audit":
+        return f"keyleak database-audit {safe_target}"
     if scan_mode == "local":
         if scan_options is not None:
             command = ["keyleak", "local", target, "--include", ",".join(scan_options["include"]),

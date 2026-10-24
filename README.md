@@ -51,6 +51,8 @@ Use `--json`, `--sarif`, `--markdown`, or `--html` for machine-readable or share
 
 ## Choose a scan
 
+- **Database permissions:** `keyleak database-audit catalog.json` audits an owner-exported Supabase catalog and generates SQL fixes for review. Local scans automatically consume `.keyleak/database-audit.json` and inspect Convex source. See [database audits and limits](docs/DATABASE_AUDIT.md).
+
 - **PHP patch assessment:** `keyleak php-check URL --authorized` checks ordinary response headers for the October 2026 PHP advisories. The local web bridge includes a URL form at `/php-check`. Hidden versions remain unknown; a patched banner does not prove a site is safe.
   The [public PHP checker](https://keyleakdetector.com/php-check/) offers URL assessment and a browser-side version comparison.
 - **Incident inputs:** `keyleak incident-check .` checks selected manifests for compromised dependencies and outdated trust packages. Add `--ca-bundle FILE` for fingerprint checks or `--railway` for operator-requested recovery guidance. See [incident checks and limits](docs/OCTOBER_2026_INCIDENTS.md).

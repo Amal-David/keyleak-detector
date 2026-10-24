@@ -330,6 +330,15 @@ class ScanReport:
                 "label": "REVIEW",
                 "reason": "Scan coverage is incomplete or malformed; review skipped or failed scope before release.",
             }
+        database_audits = self.extra.get("database_audits", [])
+        if not isinstance(database_audits, list) or any(
+            not isinstance(audit, dict) or audit.get("status") != "complete" for audit in database_audits
+        ):
+            return {
+                "status": VERDICT_REVIEW,
+                "label": "REVIEW",
+                "reason": "Database permission or authorization auditing needs owner metadata or source review. See database audit coverage.",
+            }
         if counts["medium_severity"]:
             return {
                 "status": VERDICT_REVIEW,
