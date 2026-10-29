@@ -53,6 +53,7 @@ SKIP_DIRS = {
     "dist",
     "node_modules",
     "venv",
+    ".venv",
 }
 SKIP_GENERATED_FILE_SUFFIXES = {
     "extension/lib/detector-info.js",
@@ -103,6 +104,7 @@ def scan_path(
 
     scan_root = target.parent if target_is_file else target
     code_files: List[Path] = []
+    serialization_files = 0
     binary_budget = _binary_budget if _binary_budget is not None else {"files": 0, "bytes": 0, "work_bytes": 0, "findings": 0}
     for file_path, categories in _iter_candidate_files(
         target, active_includes, scan_node_modules=scan_node_modules,
@@ -144,11 +146,13 @@ def scan_path(
                     continue
                 coverage_state["completed"] += 1
                 continue
+        serialization = "serialization" in categories and "leak" in active_packs
+        serialization_files += int(serialization)
         findings.extend(
             scan_file(
                 file_path, detectors_for_categories(categories, active_packs),
                 run_salt=run_salt, coverage=coverage_state, scan_root=scan_root,
-                source=source, artifact_metadata=artifact,
+                source=source, artifact_metadata=artifact, serialization=serialization,
             )
         )
         if file_path.suffix.lower() in {".js", ".mjs", ".cjs", ".ts", ".tsx", ".jsx", ".py"}:
@@ -181,6 +185,11 @@ def scan_path(
     report = build_report(str(target), findings, scan_mode="local", profile=profile, packs=active_packs,
                           scan_options=options)
     scopes = ["local files"]
+    if "serialization" in active_includes:
+        scopes.append("Python serialization source review (direct same-file uses)")
+        if serialization_files == 0:
+            coverage_state["attempted"] += 1
+            _record_coverage(coverage_state, "skipped", "No eligible Python serialization sources; this check requires the leak pack")
     if scan_node_modules:
         scopes.append("node_modules sources")
     if scan_dist:
@@ -239,6 +248,7 @@ def scan_file(
     scan_root: Optional[Path] = None,
     source: Optional[str] = None,
     artifact_metadata: Optional[dict] = None,
+    serialization: bool = False,
 ) -> List[Finding]:
     """Scan bounded text and local source maps using stable logical provenance."""
     try:
@@ -263,6 +273,18 @@ def scan_file(
         artifact_metadata.update(size_bytes=len(data), sha256=hashlib.sha256(data).hexdigest(), status="scanned")
     detectors_list = list(detectors)
     findings = scan_text(content, source, detectors_list, run_salt=run_salt)
+    if serialization:
+        from .serialization_audit import SerializationAuditLimitError, audit_python_serialization
+        try:
+            findings.extend(audit_python_serialization(data, source))
+        except (SyntaxError, ValueError, RecursionError) as exc:
+            if isinstance(exc, SerializationAuditLimitError):
+                findings.extend(exc.findings)
+            if artifact_metadata is not None:
+                artifact_metadata["status"] = "partial"
+            if coverage is not None:
+                _record_coverage(coverage, "skipped", "Python serialization review stopped at a syntax or analysis limit")
+            return findings
     # Missing source maps are coverage gaps even when the carrier is readable.
     if file_path.suffix.lower() in {".js", ".mjs", ".cjs", ".html", ".htm"}:
         def record_map_gap(reason: str) -> None:
@@ -503,7 +525,7 @@ def _iter_candidate_files(
     """Yield policy-selected files, distinguishing unsupported inputs from explicit exclusions."""
     if target_is_file:
         inventory["discovered"] += 1
-        categories = _categories_for_file(target, includes)
+        categories = _categories_for_file(target, includes, target.parent)
         if categories or (scan_binaries and _binary_candidate(target)):
             inventory["selected"] += 1
             yield target, categories
@@ -648,7 +670,7 @@ def _candidate_for_local_scan(
             return None
         budget["files"] += 1
         budget["bytes"] += size
-    categories = [] if in_node_modules else _categories_for_file(file_path, includes)
+    categories = [] if in_node_modules else _categories_for_file(file_path, includes, target)
     if categories or in_node_modules:
         return file_path, categories
     if binary_candidate:
@@ -677,11 +699,12 @@ def _matches_include(path: Path, includes: Sequence[str]) -> bool:
     return bool(_categories_for_file(path, includes))
 
 
-def _categories_for_file(path: Path, includes: Sequence[str]) -> List[str]:
+def _categories_for_file(path: Path, includes: Sequence[str], root: Optional[Path] = None) -> List[str]:
     requested = {include.lower() for include in includes}
     name = path.name.lower()
     full = str(path).lower()
     suffix = path.suffix.lower()
+    directory_parts = path.relative_to(root).parts[:-1] if root is not None else path.parts[:-1]
 
     checks = {
         "env": name.startswith(".env") or name.endswith(".env") or name in {"config.json", "secrets.json"},
@@ -690,6 +713,17 @@ def _categories_for_file(path: Path, includes: Sequence[str]) -> List[str]:
         "docker": name in {"dockerfile", "compose.yml", "docker-compose.yml"} or name.endswith(".dockerfile"),
         "sourcemaps": name.endswith((".map", ".js", ".html", ".htm")),
         "logs": name.endswith(".log") or name.endswith(".txt"),
+        "agent-assets": (
+            name in {"skill.md", "agents.md", "claude.md", ".mcp.json", "mcp.json"}
+            or (set(path.parts).intersection({"skills", ".agents", ".codex", ".claude", ".cursor"})
+                and suffix in {".md", ".mdc", ".json", ".yaml", ".yml", ".toml", ".sh", ".py", ".js", ".ts"})
+        ),
+        "serialization": (
+            suffix == ".py"
+            and not name.startswith("test_") and not name.endswith("_test.py")
+            and not name.endswith("_pb2.py")
+            and not set(directory_parts).intersection({"test", "tests", "fixtures", "examples", ".venv", "venv", "node_modules", "dist", "build"})
+        ),
         "code": suffix in {
             ".py", ".js", ".jsx", ".ts", ".tsx", ".java", ".go", ".rb", ".php", ".cs",
             ".rs", ".swift", ".kt", ".sql", ".graphql", ".html", ".htm",
@@ -706,7 +740,10 @@ def _categories_for_file(path: Path, includes: Sequence[str]) -> List[str]:
         "config": suffix in {".json", ".yml", ".yaml", ".toml", ".ini", ".cfg"} or name in {"package.json", "pyproject.toml"},
     }
 
-    return [include for include in requested if checks.get(include, False)]
+    categories = [include for include in requested if checks.get(include, False)]
+    if "agent-assets" in categories:
+        categories = sorted(set(categories).union(categories_for_packs(("leak",))))
+    return categories
 
 
 def _effective_includes(includes: Sequence[str], packs: Tuple[str, ...]) -> Tuple[str, ...]:

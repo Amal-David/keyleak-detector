@@ -667,5 +667,31 @@ class AgentRunbookSmokeTests(unittest.TestCase):
         self.assertIn("delete `.keyleak/audits/", security)
 
 
+
+
+class ChildCoverageTests(unittest.TestCase):
+    def test_local_and_archive_limits_remain_partial_in_parent_audit(self):
+        from keyleak.models import build_coverage
+        from keyleak.reporting import build_report
+        for target_kind in ("local", "archive"):
+            with self.subTest(target_kind=target_kind), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                target = root / "release.zip" if target_kind == "archive" else root / "source"
+                if target_kind == "archive":
+                    target.write_bytes(b"fixture")
+                else:
+                    target.mkdir()
+                child = build_report(str(target), [], scan_mode=target_kind)
+                child.extra["coverage"] = build_coverage("files", 1, 0, skipped=1, reasons=["file limit"])
+                options = AuditOptions(str(target), intent="ship", depth="passive", out_dir=str(root / "out"), apply_default_suppressions=False)
+                with mock.patch.object(audit, "run_doctor", return_value=[]), mock.patch.object(audit, "scan_path", return_value=child), mock.patch.object(audit, "scan_archive", return_value={"report": child.to_dict()}):
+                    report = run_audit(options)
+                phase_id = "archive_evidence" if target_kind == "archive" else "local_evidence"
+                phase = next(item for item in report.extra["audit_plan"]["phases"] if item["id"] == phase_id)
+                self.assertEqual(phase["status"], "partial")
+                self.assertIn(phase_id, report.extra["audit_coverage"]["incomplete_phase_ids"])
+                self.assertNotEqual(report.verdict["status"], "SAFE_TO_SHIP")
+
+
 if __name__ == "__main__":
     unittest.main()

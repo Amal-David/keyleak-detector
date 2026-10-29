@@ -49,6 +49,18 @@ def main(argv: Optional[List[str]] = None) -> int:
         )
         return 1
 
+    if args.command == "capabilities":
+        from .capabilities import capability_catalog
+        catalog = capability_catalog()
+        if args.json:
+            print(json.dumps(catalog, indent=2, sort_keys=True))
+        else:
+            print(catalog["positioning"])
+            for workflow in catalog["workflows"]:
+                print(f"{workflow['id']}: {workflow['purpose']}")
+            print("Use --json for rule, pack, bundle, skill, and report contracts.")
+        return 0
+
     if args.command == "bundles":
         return _print_bundles()
 
@@ -414,6 +426,9 @@ def build_parser() -> argparse.ArgumentParser:
     incidents.add_argument("--fail-on", default="high", choices=["low", "medium", "high", "critical"])
     _add_format_flags(incidents)
 
+    capabilities = subparsers.add_parser("capabilities", help="Discover installed checks, skills, coverage limits and report contracts without scanning.")
+    capabilities.add_argument("--json", action="store_true", help="Emit the versioned capability catalog.")
+
     subparsers.add_parser("bundles", help="List scan bundles (named groups of detector packs + scan phases).")
 
     extension_host = subparsers.add_parser(
@@ -445,7 +460,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     local = subparsers.add_parser("local", help="Scan local files for secrets, MCP configs, source maps, and CI leaks.")
     local.add_argument("path")
-    local.add_argument("--include", default=",".join(DEFAULT_INCLUDES))
+    local.add_argument("--include", default=",".join(DEFAULT_INCLUDES), help="Comma-separated file categories; serialization opts into Python credential-holder and serializer review.")
     local.add_argument("--scan-node-modules", action="store_true", help="Boundedly scan JavaScript/TypeScript sources inside node_modules for worm behavior and known fingerprints.")
     local.add_argument("--scan-dist", action="store_true", help="Include the root dist/ build output in the bounded local scan.")
     local.add_argument("--scan-binaries", action="store_true", help="Opt in to bounded printable-string scanning of recognized binary artifacts.")

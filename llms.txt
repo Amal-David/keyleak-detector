@@ -1,0 +1,21 @@
+# KeyLeak
+
+> Local evidence collection and remediation verification for security agents.
+
+Start with `keyleak capabilities --json` for the installed version's supported checks,
+skill routes, network requirements, registered patterns and coverage limitations.
+Pattern matches and correlations are not proof of exploitation. Inspect validation
+status and incomplete coverage before making a release decision.
+
+## Skills
+- [Audit planning](.codex/skills/keyleak-audit/SKILL.md): Discover checks and preview a defensive audit.
+- [Local review](.codex/skills/keyleak-local-review/SKILL.md): Secrets, Python serialization, archive evidence and repository hygiene.
+- [Agent assets](.codex/skills/keyleak-agent-assets/SKILL.md): Credential checks for skills, agent rules and MCP settings.
+- [Report triage](.codex/skills/keyleak-report-triage/SKILL.md): Review redacted evidence, suppressions, coverage and remediation.
+
+## Documentation
+- [Setup and usage](README.md)
+- [Flow audit and ecosystem survey](docs/AGENT_INTEGRATION_AUDIT.md)
+
+Skills are distributed in the repository and require an approved CLI installation.
+This index is not proof of installation, marketplace listing, or search indexing.
