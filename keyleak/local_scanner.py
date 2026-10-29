@@ -103,6 +103,7 @@ def scan_path(
 
     scan_root = target.parent if target_is_file else target
     code_files: List[Path] = []
+    serialization_files = 0
     binary_budget = _binary_budget if _binary_budget is not None else {"files": 0, "bytes": 0, "work_bytes": 0, "findings": 0}
     for file_path, categories in _iter_candidate_files(
         target, active_includes, scan_node_modules=scan_node_modules,
@@ -144,11 +145,13 @@ def scan_path(
                     continue
                 coverage_state["completed"] += 1
                 continue
+        serialization = "serialization" in categories and "leak" in active_packs
+        serialization_files += int(serialization)
         findings.extend(
             scan_file(
                 file_path, detectors_for_categories(categories, active_packs),
                 run_salt=run_salt, coverage=coverage_state, scan_root=scan_root,
-                source=source, artifact_metadata=artifact,
+                source=source, artifact_metadata=artifact, serialization=serialization,
             )
         )
         if file_path.suffix.lower() in {".js", ".mjs", ".cjs", ".ts", ".tsx", ".jsx", ".py"}:
@@ -181,6 +184,11 @@ def scan_path(
     report = build_report(str(target), findings, scan_mode="local", profile=profile, packs=active_packs,
                           scan_options=options)
     scopes = ["local files"]
+    if "serialization" in active_includes:
+        scopes.append("Python serialization source review (direct same-file uses)")
+        if serialization_files == 0:
+            coverage_state["attempted"] += 1
+            _record_coverage(coverage_state, "skipped", "No eligible Python serialization sources; this check requires the leak pack")
     if scan_node_modules:
         scopes.append("node_modules sources")
     if scan_dist:
@@ -239,6 +247,7 @@ def scan_file(
     scan_root: Optional[Path] = None,
     source: Optional[str] = None,
     artifact_metadata: Optional[dict] = None,
+    serialization: bool = False,
 ) -> List[Finding]:
     """Scan bounded text and local source maps using stable logical provenance."""
     try:
@@ -263,6 +272,18 @@ def scan_file(
         artifact_metadata.update(size_bytes=len(data), sha256=hashlib.sha256(data).hexdigest(), status="scanned")
     detectors_list = list(detectors)
     findings = scan_text(content, source, detectors_list, run_salt=run_salt)
+    if serialization:
+        from .serialization_audit import SerializationAuditLimitError, audit_python_serialization
+        try:
+            findings.extend(audit_python_serialization(data, source))
+        except (SyntaxError, ValueError, RecursionError) as exc:
+            if isinstance(exc, SerializationAuditLimitError):
+                findings.extend(exc.findings)
+            if artifact_metadata is not None:
+                artifact_metadata["status"] = "partial"
+            if coverage is not None:
+                _record_coverage(coverage, "skipped", "Python serialization review stopped at a syntax or analysis limit")
+            return findings
     # Missing source maps are coverage gaps even when the carrier is readable.
     if file_path.suffix.lower() in {".js", ".mjs", ".cjs", ".html", ".htm"}:
         def record_map_gap(reason: str) -> None:
@@ -690,6 +711,12 @@ def _categories_for_file(path: Path, includes: Sequence[str]) -> List[str]:
         "docker": name in {"dockerfile", "compose.yml", "docker-compose.yml"} or name.endswith(".dockerfile"),
         "sourcemaps": name.endswith((".map", ".js", ".html", ".htm")),
         "logs": name.endswith(".log") or name.endswith(".txt"),
+        "serialization": (
+            suffix == ".py"
+            and not name.startswith("test_") and not name.endswith("_test.py")
+            and not name.endswith("_pb2.py")
+            and not set(path.parts).intersection({"test", "tests", "fixtures", "examples", ".venv", "venv", "node_modules", "dist", "build"})
+        ),
         "code": suffix in {
             ".py", ".js", ".jsx", ".ts", ".tsx", ".java", ".go", ".rb", ".php", ".cs",
             ".rs", ".swift", ".kt", ".sql", ".graphql", ".html", ".htm",

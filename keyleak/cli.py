@@ -445,7 +445,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     local = subparsers.add_parser("local", help="Scan local files for secrets, MCP configs, source maps, and CI leaks.")
     local.add_argument("path")
-    local.add_argument("--include", default=",".join(DEFAULT_INCLUDES))
+    local.add_argument("--include", default=",".join(DEFAULT_INCLUDES), help="Comma-separated file categories; serialization opts into Python credential-holder and serializer review.")
     local.add_argument("--scan-node-modules", action="store_true", help="Boundedly scan JavaScript/TypeScript sources inside node_modules for worm behavior and known fingerprints.")
     local.add_argument("--scan-dist", action="store_true", help="Include the root dist/ build output in the bounded local scan.")
     local.add_argument("--scan-binaries", action="store_true", help="Opt in to bounded printable-string scanning of recognized binary artifacts.")
