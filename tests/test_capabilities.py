@@ -13,6 +13,16 @@ from keyleak.local_scanner import scan_path
 
 
 class CapabilitiesTests(unittest.TestCase):
+    def test_project_virtualenv_is_not_repository_scan_scope(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / '.venv').mkdir()
+            (root / '.venv' / 'dependency.log').write_bytes(b'x' * (5 * 1024 * 1024 + 1))
+            (root / '.env').write_text('APP_MODE=development')
+            report = scan_path(directory, packs=['leak'])
+            self.assertEqual(report.extra['coverage']['status'], 'complete')
+            self.assertFalse(any('/.venv/' in item['source'] for item in report.extra['scan_manifest']['artifacts']))
+
     def test_discovery_does_not_preflight_or_scan(self):
         output = io.StringIO()
         with patch('keyleak.cli.resolve_proxy', side_effect=AssertionError('network setup')), patch('keyleak.cli.scan_path', side_effect=AssertionError('scan')), contextlib.redirect_stdout(output):
@@ -53,3 +63,13 @@ class CapabilitiesTests(unittest.TestCase):
                 self.assertNotIn(synthetic_value, json.dumps(report.to_dict()))
                 self.assertIn('agent-assets', report.retest_command)
                 self.assertEqual(report.extra['coverage']['status'], 'complete')
+
+
+    def test_agent_assets_include_credentials_without_mcp_category(self):
+        synthetic_value = 'sk_test_' + 'aB3dE5gH7jK9mN2pQ4sT6vW8yZ1cD0fG'
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / 'SKILL.md'
+            path.write_text('Fixture for detection: ' + synthetic_value)
+            report = scan_path(str(path), includes=['agent-assets'], packs=['leak'])
+            self.assertTrue(any(f.detector_id == 'leak.stripe_secret_key' for f in report.findings))
+            self.assertNotIn(synthetic_value, json.dumps(report.to_dict()))

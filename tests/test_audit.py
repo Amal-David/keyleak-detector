@@ -667,8 +667,6 @@ class AgentRunbookSmokeTests(unittest.TestCase):
         self.assertIn("delete `.keyleak/audits/", security)
 
 
-if __name__ == "__main__":
-    unittest.main()
 
 
 class ChildCoverageTests(unittest.TestCase):
@@ -693,3 +691,7 @@ class ChildCoverageTests(unittest.TestCase):
                 self.assertEqual(phase["status"], "partial")
                 self.assertIn(phase_id, report.extra["audit_coverage"]["incomplete_phase_ids"])
                 self.assertNotEqual(report.verdict["status"], "SAFE_TO_SHIP")
+
+
+if __name__ == "__main__":
+    unittest.main()

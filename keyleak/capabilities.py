@@ -61,7 +61,7 @@ def capability_catalog():
         ],
         "report_contract": {
             "formats": ["json", "sarif", "markdown", "html"],
-            "exit_codes": {"0": "Selected threshold passed with complete coverage.",
+            "exit_codes": {"0": "Command completed successfully. Plans and discovery do not scan; inspect coverage in scan reports.",
                            "1": "Command failed.", "2": "Threshold reached or coverage incomplete."},
             "interpretation": "A pattern match or correlated lead is not proof of exploitability. Inspect validation_status and coverage.",
         },

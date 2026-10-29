@@ -53,6 +53,7 @@ SKIP_DIRS = {
     "dist",
     "node_modules",
     "venv",
+    ".venv",
 }
 SKIP_GENERATED_FILE_SUFFIXES = {
     "extension/lib/detector-info.js",
@@ -740,8 +741,8 @@ def _categories_for_file(path: Path, includes: Sequence[str], root: Optional[Pat
     }
 
     categories = [include for include in requested if checks.get(include, False)]
-    if "agent-assets" in categories and "mcp" not in categories:
-        categories.append("mcp")
+    if "agent-assets" in categories:
+        categories = sorted(set(categories).union(categories_for_packs(("leak",))))
     return categories
 
 

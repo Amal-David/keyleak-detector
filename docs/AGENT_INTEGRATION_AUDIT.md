@@ -47,8 +47,8 @@ No new precision or recall claim is made.
 
 The four simplification reviews run inline under repository instructions: reuse,
 quality, efficiency and maintainability. The catalog reuses DETECTORS, PROFILE_PACKS,
-BUNDLES, runnable_packs and unpopulated_packs. Agent asset selection reuses the MCP
-pattern category; coverage propagation reuses _child_coverage_reason. No new scan
+BUNDLES, runnable_packs and unpopulated_packs. Agent asset selection reuses the leak-pack
+pattern categories; coverage propagation reuses `_child_coverage_reason`. No new scan
 executor, package installer, model provider, or RPC transport is introduced.
 
 ## Representative GitHub survey
@@ -136,3 +136,28 @@ value, not a credential. The fixture variable is now explicitly named synthetic_
 the plaintext fixture and redaction assertion remain, so the test still checks the
 required behavior. The docstring-coverage suggestion is stylistic; blanket narration
 was not added to satisfy a percentage. Existing scope/constraint documentation remains.
+
+
+Late review checks also found an overly broad exit-zero description (frequency 7:
+planning succeeds without scanning; impact 6: consumers could claim uncollected
+coverage), MCP-only credential selection for agent assets (frequency 7: valid leak
+rules such as Stripe omit MCP; impact 7: missed credentials), and a test class below
+unittest.main (frequency 3: direct file runs; impact 3: regression omitted). The catalog
+now separates successful commands from scan coverage, agent assets select all leak-pack
+categories, and direct test execution includes the child-coverage class. Markdown
+formatting was corrected as requested.
+
+The baseline browser failure and skip came from a borrowed environment with an older
+Playwright than the lockfile. Verification now uses an isolated `.venv` created with
+`POETRY_VIRTUALENVS_IN_PROJECT=true poetry install --no-interaction`, matching the
+locked browser version. No skip condition or assertion was removed. Repository scans
+now exclude `.venv` alongside `venv` (frequency 8: conventional local setup; impact 5:
+installed dependency limits polluted repository coverage); a regression verifies the
+scan remains complete without traversing an oversized dependency file.
+
+Final local verification after review fixes: **591 tests, zero failures, zero errors,
+zero skips**, using the same unittest discovery/skip gate as CI. Extension tests:
+49 passed, zero skipped. Launch gate: exit 0, complete 198/198 coverage, one medium
+finding and zero high/critical findings. Self-audit: exit 0 with one low finding.
+Dependency consistency, compilation and whitespace checks passed. These results
+supersede the earlier local baseline-failure receipt above.
