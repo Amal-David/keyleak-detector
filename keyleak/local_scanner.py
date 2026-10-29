@@ -711,6 +711,11 @@ def _categories_for_file(path: Path, includes: Sequence[str]) -> List[str]:
         "docker": name in {"dockerfile", "compose.yml", "docker-compose.yml"} or name.endswith(".dockerfile"),
         "sourcemaps": name.endswith((".map", ".js", ".html", ".htm")),
         "logs": name.endswith(".log") or name.endswith(".txt"),
+        "agent-assets": (
+            name in {"skill.md", "agents.md", "claude.md", ".mcp.json", "mcp.json"}
+            or (set(path.parts).intersection({"skills", ".agents", ".codex", ".claude", ".cursor"})
+                and suffix in {".md", ".mdc", ".json", ".yaml", ".yml", ".toml", ".sh", ".py", ".js", ".ts"})
+        ),
         "serialization": (
             suffix == ".py"
             and not name.startswith("test_") and not name.endswith("_test.py")
@@ -733,7 +738,10 @@ def _categories_for_file(path: Path, includes: Sequence[str]) -> List[str]:
         "config": suffix in {".json", ".yml", ".yaml", ".toml", ".ini", ".cfg"} or name in {"package.json", "pyproject.toml"},
     }
 
-    return [include for include in requested if checks.get(include, False)]
+    categories = [include for include in requested if checks.get(include, False)]
+    if "agent-assets" in categories and "mcp" not in categories:
+        categories.append("mcp")
+    return categories
 
 
 def _effective_includes(includes: Sequence[str], packs: Tuple[str, ...]) -> Tuple[str, ...]:

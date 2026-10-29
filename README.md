@@ -93,6 +93,30 @@ installation even with explicit consent. `keyleak doctor` reports available
 discovery tools. See [distribution readiness](docs/DISTRIBUTION.md) for the
 migration note and package-manager contract.
 
+## Use KeyLeak from an agent
+
+Discover supported checks and their limits without starting a scan:
+
+```bash
+keyleak capabilities --json
+keyleak local . --include agent-assets --packs leak --json
+```
+
+The second command checks skill instructions, agent rules, MCP configuration and
+common scripts/config files under agent directories for credential patterns. It does
+not execute those files or certify prompt-injection resistance.
+
+Available skills: [audit planning](.codex/skills/keyleak-audit/SKILL.md),
+[local review](.codex/skills/keyleak-local-review/SKILL.md),
+[agent assets](.codex/skills/keyleak-agent-assets/SKILL.md), and
+[report triage](.codex/skills/keyleak-report-triage/SKILL.md).
+Review and copy a selected skill directory into your agent host's supported skills
+directory. These skills require KeyLeak on PATH and are distributed through the
+repository, not automatically installed by pip.
+
+See the [flow audit and ecosystem comparison](docs/AGENT_INTEGRATION_AUDIT.md) for
+implementation evidence, positioning, validation limits and follow-up work.
+
 ## Python secret serialization review
 
 Opt into static source checks for credentials on Python dataclasses, attrs classes,

@@ -14,3 +14,8 @@
   may still fail because its configured writable root retains the symlink;
   explain that distinction and use approved physical-path access. Preserve dirty
   primary checkouts and implement in an isolated worktree.
+
+- For the agent-security ecosystem request, compare a representative set of GitHub
+  offensive/red-team skill libraries rather than narrowing the research to DeepSeek.
+  Distinguish advertised capabilities from verified behavior and do not claim exhaustive
+  GitHub coverage or convert methodology catalogs into autonomous exploitation.

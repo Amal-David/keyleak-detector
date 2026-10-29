@@ -49,6 +49,18 @@ def main(argv: Optional[List[str]] = None) -> int:
         )
         return 1
 
+    if args.command == "capabilities":
+        from .capabilities import capability_catalog
+        catalog = capability_catalog()
+        if args.json:
+            print(json.dumps(catalog, indent=2, sort_keys=True))
+        else:
+            print(catalog["positioning"])
+            for workflow in catalog["workflows"]:
+                print(f"{workflow['id']}: {workflow['purpose']}")
+            print("Use --json for rule, pack, bundle, skill, and report contracts.")
+        return 0
+
     if args.command == "bundles":
         return _print_bundles()
 
@@ -413,6 +425,9 @@ def build_parser() -> argparse.ArgumentParser:
     incidents.add_argument("--railway", action="store_true", help="Include recovery guidance for operator-declared Railway usage.")
     incidents.add_argument("--fail-on", default="high", choices=["low", "medium", "high", "critical"])
     _add_format_flags(incidents)
+
+    capabilities = subparsers.add_parser("capabilities", help="Discover installed checks, skills, coverage limits and report contracts without scanning.")
+    capabilities.add_argument("--json", action="store_true", help="Emit the versioned capability catalog.")
 
     subparsers.add_parser("bundles", help="List scan bundles (named groups of detector packs + scan phases).")
 
