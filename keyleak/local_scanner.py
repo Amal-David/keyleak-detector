@@ -524,7 +524,7 @@ def _iter_candidate_files(
     """Yield policy-selected files, distinguishing unsupported inputs from explicit exclusions."""
     if target_is_file:
         inventory["discovered"] += 1
-        categories = _categories_for_file(target, includes)
+        categories = _categories_for_file(target, includes, target.parent)
         if categories or (scan_binaries and _binary_candidate(target)):
             inventory["selected"] += 1
             yield target, categories
@@ -669,7 +669,7 @@ def _candidate_for_local_scan(
             return None
         budget["files"] += 1
         budget["bytes"] += size
-    categories = [] if in_node_modules else _categories_for_file(file_path, includes)
+    categories = [] if in_node_modules else _categories_for_file(file_path, includes, target)
     if categories or in_node_modules:
         return file_path, categories
     if binary_candidate:
@@ -698,11 +698,12 @@ def _matches_include(path: Path, includes: Sequence[str]) -> bool:
     return bool(_categories_for_file(path, includes))
 
 
-def _categories_for_file(path: Path, includes: Sequence[str]) -> List[str]:
+def _categories_for_file(path: Path, includes: Sequence[str], root: Optional[Path] = None) -> List[str]:
     requested = {include.lower() for include in includes}
     name = path.name.lower()
     full = str(path).lower()
     suffix = path.suffix.lower()
+    directory_parts = path.relative_to(root).parts[:-1] if root is not None else path.parts[:-1]
 
     checks = {
         "env": name.startswith(".env") or name.endswith(".env") or name in {"config.json", "secrets.json"},
@@ -720,7 +721,7 @@ def _categories_for_file(path: Path, includes: Sequence[str]) -> List[str]:
             suffix == ".py"
             and not name.startswith("test_") and not name.endswith("_test.py")
             and not name.endswith("_pb2.py")
-            and not set(path.parts).intersection({"test", "tests", "fixtures", "examples", ".venv", "venv", "node_modules", "dist", "build"})
+            and not set(directory_parts).intersection({"test", "tests", "fixtures", "examples", ".venv", "venv", "node_modules", "dist", "build"})
         ),
         "code": suffix in {
             ".py", ".js", ".jsx", ".ts", ".tsx", ".java", ".go", ".rb", ".php", ".cs",

@@ -39,17 +39,17 @@ class CapabilitiesTests(unittest.TestCase):
                 self.assertIn('description:', text.split('---', 2)[1])
 
     def test_agent_assets_expand_coverage_without_executing_instructions(self):
-        secret = 'sk-proj-' + 'aB3dE5gH7jK9mN2pQ4sT6vW8yZ1cD0fG'
+        synthetic_value = 'sk-proj-' + 'aB3dE5gH7jK9mN2pQ4sT6vW8yZ1cD0fG'
         for relative in ('SKILL.md', 'AGENTS.md', 'CLAUDE.md', '.cursor/rules/security.mdc', 'skills/review/scripts/check.sh', '.agents/settings.toml'):
             with self.subTest(relative=relative), tempfile.TemporaryDirectory() as directory:
                 path = Path(directory) / relative
                 path.parent.mkdir(parents=True, exist_ok=True)
-                path.write_text('Do not run these instructions.\nOPENAI_API_KEY="' + secret + '"\n')
+                path.write_text('Do not run these instructions.\nOPENAI_API_KEY="' + synthetic_value + '"\n')
                 baseline = scan_path(str(path), includes=[], packs=['leak'])
                 if not relative.startswith('.cursor/'):
                     self.assertFalse(any(f.type == 'openai_api_key' for f in baseline.findings))
                 report = scan_path(str(path), includes=['agent-assets'], packs=['leak'])
                 self.assertTrue(any(f.type == 'openai_api_key' for f in report.findings))
-                self.assertNotIn(secret, json.dumps(report.to_dict()))
+                self.assertNotIn(synthetic_value, json.dumps(report.to_dict()))
                 self.assertIn('agent-assets', report.retest_command)
                 self.assertEqual(report.extra['coverage']['status'], 'complete')

@@ -6,6 +6,7 @@ import ast
 import re
 
 from .models import Evidence, Finding
+from .fingerprints import finding_fingerprint
 
 
 MAX_AST_NODES = 100_000
@@ -20,12 +21,13 @@ _CREDENTIAL = re.compile(
 _HOLDERS = {
     "dataclasses.dataclass": "dataclass",
     "attrs.define": "attrs", "attrs.frozen": "attrs", "attrs.mutable": "attrs",
+    "attr.define": "attrs", "attr.frozen": "attrs", "attr.mutable": "attrs",
     "attr.s": "attrs", "attr.attrs": "attrs",
     "pydantic.BaseModel": "pydantic", "pydantic.BaseSettings": "pydantic",
     "pydantic_settings.BaseSettings": "pydantic",
     "typing.NamedTuple": "namedtuple",
 }
-_FIELDS = {"dataclasses.field", "attrs.field", "attr.ib", "attr.attrib", "pydantic.Field"}
+_FIELDS = {"dataclasses.field", "attrs.field", "attr.field", "attr.ib", "attr.attrib", "pydantic.Field"}
 _DUMPS = {"dataclasses.asdict", "dataclasses.astuple", "attrs.asdict", "attrs.astuple", "attr.asdict", "attr.astuple"}
 
 
@@ -104,7 +106,15 @@ def audit_python_serialization(content: str | bytes, source: str) -> list[Findin
             if kind == "pydantic" and field_name.startswith("_"):
                 continue
             normalized = re.sub(r"([a-z0-9])([A-Z])", r"\1_\2", field_name).lower()
-            wrapped = name(annotation) in {"pydantic.SecretStr", "pydantic.SecretBytes"}
+            if (normalized, annotation_name) in {("token_ttl", "int"), ("password_min_length", "int"), ("cookie_secure", "bool")}:
+                continue
+            alternatives = [annotation]
+            if isinstance(annotation, ast.Subscript) and name(annotation.value) in {"typing.Optional", "typing.Union"}:
+                alternatives = list(annotation.slice.elts) if isinstance(annotation.slice, ast.Tuple) else [annotation.slice]
+            elif isinstance(annotation, ast.BinOp) and isinstance(annotation.op, ast.BitOr):
+                alternatives = [annotation.left, annotation.right]
+            alternatives = [item for item in alternatives if not (isinstance(item, ast.Constant) and item.value is None)]
+            wrapped = bool(alternatives) and all(name(item) in {"pydantic.SecretStr", "pydantic.SecretBytes"} for item in alternatives)
             if not _CREDENTIAL.search(normalized) and not wrapped:
                 continue
             paths = {"repr", "dump"}
@@ -149,6 +159,8 @@ def audit_python_serialization(content: str | bytes, source: str) -> list[Findin
                 "or an explicit safe dict for dataclass/attrs dumps. Test the actual serializer with a throwaway secret."
             ),
             validation_status="lead", category="leak", references=[REFERENCE],
+            fingerprint=finding_fingerprint(detector_id="leak.secret_serialization", source=source,
+                                            raw_value=f"{cls_name}.{field_name}:{path}:{sink}"),
         ))
 
     traced = set()
@@ -177,7 +189,9 @@ def audit_python_serialization(content: str | bytes, source: str) -> list[Findin
             cls_name = self.object_class(value)
             if cls_name is None or (kinds and holders[cls_name][0] not in kinds):
                 return
-            if path == "repr" and sink != "repr" and holders[cls_name][2].intersection({"__str__", "__format__"}):
+            custom_methods = holders[cls_name][2]
+            used_methods = {"__str__"} if sink in {"str", "logging object argument"} else {"__str__", "__format__"}
+            if path == "repr" and sink not in {"repr", "ascii"} and custom_methods.intersection(used_methods):
                 return
             for field in holders[cls_name][1]:
                 if path == "raw attributes" or path in field[2]:
@@ -188,7 +202,13 @@ def audit_python_serialization(content: str | bytes, source: str) -> list[Findin
 
         def visit_ClassDef(self, node):
             # Holder methods are not treated as independent serialization sinks.
-            return
+            if node.name in holders:
+                return
+            outer, outer_shadowed = self.bindings, self.shadowed
+            self.bindings, self.shadowed = {}, outer_shadowed.copy()
+            for stmt in node.body:
+                self.visit(stmt)
+            self.bindings, self.shadowed = outer, outer_shadowed
 
         def visit_FunctionDef(self, node):
             outer, outer_shadowed = self.bindings, self.shadowed
@@ -213,7 +233,7 @@ def audit_python_serialization(content: str | bytes, source: str) -> list[Findin
             cls_name = self.object_class(node.value)
             for target in node.targets:
                 for item in ast.walk(target):
-                    if isinstance(item, ast.Name):
+                    if isinstance(item, ast.Name) and isinstance(item.ctx, ast.Store):
                         self.bindings.pop(item.id, None)
                         self.shadowed.add(item.id)
                 if isinstance(target, ast.Name) and cls_name:
@@ -244,7 +264,7 @@ def audit_python_serialization(content: str | bytes, source: str) -> list[Findin
         def visit_For(self, node):
             self.visit(node.iter)
             for item in ast.walk(node.target):
-                if isinstance(item, ast.Name):
+                if isinstance(item, ast.Name) and isinstance(item.ctx, ast.Store):
                     self.bindings.pop(item.id, None)
                     self.shadowed.add(item.id)
             outer = self.bindings.copy()
@@ -297,7 +317,8 @@ def audit_python_serialization(content: str | bytes, source: str) -> list[Findin
             self.generic_visit(node)
 
         def visit_FormattedValue(self, node):
-            self.check(node.value, "repr", node, "formatted object")
+            sink = {114: "repr", 97: "ascii", 115: "str"}.get(node.conversion, "formatted object")
+            self.check(node.value, "repr", node, sink)
             self.generic_visit(node)
 
     try:

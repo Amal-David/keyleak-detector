@@ -243,3 +243,63 @@ class SerializationLocalTests(unittest.TestCase):
             report = scan_path(directory, includes=["serialization"], packs=["leak"])
             self.assertEqual(report.extra["coverage"]["status"], "complete")
             self.assertTrue(any(item.type == "secret_serialization" for item in report.findings))
+
+
+class SerializationReviewRegressions(unittest.TestCase):
+    def test_attribute_writes_keep_holder_type(self):
+        source = "from dataclasses import dataclass, field, asdict\n@dataclass\nclass Config:\n    token: str = field(repr=False)\nconfig = Config('fixture')\nconfig.token = 'updated'\nasdict(config)\n"
+        findings = audit_python_serialization(source, "settings.py")
+        self.assertEqual(len(findings), 1)
+        self.assertEqual(findings[0].severity, "high")
+
+    def test_explicit_repr_conversions_bypass_safe_string_methods(self):
+        base = "from pydantic import BaseModel, Field\nclass Config(BaseModel):\n    token: str = Field(exclude=True)\n    def __str__(self): return 'safe'\n    def __format__(self, spec): return 'safe'\nconfig = Config(token='fixture')\n"
+        for conversion in ('r', 'a'):
+            with self.subTest(conversion=conversion):
+                findings = audit_python_serialization(base + 'f"{config!' + conversion + '}"', "settings.py")
+                self.assertEqual(len(findings), 1)
+                self.assertEqual(findings[0].severity, "high")
+        self.assertEqual(audit_python_serialization(base + 'f"{config}"', "settings.py"), [])
+
+    def test_attr_namespace_aliases_preserve_partial_protection(self):
+        for decorator in ('define', 'frozen', 'mutable'):
+            with self.subTest(decorator=decorator):
+                base = f"import attr\n@attr.{decorator}\nclass Config:\n    token: str = attr.field(repr=False)\nconfig = Config('fixture')\n"
+                self.assertEqual(audit_python_serialization(base, "settings.py"), [])
+                self.assertEqual(audit_python_serialization(base + 'attr.asdict(config)', "settings.py")[0].severity, 'high')
+
+    def test_optional_secret_wrappers_are_safe_but_scalar_secrets_remain(self):
+        for annotation in ('Optional[SecretStr]', 'SecretStr | None', 'None | SecretStr', 'Union[None, SecretStr]'):
+            with self.subTest(annotation=annotation):
+                base = f"from typing import Optional, Union\nfrom pydantic import BaseModel, SecretStr\nclass Config(BaseModel):\n    token: {annotation}\nconfig = Config(token='fixture')\nrepr(config)\nconfig.model_dump()"
+                self.assertEqual(audit_python_serialization(base, 'settings.py'), [])
+        for field, annotation in (('token', 'int'), ('password', 'int'), ('token', 'str | SecretStr')):
+            with self.subTest(field=field, annotation=annotation):
+                base = f"from pydantic import BaseModel, SecretStr\nclass Config(BaseModel):\n    {field}: {annotation}\nrepr(Config())"
+                self.assertEqual(audit_python_serialization(base, 'settings.py')[0].severity, 'high')
+        source = "from dataclasses import dataclass\n@dataclass\nclass Config:\n    token_ttl: int\n    password_min_length: int\n    cookie_secure: bool\n"
+        self.assertEqual(audit_python_serialization(source, 'settings.py'), [])
+
+    def test_non_holder_methods_are_scanned(self):
+        source = "from pydantic import BaseModel, Field\nclass Config(BaseModel):\n    token: str = Field(exclude=True)\nclass Service:\n    def run(self, config: Config):\n        logger.info(config)"
+        self.assertEqual(audit_python_serialization(source, 'settings.py')[0].severity, 'high')
+
+    def test_structural_fingerprint_can_suppress_across_line_changes(self):
+        from keyleak.suppressions import SuppressionSet, is_suppressed
+        source = "from dataclasses import dataclass\n@dataclass\nclass Config:\n    token: str\n"
+        with mock.patch.dict('os.environ', {'KEYLEAK_FINDING_FINGERPRINT_KEY': 'fixture-key'}):
+            first = audit_python_serialization(source, 'settings.py')[0]
+            second = audit_python_serialization('\n' + source, 'settings.py')[0]
+        self.assertTrue(first.fingerprint)
+        self.assertEqual(first.fingerprint, second.fingerprint)
+        self.assertTrue(is_suppressed(second, SuppressionSet(fingerprints={first.fingerprint})))
+
+    def test_scan_root_ancestor_names_do_not_exclude_project(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory) / 'examples' / 'project'
+            root.mkdir(parents=True)
+            path = root / 'settings.py'
+            path.write_text("from dataclasses import dataclass\n@dataclass\nclass Config:\n    token: str\n")
+            for target in (root, path):
+                report = scan_path(str(target), includes=['serialization'], packs=['leak'])
+                self.assertTrue(any(f.type == 'secret_serialization' for f in report.findings))

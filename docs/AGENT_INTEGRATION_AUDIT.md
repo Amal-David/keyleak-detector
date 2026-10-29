@@ -113,3 +113,26 @@ are the differentiators to measure.
 - Compilation and whitespace checks passed. No project lint/typecheck is configured.
 - No live external validation, offensive skill execution, installed-host skill
   discovery, hosted publication, or held-out detector benchmark was performed.
+
+## PR 39 review follow-up
+
+Frequency/impact estimates below use 1–10 scales; examples are covered by regression
+checks. All products exceed the implementation threshold of 5.
+
+| Finding | Frequency and evidence | Impact and evidence | Resolution |
+|---|---|---|---|
+| Attribute writes erase holder bindings | 7: assigning config fields before logging is ordinary application code | 7: hides an exposing serializer use | Invalidate only names in Store context |
+| Explicit repr formatting suppressed by string overrides | 5: diagnostic f-strings use repr conversions | 7: a custom safe str does not protect repr | Preserve !r/!a semantics |
+| Absolute ancestor exclusion | 5: checkouts commonly sit beneath build/examples directories | 8: excludes the entire requested Python scope | Classify exclusions relative to the scan root |
+| attr namespace aliases missing | 5: supported attrs API spellings | 6: missed holders or wrong protection state | Add modern attr decorators and field alias |
+| Optional secret annotations misclassified | 7: optional configuration credentials are common | 4: false generated-output leads | Unwrap optional forms while retaining mixed plain-string unions |
+| Numeric metadata treated as credentials | 6: TTL/length/security flags are ordinary config fields | 3: noisy findings | Exclude three exact typed metadata names; retain numeric tokens/passwords |
+| Ordinary class methods skipped | 8: service methods routinely receive typed config | 7: missed serializer use | Traverse non-holder classes with isolated bindings |
+| Missing structural fingerprints | 6: baselines and allowlists are supported workflows | 5: findings cannot be suppressed by fingerprint | Reuse keyed fingerprint helper; verify suppression across line shifts |
+| Empty optional arrays under Bash 3 nounset | 9: default Action settings leave both arrays empty on macOS | 6: scan step fails before output | Preserve optional argument quoting with conditional expansion |
+
+The CodeQL clear-text-storage alert references a deliberately synthetic detector test
+value, not a credential. The fixture variable is now explicitly named synthetic_value;
+the plaintext fixture and redaction assertion remain, so the test still checks the
+required behavior. The docstring-coverage suggestion is stylistic; blanket narration
+was not added to satisfy a percentage. Existing scope/constraint documentation remains.
