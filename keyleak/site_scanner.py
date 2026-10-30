@@ -177,7 +177,7 @@ def _amass_subdomains(domain: str) -> List[str]:
     return []
 
 
-SUBFINDER_VERSION = "v2.14.0"
+SUBFINDER_VERSION = "v2.17.0"
 
 
 def _go_bin_dir() -> Optional[str]:

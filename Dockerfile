@@ -3,7 +3,7 @@ FROM python:3.12-slim-bookworm
 
 # Tool versions
 ARG TARGETARCH
-ARG SUBFINDER_VERSION=2.12.0
+ARG SUBFINDER_VERSION=2.17.0
 ARG AMASS_VERSION=5.0.1
 
 # Set working directory
@@ -30,20 +30,26 @@ RUN set -eux && \
     SUBFINDER_ARCHIVE="subfinder_${SUBFINDER_VERSION}_linux_${TOOL_ARCH}.zip" && \
     AMASS_ARCHIVE="amass_linux_${TOOL_ARCH}.tar.gz" && \
     AMASS_DIR="amass_linux_${TOOL_ARCH}" && \
+    case "$TOOL_ARCH" in \
+      amd64) \
+        SUBFINDER_SHA256='a39c3e5c7a26ef3c430915c4d6cbf7716a00f26769a75e9405aba796142eba37'; \
+        AMASS_SHA256='ca0682b7f504c7016e8991505aa1bf343b1bf02e64946ce8575891bda037b8e6' ;; \
+      arm64) \
+        SUBFINDER_SHA256='24913d49dddc1d3a5e99a4a7580da5be980959b9415b96f52c4f7f4124392190'; \
+        AMASS_SHA256='286403bcb0e8dcf8e989f76584a848b179007872ed5258234f77810babf6b771' ;; \
+    esac && \
     wget -qO "/tmp/${SUBFINDER_ARCHIVE}" "https://github.com/projectdiscovery/subfinder/releases/download/v${SUBFINDER_VERSION}/${SUBFINDER_ARCHIVE}" && \
-    wget -qO /tmp/subfinder_checksums.txt "https://github.com/projectdiscovery/subfinder/releases/download/v${SUBFINDER_VERSION}/subfinder_${SUBFINDER_VERSION}_checksums.txt" && \
-    grep -E "[[:space:]]${SUBFINDER_ARCHIVE}$" /tmp/subfinder_checksums.txt | (cd /tmp && sha256sum -c -) && \
+    echo "${SUBFINDER_SHA256}  /tmp/${SUBFINDER_ARCHIVE}" | sha256sum --check && \
     mkdir -p /tmp/subfinder && \
     unzip -q "/tmp/${SUBFINDER_ARCHIVE}" -d /tmp/subfinder && \
     mv /tmp/subfinder/subfinder /usr/local/bin/subfinder && \
     chmod +x /usr/local/bin/subfinder && \
     wget -qO "/tmp/${AMASS_ARCHIVE}" "https://github.com/owasp-amass/amass/releases/download/v${AMASS_VERSION}/${AMASS_ARCHIVE}" && \
-    wget -qO /tmp/amass_checksums.txt "https://github.com/owasp-amass/amass/releases/download/v${AMASS_VERSION}/amass_checksums.txt" && \
-    grep -E "[[:space:]]${AMASS_ARCHIVE}$" /tmp/amass_checksums.txt | (cd /tmp && sha256sum -c -) && \
+    echo "${AMASS_SHA256}  /tmp/${AMASS_ARCHIVE}" | sha256sum --check && \
     tar -xzf "/tmp/${AMASS_ARCHIVE}" -C /tmp && \
     mv "/tmp/${AMASS_DIR}/amass" /usr/local/bin/amass && \
     chmod +x /usr/local/bin/amass && \
-    rm -rf "/tmp/${SUBFINDER_ARCHIVE}" /tmp/subfinder /tmp/subfinder_checksums.txt "/tmp/${AMASS_ARCHIVE}" "/tmp/${AMASS_DIR}" /tmp/amass_checksums.txt && \
+    rm -rf "/tmp/${SUBFINDER_ARCHIVE}" /tmp/subfinder "/tmp/${AMASS_ARCHIVE}" "/tmp/${AMASS_DIR}" && \
     # Clean apt cache
     apt-get clean && rm -rf /var/lib/apt/lists/* /var/cache/apt/* && \
     # Install Python packages
