@@ -37,6 +37,20 @@ class CodeownersAuditTests(unittest.TestCase):
         self.assertEqual(len(findings), 1)
         self.assertEqual(findings[0].detector_id, "self_audit.codeowners_incomplete")
 
+    def test_ownerless_rule_overrides_earlier_global_owner(self):
+        findings = self._findings(
+            "* @maintainer\n"
+            "/.github/workflows/\n"
+        )
+        self.assertEqual(len(findings), 1)
+        self.assertIn(".github/workflows", findings[0].evidence.snippet)
+
+    def test_later_global_owner_restores_coverage(self):
+        self.assertEqual(
+            self._findings("/.github/workflows/\n* @maintainer\n"),
+            [],
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
