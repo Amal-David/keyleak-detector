@@ -447,6 +447,39 @@ class AutoInstallTests(unittest.TestCase):
         self.assertTrue(any("brew" in c for c in calls),
                         "KEYLEAK_NO_AUTO_INSTALL=0 must not block auto-install")
 
+    def test_go_install_uses_reviewed_subfinder_release(self):
+        state = {"installed": False}
+        calls = []
+
+        def fake_which(name):
+            if name == "go":
+                return "/usr/bin/go"
+            if name == "subfinder" and state["installed"]:
+                return "/tmp/go/bin/subfinder"
+            return None
+
+        def fake_run(command, *args, **kwargs):
+            calls.append(command)
+            if command[:2] == ["go", "install"]:
+                state["installed"] = True
+
+            class Result:
+                returncode, stderr = 0, ""
+                stdout = "/tmp/go/bin\n" if command[:3] == ["go", "env", "GOBIN"] else ""
+
+            return Result()
+
+        with mock.patch.object(ss.shutil, "which", side_effect=fake_which), \
+             mock.patch.object(ss.subprocess, "run", side_effect=fake_run), \
+             mock.patch.object(ss.os.path, "isfile", return_value=True):
+            self.assertTrue(ss._ensure_subfinder(auto_install=True))
+
+        install = next(command for command in calls if command[:2] == ["go", "install"])
+        self.assertEqual(
+            install[-1],
+            "github.com/projectdiscovery/subfinder/v2/cmd/subfinder@v2.17.0",
+        )
+
     def test_discover_threads_auto_install_flag(self):
         captured = {}
 

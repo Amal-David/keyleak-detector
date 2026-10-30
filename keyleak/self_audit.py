@@ -332,12 +332,26 @@ def _audit_codeowners(repo_root: Path) -> List[Finding]:
         return findings
 
     content = existing[0].read_text(encoding="utf-8")
+    rules = []
+    for line in content.splitlines():
+        fields = line.split("#", 1)[0].strip().split()
+        if len(fields) < 2:
+            continue
+        if any(owner.startswith("@") or "@" in owner for owner in fields[1:]):
+            rules.append(fields[0])
+
     required_patterns = (
         ".github/workflows",
         "keyleak",
         "pyproject.toml",
     )
-    missing = [pattern for pattern in required_patterns if pattern not in content]
+    global_patterns = {"*", "**", "/*", "/**", "**/*"}
+    globally_owned = any(pattern in global_patterns for pattern in rules)
+    missing = [] if globally_owned else [
+        required
+        for required in required_patterns
+        if not any(required in pattern for pattern in rules)
+    ]
     if missing:
         findings.append(_finding(
             detector_id="self_audit.codeowners_incomplete",
