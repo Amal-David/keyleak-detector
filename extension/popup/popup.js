@@ -244,7 +244,7 @@ function renderFindings(findings) {
         ${rawSampleHtml}
         <div class="fix"><strong>fix:</strong> ${escapeHtml(f.remediation || 'Review and remove exposed sensitive data.')}</div>
         <div class="finding-actions">
-          ${TESTABLE_TYPES.has(f.type) && f.raw_value ? `<button class="test-btn primary" data-id="${escapeHtml(f.id)}" data-type="${escapeHtml(f.type)}" data-raw="${escapeHtml(f.raw_value)}">TEST</button>` : ''}
+          ${TESTABLE_TYPES.has(f.type) && f.raw_value ? `<button class="test-btn primary" data-id="${escapeHtml(f.id)}" data-type="${escapeHtml(f.type)}" data-raw="${escapeHtml(f.raw_value)}">INSPECT LOCALLY</button>` : ''}
           <button class="learn-btn" data-id="${escapeHtml(f.id)}" data-detector="${escapeHtml(f.detector_id || '')}">LEARN</button>
           <button class="suppress-btn" data-id="${escapeHtml(f.id)}">SUPPRESS ID</button>
         </div>
@@ -358,11 +358,11 @@ content.addEventListener('click', (event) => {
     const resultEl = content.querySelector(`.test-result[data-test-for="${CSS.escape(findingId)}"]`);
     if (!resultEl) return;
     testBtn.disabled = true;
-    testBtn.textContent = 'TESTING...';
-    resultEl.innerHTML = '<span class="test-pending">Testing key...</span>';
+    testBtn.textContent = 'INSPECTING...';
+    resultEl.innerHTML = '<span class="test-pending">Inspecting token locally...</span>';
     chrome.runtime.sendMessage({ action: 'test_key', type, raw_value: rawValue }, (response) => {
       testBtn.disabled = false;
-      testBtn.textContent = 'TEST';
+      testBtn.textContent = 'INSPECT LOCALLY';
       if (!response) {
         resultEl.innerHTML = '<span class="test-error">Test failed — no response.</span>';
         return;

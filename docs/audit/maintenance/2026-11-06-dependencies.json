@@ -1,0 +1,56 @@
+{
+  "audit_date": "2026-11-06",
+  "baseline_revision": "4def4c9c7ea121cbaad505c02b04526666d06a41",
+  "implementation_revision": "e63b3dcce9a04aa5c81c0fffdf40641c1396215d",
+  "maintenance_pull_request": 41,
+  "counts": {
+    "initial_osv_queries": 170,
+    "post_fix_osv_queries": 171,
+    "poetry_locked_packages": 28,
+    "post_fix_npm_locked_packages": 143
+  },
+  "initial_advisory_matches": {
+    "glob@13.0.6": [
+      "GHSA-3g3m-2fjr-6pw4"
+    ],
+    "minimatch@10.2.6": [
+      "GHSA-g3hv-75wg-m249"
+    ]
+  },
+  "lock_hashes": {
+    "poetry.lock": "sha256:f18c944b4d78c76b67ea45c0977dd830efe5a113fe268fbd352f1b6c08cf0b0e",
+    "tests/rea-evaluation/package-lock.json": "sha256:fa87b651431345fc69f2bf8ee86c3e539590b1e77dbb0d6a3d055f7229e7717b"
+  },
+  "reviewed_artifacts": {
+    "@isaacs/nonrecursive-glob-match@1.1.0": {
+      "npm_integrity": "sha512-GPm/Dbvk5RLmhRnxXIa7nTpK0xtl4E0wj0MslsuNiJ1FIROU+2+9lgUC/dgF7Ey4QCWhfEsgxilMRMCdHPfDfw=="
+    },
+    "glob@14.0.2": {
+      "npm_integrity": "sha512-vfMgTR2djMHPUchsJMLpZlYQvtjVL+mHpEr5wPpoCbQs2vr/FBNK+3Gnl9Ara1DSs4Aeg4eG9HiADb5/rkY/ZA=="
+    },
+    "minimatch@11.0.1": {
+      "npm_integrity": "sha512-t+Vn6DX4wPCxS23y03C0uhF7S1jpi1GfqPrnlEipCJaA2ykiNbMkVlDutZtmvLfRcUN6R8AYVlzTsQrT4RZoLQ=="
+    },
+    "path-scurry@3.0.0": {
+      "npm_integrity": "sha512-1pTbQqH1wIwMi/eleQ5leFTTCkzFsPcgXNjwOA8YGGW/W4/kHT3dssE7Z6NH+zuqNLOzOB0uaD61yl7cAcVhgg=="
+    }
+  },
+  "selected_versions": {
+    "glob": "14.0.2",
+    "minimatch": "11.0.1",
+    "pyjwt": "2.15.1"
+  },
+  "verification": {
+    "npm_audit_vulnerabilities": 0,
+    "npm_registry_attestations": 27,
+    "npm_registry_signatures": 138,
+    "post_fix_osv_matches": 0,
+    "pypi_artifact_hash_mismatches": 0,
+    "pypi_yanked_releases": 0,
+    "npm_integrity_mismatches": 0,
+    "npm_deprecated_packages": 0,
+    "registry_declared_install_hooks": 0,
+    "php_deployment_osv_matches": 0,
+    "installed_wheel_osv_matches_excluding_packaging_bootstrap": 0
+  }
+}
