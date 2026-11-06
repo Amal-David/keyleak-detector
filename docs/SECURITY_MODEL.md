@@ -119,6 +119,11 @@ Avoid it when:
 
 The extension stores per-tab reports in `chrome.storage.local` and renders redacted evidence by default. The popup has a deliberate reveal control for local debugging, but copied JSON/Markdown reports use redacted values.
 
+Detected provider credentials are never sent back to their provider for live
+validation. The popup can inspect JWT claims locally, without verifying the
+signature or contacting the issuer; other credential types must be revoked or
+rotated rather than tested.
+
 Confirmed open-table findings require a returned record, not just HTTP 200 or a visible schema. The extension reuses up to two rows already returned by its bounded read probe and stores only a structural preview: safe field names, masked string prefixes and lengths, and type markers. PII, token-like identifiers, scalar values, nested content, excess fields, and excess output are masked or truncated before the finding reaches extension storage.
 
 An explicit popup action can reveal those one or two raw rows. They are held only in the tab's in-memory BaaS state and are never included in normalized findings, storage, reports, logs, clipboard exports, or native messages. Navigation, clear, tab close, and service-worker restart discard them. Empty arrays produce a low-severity readable-empty observation, not a confirmed data-exposure finding, and expose no reveal action.

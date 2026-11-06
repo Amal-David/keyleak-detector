@@ -9,6 +9,8 @@
   "overrides": {
     "@modelcontextprotocol/client": "2.3.0",
     "@modelcontextprotocol/server": "2.3.0",
+    "glob": "14.0.2",
+    "minimatch": "11.0.1",
     "readable-stream": "4.7.0",
     "smol-toml": "1.9.0",
     "zod": "4.6.7"
