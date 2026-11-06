@@ -161,12 +161,12 @@ runs:
         # Local scan
         if [ "$KL_MODE" = "local" ] || [ "$KL_MODE" = "both" ]; then
           run_scan "$REPORT_DIR/keyleak-self-audit-report.json" \
-            python -I -m keyleak.cli self-audit . "${ALLOWLIST_ARGS[@]}" \
+            python -I -m keyleak.cli self-audit . ${ALLOWLIST_ARGS[@]+"${ALLOWLIST_ARGS[@]}"} \
             --json --fail-on "$KL_FAILON"
 
           run_scan "$REPORT_DIR/keyleak-report.json" python -I -m keyleak.cli local . \
             --launch-profile "$KL_PROFILE" \
-            "${ALLOWLIST_ARGS[@]}" \
+            ${ALLOWLIST_ARGS[@]+"${ALLOWLIST_ARGS[@]}"} \
             --json \
             --fail-on "$KL_FAILON"
         fi
@@ -180,8 +180,8 @@ runs:
 
           REPORT="$REPORT_DIR/keyleak-browser-report.$KL_FORMAT"
           run_scan "$REPORT_DIR/keyleak-browser-report.json" python -I -m keyleak.cli browser-scan "$KL_URL" \
-            "${BAAS_ARGS[@]}" \
-            "${ALLOWLIST_ARGS[@]}" \
+            ${BAAS_ARGS[@]+"${BAAS_ARGS[@]}"} \
+            ${ALLOWLIST_ARGS[@]+"${ALLOWLIST_ARGS[@]}"} \
             --json \
             --fail-on "$KL_FAILON"
         fi

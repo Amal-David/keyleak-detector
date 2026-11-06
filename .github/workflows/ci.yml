@@ -34,6 +34,9 @@ jobs:
           poetry install --no-interaction
           poetry run python -m pip check
           poetry run python -m playwright install chromium --with-deps
+      - name: Expose installed PostgreSQL test binaries
+        run: |
+          echo "$(pg_config --bindir)" >> "$GITHUB_PATH"
       - name: Run tests (requires browser integration; no skips)
         run: |
           PYTHONPATH=. poetry run python - <<'PY'

@@ -14,3 +14,8 @@
   may still fail because its configured writable root retains the symlink;
   explain that distinction and use approved physical-path access. Preserve dirty
   primary checkouts and implement in an isolated worktree.
+
+- Browser tests that mock Playwright must also isolate DNS and HTTP probes. Use
+  valid resolver fixtures, explicit permission for owned local servers, and
+  assertions that offline scans fail before discovery. Do not weaken guards to
+  preserve stale mock expectations or leave known failures outside the PR check.

@@ -89,6 +89,8 @@ def scan_path(
     coverage_state = {"attempted": 0, "completed": 0, "skipped": 0, "failed": 0, "reasons": []}
     inventory = {"discovered": 0, "selected": 0, "excluded": 0, "unsupported": 0, "containers": 0, "excluded_directories": 0}
     artifacts = []
+    from .database_audit import CATALOG_PATH, audit_supabase_catalog, load_catalog
+    catalog_path = target / CATALOG_PATH if target.is_dir() else None
     try:
         root_mode = target.stat().st_mode
     except OSError:
@@ -111,6 +113,8 @@ def scan_path(
         inventory=inventory,
         expanded_archives=_expanded_archives,
     ):
+        if file_path == catalog_path:
+            continue
         coverage_state["attempted"] += 1
         relative = file_path.name if target_is_file else file_path.relative_to(target).as_posix()
         source = f"{binary_source_prefix.rstrip('/!')}!/{relative}" if binary_source_prefix is not None else str(file_path)
@@ -176,10 +180,35 @@ def scan_path(
         from .lifecycle_audit import audit_node_dependencies
         findings.extend(audit_node_dependencies(str(target)))
 
+    database_audits = []
+    if catalog_path is not None and (catalog_path.exists() or catalog_path.is_symlink()):
+        coverage_state["attempted"] += 1
+        try:
+            catalog_findings, catalog_status = audit_supabase_catalog(load_catalog(catalog_path), str(catalog_path))
+            findings.extend(catalog_findings)
+            database_audits.append(catalog_status)
+            coverage_state["completed"] += 1
+        except (OSError, ValueError):
+            database_audits.append({"provider": "supabase", "status": "failed",
+                                    "message": "Database metadata could not be read or was incomplete/invalid."})
+            _record_coverage(coverage_state, "failed", "database metadata audit failed")
+    convex_source_files = sum(
+        1 for path in code_files if "convex" in path.parts and "_generated" not in path.parts
+        and path.suffix.lower() in {".js", ".ts", ".mjs"}
+    )
+    if convex_source_files:
+        database_audits.append({
+            "provider": "convex", "status": "source_review", "files": convex_source_files,
+            "message": "Local public registrations were inspected. Static analysis cannot prove authorization; review wrappers, helpers, aliases, and ownership checks.",
+        })
+    elif target.is_dir() and (target / "convex").is_dir():
+        database_audits.append({"provider": "convex", "status": "source_required",
+                                "message": "A Convex directory exists but no function source was audited."})
+
     options = {"include": list(active_includes), "launch_profile": profile, "packs": list(active_packs),
                "scan_node_modules": scan_node_modules, "scan_dist": scan_dist, "scan_binaries": scan_binaries}
     report = build_report(str(target), findings, scan_mode="local", profile=profile, packs=active_packs,
-                          scan_options=options)
+                          scan_options=options, database_audits=database_audits)
     scopes = ["local files"]
     if scan_node_modules:
         scopes.append("node_modules sources")
@@ -263,6 +292,11 @@ def scan_file(
         artifact_metadata.update(size_bytes=len(data), sha256=hashlib.sha256(data).hexdigest(), status="scanned")
     detectors_list = list(detectors)
     findings = scan_text(content, source, detectors_list, run_salt=run_salt)
+    if ("convex" in file_path.parts and "_generated" not in file_path.parts
+            and file_path.suffix.lower() in {".js", ".ts", ".mjs"}
+            and not file_path.name.endswith((".test.ts", ".spec.ts", ".d.ts"))):
+        from .convex_audit import audit_convex_source
+        findings.extend(audit_convex_source(content, source))
     # Missing source maps are coverage gaps even when the carrier is readable.
     if file_path.suffix.lower() in {".js", ".mjs", ".cjs", ".html", ".htm"}:
         def record_map_gap(reason: str) -> None:
