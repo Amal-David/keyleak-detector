@@ -227,6 +227,31 @@ export const wipe = mutation({handler: async (ctx,args) => ctx.db.delete(args.id
                             contextlib.redirect_stderr(io.StringIO()):
                         self.assertEqual(main(args), expected)
 
+    def test_catalog_findings_ignore_default_paths_but_honor_explicit_suppressions(self):
+        from keyleak.cli import main
+        from keyleak.suppressions import apply_suppressions
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory).resolve() / "tests" / "project"
+            (root / ".keyleak").mkdir(parents=True)
+            path = root / ".keyleak/database-audit.json"
+            data = {**catalog(), "relations": [relation(rls_enabled=False)]}
+            data["relations"][0]["grants"]["anon"]["select"] = True
+            path.write_text(json.dumps(data))
+            for args in (["database-audit", str(path), "--json"], ["local", str(root), "--json"]):
+                output = io.StringIO()
+                with self.subTest(command=args[0]), contextlib.redirect_stdout(output):
+                    self.assertEqual(main(args), 2)
+                self.assertIn("supabase_rls_disabled", output.getvalue())
+                self.assertEqual(json.loads(output.getvalue())["verdict"]["label"], "BLOCK SHIP")
+            findings, status = audit_supabase_catalog(data, str(path))
+            report = build_report(str(path), findings, database_audits=[status])
+            baseline = root / "baseline.json"
+            baseline.write_text(json.dumps({"findings": [finding.to_dict() for finding in report.findings]}))
+            allowlist = root / "allowlist.txt"
+            allowlist.write_text("source:/tests/\n")
+            self.assertEqual(apply_suppressions(report, baseline_path=str(baseline)).findings, [])
+            self.assertEqual(apply_suppressions(report, allowlist_path=str(allowlist)).findings, [])
+
     def test_unused_proxy_is_not_contacted_and_offline_policy_is_enforced(self):
         from keyleak.cli import main
         for offline, expected in ((False, 0), (True, 1)):

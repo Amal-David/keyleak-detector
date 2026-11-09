@@ -5,7 +5,6 @@ from __future__ import annotations
 import importlib.util
 import unittest
 from typing import Any, Dict
-from types import SimpleNamespace
 from unittest import mock
 
 HAS_PLAYWRIGHT = importlib.util.find_spec("playwright") is not None
@@ -23,7 +22,11 @@ class BrowserLibraryScanTests(unittest.TestCase):
         page.evaluate.side_effect = list(results)
         context = mock.MagicMock()
         context.new_page.return_value = page
-        page.goto.side_effect = lambda *_args, **_kwargs: [context.route.call_args.args[1](route) for route in routes]
+        page.context = context
+        page.goto.side_effect = lambda *_args, **_kwargs: [
+            next(call.args[1] for call in context.new_cdp_session.return_value.on.call_args_list
+                 if call.args[0] == "Fetch.requestPaused")(route) for route in routes
+        ]
         browser = mock.MagicMock()
         browser.new_context.return_value = context
         p = mock.MagicMock()
@@ -37,7 +40,7 @@ class BrowserLibraryScanTests(unittest.TestCase):
                 target_guard=lambda _host: None,
             )
 
-        context.route.assert_called_once()
+        context.new_cdp_session.return_value.send.assert_any_call("Fetch.enable", mock.ANY)
         context.route_web_socket.assert_called_once()
         return report
 
@@ -68,23 +71,20 @@ class BrowserLibraryScanTests(unittest.TestCase):
                     self._run_with_evaluate_results([result])
 
     def test_browser_routes_obey_the_scan_wide_validation_budget(self):
-        route = mock.Mock(request=SimpleNamespace(
-            url="https://app.example.test/script.js", method="GET", post_data_buffer=None,
-            all_headers=lambda: {},
-        ))
+        route = {"requestId": "script", "request": {
+            "url": "https://app.example.test/script.js", "method": "GET", "headers": {},
+        }}
         with mock.patch("keyleak.browser_scanner.MAX_BROWSER_GUARD_CHECKS", 0), \
                 mock.patch("keyleak.browser_scanner.guarded_request") as fetch:
             report = self._run_with_evaluate_results([[], None, []], [route])
         fetch.assert_not_called()
-        route.abort.assert_called_once()
         self.assertEqual(report.extra["egress_blocked_requests"]["total"], 1)
         self.assertTrue(report.extra["coverage_incomplete"])
 
     def test_fetch_failure_reports_incomplete_coverage_without_an_unsafe_egress_count(self):
-        route = mock.Mock(request=SimpleNamespace(
-            url="https://app.example.test/script.js", method="GET", post_data_buffer=None,
-            all_headers=lambda: {},
-        ))
+        route = {"requestId": "script", "request": {
+            "url": "https://app.example.test/script.js", "method": "GET", "headers": {},
+        }}
         with mock.patch("keyleak.browser_scanner.guarded_request", side_effect=TimeoutError("private-token")):
             report = self._run_with_evaluate_results([[], None, []], [route])
         self.assertEqual(report.extra["egress_blocked_requests"]["total"], 0)

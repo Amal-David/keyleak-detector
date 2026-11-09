@@ -35,7 +35,8 @@ class BrowserAuthStateTests(unittest.TestCase):
 
         context = mock.MagicMock()
         context.new_page.return_value = page
-        context.new_cdp_session.side_effect = RuntimeError("CDP unavailable in unit test")
+        page.context = context
+        context.new_cdp_session.side_effect = [mock.MagicMock(), RuntimeError("Capture CDP unavailable in unit test")]
 
         browser = mock.MagicMock()
         browser.new_context.return_value = context

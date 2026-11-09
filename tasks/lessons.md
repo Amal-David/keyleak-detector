@@ -1,5 +1,9 @@
 # Lessons
 
+- For browser redirect changes, verify the final page URL and origin, relative
+  asset paths, storage isolation, and interception of every redirect hop in a
+  real browser. Cookie and header assertions alone do not prove redirect safety.
+
 - Read newly updated review-comment bodies before running a merge command.
   Green checks do not mean late feedback is addressed; keep inspection and the
   merge as separate steps so new findings can change the decision.

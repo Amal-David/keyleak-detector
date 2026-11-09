@@ -917,13 +917,13 @@ def run_browser_scan(
                 )
 
         bounded_guard = bounded_browser_target_guard(target_guard)
-        transport_state = install_guarded_routes(
-            context, url, lambda request_url: browser_request_block_reason(request_url, bounded_guard),
-            fetch_browser_request, proxy,
-        )
         context.add_init_script(init_script)
-
         page = context.new_page()
+        transport_state = install_guarded_routes(
+            page, url, lambda request_url: browser_request_block_reason(request_url, bounded_guard),
+            fetch_browser_request, proxy,
+            request_timeout=scan_budget_seconds,
+        )
         page.set_default_timeout(scan_budget_seconds * 1000)
         cdp_capture = _start_cdp_capture(context, page, url, run_salt)
         page.goto(url, wait_until="networkidle")
