@@ -602,13 +602,14 @@ def _run_local_phase(
         "target": str(target.resolve()),
         "symlinks_skipped": _local_symlink_count(target),
     }
-    if local_detail["symlinks_skipped"]:
+    child_coverage_reason = _child_coverage_reason(report)
+    if local_detail["symlinks_skipped"] or child_coverage_reason:
         _partial_phase(
             plan,
             "local_evidence",
             coverage,
             local_detail,
-            "symlinked files are excluded to preserve the requested local-root scope",
+            child_coverage_reason or "symlinked files are excluded to preserve the requested local-root scope",
         )
     else:
         _complete_phase(plan, "local_evidence", coverage, local_detail)
@@ -661,16 +662,16 @@ def _run_archive_phase(
     report = _apply_phase_suppressions(report, options)
     findings.extend(report.findings)
     source_reports.append(report)
-    _complete_phase(
-        plan,
-        "archive_evidence",
-        coverage,
-        {
-            "scanner": "archive",
-            "findings": len(report.findings),
-            "chain_of_custody": bool(envelope.get("self_hash")),
-        },
-    )
+    detail = {
+        "scanner": "archive",
+        "findings": len(report.findings),
+        "chain_of_custody": bool(envelope.get("self_hash")),
+    }
+    child_coverage_reason = _child_coverage_reason(report)
+    if child_coverage_reason:
+        _partial_phase(plan, "archive_evidence", coverage, detail, child_coverage_reason)
+    else:
+        _complete_phase(plan, "archive_evidence", coverage, detail)
 
 
 def _run_runtime_phase(
