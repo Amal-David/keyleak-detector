@@ -13,7 +13,7 @@ service configurations and returns redacted evidence with remediation guidance.
 
 ## Install
 
-KeyLeak requires Python 3.12 or newer.
+The KeyLeak CLI requires Python 3.12 or newer. The [static browser app](#static-browser-app-and-github-pages) runs without a Python installation on the visitor's device.
 
 ```bash
 python -m pip install keyleak-detector
@@ -200,6 +200,37 @@ proof, not page URLs or scan data.
   `chrome://extensions`, then run `poetry run keyleak install-extension-host`
   from a source checkout. The helper restricts access to the exact extension
   origin.
+
+## Static browser app and GitHub Pages
+
+The browser app scans pasted text, selected files/folders, ZIP text entries and
+embedded source-map contents on the visitor's device. A Web Worker runs the
+shared JavaScript detector; redacted history stays in IndexedDB and reports can
+be exported as JSON, SARIF, Markdown or HTML. Local scans work offline once the
+app assets have cached successfully.
+
+Build and preview the static app with no application server or runtime packages:
+
+```bash
+python scripts/build_browser_app.py
+python -m http.server 8080 --directory dist/browser
+```
+
+The included **Browser app and Pages** workflow tests pull requests and deploys
+the tested artifact after a merge to `main`. Select **Settings → Pages → Source →
+GitHub Actions** once to enable publication. Relative assets and workers support
+the project URL `https://amal-david.github.io/keyleak-detector/` and custom-domain
+roots; the existing `php-check/` utility remains in the published site.
+
+Optional URL scanning reads one CORS-enabled HTTPS resource. Optional DNS
+discovery sends a bounded set of candidate names to Google Public DNS. These
+operations require explicit user action. This browser release does not provide
+the CLI's site crawl, native discovery tools, active BaaS checks or binary
+analysis. Browser verdicts are `REVIEW`, `NO_FINDINGS` and `INCOMPLETE`; a result
+only describes the selected checks.
+
+See the [browser app guide](docs/BROWSER_APP.md) for setup, privacy boundaries,
+supported inputs, limits and deployment verification.
 
 ## What it detects
 
