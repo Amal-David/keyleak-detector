@@ -5,6 +5,7 @@ import { fetchPublicResource, discoverSubdomains } from './network.js';
 const $ = id => document.getElementById(id);
 const MAX_INPUTS = 500;
 const MAX_INPUT_BYTES = 20 * 1024 * 1024;
+const MAX_TEXT_BYTES = 2 * 1024 * 1024; // The engine's per-file byte limit.
 const WORKER_DEADLINE_MS = 25_000;
 const labels = { files: 'Scan selected files', text: 'Scan pasted text', url: 'Fetch and scan resource', dns: 'Discover DNS names' };
 let selectedTab = 'files';
@@ -109,7 +110,7 @@ async function collectInputs(job) {
   if (selectedTab === 'text') {
     const content = $('source-text').value;
     if (!content.trim()) throw userError('Paste some text before starting a scan.');
-    if (new TextEncoder().encode(content).byteLength > MAX_INPUT_BYTES) throw userError('Pasted input exceeds 20 MiB. Select a smaller input.');
+    if (new TextEncoder().encode(content).byteLength > MAX_TEXT_BYTES) throw userError('Pasted input exceeds the 2 MiB per-file limit. Paste a smaller excerpt or split the text into files no larger than 2 MiB each.');
     return [{ name: 'Pasted text.txt', content }];
   }
   if (selectedTab === 'url') {

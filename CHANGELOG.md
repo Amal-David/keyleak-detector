@@ -4,6 +4,22 @@ All notable changes to KeyLeak Detector are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and the project aims to follow [Semantic Versioning](https://semver.org/).
 
+## Unreleased
+
+### Browser app and delivery
+
+- Add a static browser scanner for local text, files/folders, ordinary ZIP text
+  entries and embedded source-map content, with a dedicated worker, redacted
+  local history, report exports and offline application caching.
+- Support explicit CORS-limited HTTPS resource scanning and bounded DNS-over-HTTPS
+  candidate discovery. Browser reports state unsupported and incomplete scope;
+  native CLI/runtime scanning remains a separate capability.
+- Add GitHub Pages publication from tested `main` builds, with project-path and
+  custom-domain-root support and the existing PHP utility preserved.
+- Automate allowlisted extension ZIP packaging and checksummed GitHub Release
+  assets alongside the existing PyPI Trusted Publishing workflow. Chrome Web
+  Store submission remains a separate publisher operation.
+
 ## [0.7.0] — 2026-10-11
 
 A feature release for deeper local audits and browser privacy controls. The

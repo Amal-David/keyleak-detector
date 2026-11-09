@@ -5,6 +5,7 @@ import json
 from pathlib import Path
 import tempfile
 import unittest
+from unittest.mock import patch
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -36,9 +37,10 @@ class BrowserBuildTests(unittest.TestCase):
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(content)
 
-    def snapshot(self):
-        return {str(path.relative_to(self.output)): path.read_bytes()
-                for path in self.output.rglob("*") if path.is_file()}
+    def snapshot(self, directory=None):
+        directory = directory or self.output
+        return {str(path.relative_to(directory)): path.read_bytes()
+                for path in directory.rglob("*") if path.is_file()}
 
     def test_only_public_runtime_files_are_published(self):
         for name in (".env", "scan-results.json", "site/CNAME", "web/.env",
@@ -88,6 +90,45 @@ class BrowserBuildTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "missing"):
             BUILDER.build_browser_app(self.repo, self.output)
         self.assertEqual(before, self.snapshot())
+
+    def test_failed_replacement_restores_previous_build(self):
+        BUILDER.build_browser_app(self.repo, self.output)
+        before = self.snapshot()
+        self.write("web/index.html", "replacement build")
+        rename = Path.rename
+        failed = False
+
+        def fail_install_once(source, destination):
+            nonlocal failed
+            if Path(destination) == self.output and not failed:
+                failed = True
+                raise PermissionError("synthetic replacement failure")
+            return rename(source, destination)
+
+        with patch.object(Path, "rename", autospec=True, side_effect=fail_install_once):
+            with self.assertRaisesRegex(PermissionError, "replacement failure"):
+                BUILDER.build_browser_app(self.repo, self.output)
+        self.assertTrue(failed)
+        self.assertEqual(before, self.snapshot())
+        self.assertEqual(set(self.base.iterdir()), {self.repo, self.output})
+
+    def test_failed_restore_preserves_the_previous_build_backup(self):
+        BUILDER.build_browser_app(self.repo, self.output)
+        before = self.snapshot()
+        self.write("web/index.html", "replacement build")
+        rename = Path.rename
+
+        def fail_install_and_restore(source, destination):
+            if Path(destination) == self.output:
+                raise PermissionError("synthetic destination failure")
+            return rename(source, destination)
+
+        with patch.object(Path, "rename", autospec=True, side_effect=fail_install_and_restore):
+            with self.assertRaisesRegex(PermissionError, "destination failure"):
+                BUILDER.build_browser_app(self.repo, self.output)
+        backups = list(self.base.glob(".keyleak-browser-backup-*/site"))
+        self.assertEqual(len(backups), 1)
+        self.assertEqual(before, self.snapshot(backups[0]))
 
     def test_refuses_source_tree_and_unrelated_output_directories(self):
         for output in (self.repo, self.repo / "web", self.repo.parent):

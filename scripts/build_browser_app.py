@@ -128,10 +128,28 @@ def build_browser_app(repo_root: Path, output: Path) -> dict:
             destination = staged / name
             destination.parent.mkdir(parents=True, exist_ok=True)
             destination.write_bytes(content)
-        # Input and rendering failures leave the previous successful build intact.
+        # Both directories share a filesystem, so rename cannot fall back to a
+        # partial copy. Keep the backup outside staging cleanup in case even
+        # restoring it fails; the previous build must remain recoverable.
+        backup = None
         if output.exists():
-            shutil.rmtree(output)
-        shutil.move(str(staged), str(output))
+            backup_directory = Path(tempfile.mkdtemp(prefix=".keyleak-browser-backup-", dir=output.parent))
+            backup = backup_directory / "site"
+            try:
+                output.rename(backup)
+            except BaseException:
+                backup_directory.rmdir()
+                raise
+        try:
+            staged.rename(output)
+        except BaseException:
+            if backup is not None:
+                backup.rename(output)
+                backup.parent.rmdir()
+            raise
+        else:
+            if backup is not None:
+                shutil.rmtree(backup.parent)
     return manifest
 
 

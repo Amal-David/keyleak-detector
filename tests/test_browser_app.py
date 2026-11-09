@@ -136,6 +136,38 @@ class BrowserAppTests(unittest.TestCase):
         page.locator("#clear-history").click()
         expect(page.locator(".history-open")).to_have_count(0)
 
+    def test_pasted_text_enforces_the_engine_utf8_byte_boundary_before_scanning(self):
+        context = self.context(service_workers="block")
+        page = self.open(context)
+        workers = []
+        page.on("worker", lambda worker: workers.append(worker))
+        page.get_by_role("tab", name="Text", exact=True).click()
+        limit = 2 * 1024 * 1024
+        # This is below the limit in JavaScript characters, but one byte over
+        # the engine's UTF-8 limit. It must never reach a worker or history.
+        byte_length = page.locator("#source-text").evaluate("""(element, limit) => {
+          element.value = 'é'.repeat(limit / 2) + 'a';
+          return new TextEncoder().encode(element.value).byteLength;
+        }""", limit)
+        self.assertEqual(byte_length, limit + 1)
+        page.locator("#scan-button").click()
+        expect(page.locator("#scan-error")).to_contain_text("2 MiB per-file limit")
+        self.assertEqual(workers, [])
+        self.assertTrue(page.locator("#report-content").is_hidden())
+        self.assertEqual(page.locator("#report-state").inner_text(), "Incomplete")
+        self.assertEqual(page.locator(".history-open").count(), 0)
+        self.assertTrue(page.locator("#scan-button").is_enabled())
+
+        # Exactly 2 MiB still runs through the real engine without a skip.
+        page.locator("#source-text").evaluate("(element) => { element.value = element.value.slice(0, -1); }")
+        page.locator("#scan-button").click()
+        page.locator("#report-content").wait_for(state="visible", timeout=30000)
+        report = json.loads(self.download(page))
+        self.assertEqual(len(workers), 1)
+        self.assertEqual(report["coverage"]["status"], "complete")
+        self.assertEqual(report["coverage"]["completed"], 1)
+        self.assertEqual(report["coverage"]["skipped"], 0)
+
     def test_offline_reload_and_scan_use_only_cached_application_assets(self):
         context = self.context()
         page = self.open(context)

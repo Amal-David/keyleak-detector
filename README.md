@@ -263,6 +263,10 @@ The current Python package release is **0.7.0**. The extension Web Store
 listing and downloadable ZIP can have different versions because store updates
 require a separate submission.
 
+The browser site deploys from tested `main` builds. Publishing a versioned
+GitHub Release triggers PyPI publication and attaches the Python distributions,
+extension ZIP and checksums to that release. See [release channels and setup](docs/DISTRIBUTION.md#deployment-and-release-channels).
+
 - [Changelog](CHANGELOG.md)
 - [Scanner workflows](docs/SCANNER_WORKFLOWS.md)
 - [Binary artifact scanning](docs/BINARY_ARTIFACT_SCANNING.md)
