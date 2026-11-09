@@ -35,10 +35,12 @@ from .extension_bundle import extension_pattern_payload
 from .local_scanner import scan_text
 from .models import Evidence, Finding, ScanReport, build_coverage, coverage_is_incomplete
 from .net_guard import SSRFBlocked, scan_target_block_reason, url_block_reason
-from .proxy import playwright_proxy
 from .redaction import new_run_salt, redact_url, redact_value, stable_id
 from .fingerprints import finding_fingerprint
 from .reporting import build_report
+from .auth_state import scoped_auth_state
+from .browser_transport import denied_browser_proxy, install_guarded_routes
+from .net_guard import guarded_request
 
 
 _LOG = logging.getLogger(__name__)
@@ -890,27 +892,38 @@ def run_browser_scan(
     if initial_block_reason:
         raise SSRFBlocked(initial_block_reason)
 
+    sanitized_auth_state = scoped_auth_state(auth_state_path, url) if auth_state_path else None
     init_script = _build_init_script()
     run_salt = new_run_salt()
     cdp_capture: Optional[_CdpNetworkCapture] = None
 
-    with sync_playwright() as p:
-        browser = p.chromium.launch(headless=headless)
+    with denied_browser_proxy() as browser_proxy, sync_playwright() as p:
+        browser = p.chromium.launch(headless=headless, proxy=browser_proxy)
         context_kwargs: Dict[str, Any] = {
             "viewport": DEFAULT_VIEWPORT,
             "service_workers": "block",
         }
-        browser_proxy = playwright_proxy(proxy)
-        if browser_proxy:
-            context_kwargs["proxy"] = browser_proxy
-        if auth_state_path:
-            context_kwargs["storage_state"] = auth_state_path
+        if sanitized_auth_state is not None:
+            context_kwargs["storage_state"] = sanitized_auth_state
         context = browser.new_context(**context_kwargs)
         egress_blocked = BlockedRequestSummary()
-        install_browser_egress_guards(context, target_guard, egress_blocked)
-        context.add_init_script(init_script)
+        def fetch_browser_request(method, request_url, **kwargs):
+            import requests
+            with requests.Session() as session:
+                session.trust_env = False
+                return guarded_request(
+                    method, request_url, allow_private=True if target_guard is not None else None,
+                    follow_redirects=False, session=session, **kwargs,
+                )
 
+        bounded_guard = bounded_browser_target_guard(target_guard)
+        context.add_init_script(init_script)
         page = context.new_page()
+        transport_state = install_guarded_routes(
+            page, url, lambda request_url: browser_request_block_reason(request_url, bounded_guard),
+            fetch_browser_request, proxy,
+            request_timeout=scan_budget_seconds,
+        )
         page.set_default_timeout(scan_budget_seconds * 1000)
         cdp_capture = _start_cdp_capture(context, page, url, run_salt)
         page.goto(url, wait_until="networkidle")
@@ -966,12 +979,17 @@ def run_browser_scan(
         profile="launch-gate",
         packs=["leak", "appsec", "access-control", "baas"],
     )
+    egress_blocked.total += transport_state["blocked"]
+    coverage_reasons = []
+    if egress_blocked.total:
+        coverage_reasons.append(f"Blocked {egress_blocked.total} unsafe network request(s).")
+    if transport_state["failed"]:
+        coverage_reasons.append(f'Failed to fetch {transport_state["failed"]} browser request(s).')
     report.extra["coverage"] = build_coverage(
         "browser page",
         attempted=1,
         completed=1,
-        reasons=(f"Blocked {egress_blocked.total} unsafe network request(s).",)
-        if egress_blocked.total else (),
+        reasons=coverage_reasons,
     )
     report.extra["coverage_incomplete"] = coverage_is_incomplete(report.extra["coverage"])
     report.extra["egress_blocked_requests"] = egress_blocked.to_dict()
