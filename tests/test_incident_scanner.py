@@ -1,10 +1,13 @@
+import hashlib
 import json
 import ssl
 import tempfile
 import unittest
 from pathlib import Path
 
-from keyleak.incident_scanner import scan_incidents
+import certifi
+
+from keyleak.incident_scanner import TRUST_ANCHORS, scan_incidents
 
 
 class IncidentScannerTests(unittest.TestCase):
@@ -129,7 +132,11 @@ class IncidentScannerTests(unittest.TestCase):
     def test_unrelated_certificate_is_not_an_incident_anchor(self):
         (self.root / "requirements.txt").write_text("certifi==2026.10.19\n")
         bundle = self.root / "unrelated.pem"
-        cert = ssl.create_default_context().get_ca_certs(binary_form=True)[0]
+        cert = next(
+            cert
+            for cert in ssl.create_default_context(cafile=certifi.where()).get_ca_certs(binary_form=True)
+            if hashlib.sha256(cert).hexdigest() not in TRUST_ANCHORS
+        )
         bundle.write_text(ssl.DER_cert_to_PEM_cert(cert))
         report = scan_incidents(str(self.root), ca_bundle=str(bundle))
         self.assertFalse(any(f.detector_id == "incident:emudhra-anchor" for f in report.findings))

@@ -54,8 +54,9 @@ Reports include `database_audits` in JSON/SARIF and a visible status in text,
 Markdown, and HTML. Detected Supabase projects without metadata are
 `metadata_required`; Convex authorization remains `source_review` or
 `source_required`. These states produce a REVIEW verdict, not a clean permission
-audit. Malformed metadata fails scan coverage and exits with code 1. Threshold
-violations exit with code 2; REVIEW alone follows the selected severity threshold.
+audit. In `keyleak local`, malformed metadata marks scan coverage incomplete and
+exits with code 2. `keyleak database-audit` exits with code 1 for malformed metadata.
+Threshold violations exit with code 2; REVIEW alone follows the selected severity threshold.
 Firebase, Appwrite, and PocketBase retain their existing exposure checks and report
 configuration auditing as `not_supported` when detected. The extension retains
 its existing passive Convex observations; catalog and source audits run in Python

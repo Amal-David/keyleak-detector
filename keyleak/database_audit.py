@@ -119,7 +119,7 @@ def audit_supabase_catalog(payload: Any, source: str = "Supabase catalog") -> Tu
             raise ValueError("invalid catalog relation")
         schema, name = _name(item.get("schema")), _name(item.get("name"))
         kind = item.get("kind")
-        if schema not in schemas or kind not in {"table", "view", "materialized_view"}:
+        if schema not in schemas or not isinstance(kind, str) or kind not in {"table", "view", "materialized_view"}:
             raise ValueError("unsupported relation or schema")
         subject = f"{_quote(schema)}.{_quote(name)}"
         if subject in seen:

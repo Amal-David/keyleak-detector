@@ -92,6 +92,7 @@ class SupabaseAuditTests(unittest.TestCase):
 
     def test_incomplete_or_hostile_metadata_is_rejected(self):
         for data in ({}, {**catalog(), "relations": None},
+                     *({**catalog(), "relations": [relation(kind)]} for kind in ([], {}, None, 1, "unsupported")),
                      {**catalog(), "relations": [relation(grants={})]},
                      {**catalog(), "functions": [{"schema": "public", "name": "x"}]},
                      {**catalog(), "functions": [{
@@ -199,6 +200,32 @@ export const wipe = mutation({handler: async (ctx,args) => ctx.db.delete(args.id
                 self.assertEqual(main(["database-audit", str(path), "--json"]), 1)
             self.assertEqual(output.getvalue(), "")
             self.assertNotIn("do-not-log", error.getvalue())
+
+    def test_cli_resolves_parent_symlinks_but_rejects_catalog_symlinks(self):
+        from keyleak.cli import main
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory).resolve()
+            (root / "real").mkdir()
+            (root / "alias").symlink_to(root / "real", target_is_directory=True)
+            (root / "real/catalog.json").write_text(json.dumps(catalog()))
+            (root / "real/link.json").symlink_to(root / "real/catalog.json")
+            for filename, expected in (("catalog.json", 0), ("link.json", 1)):
+                with self.subTest(filename=filename), contextlib.redirect_stdout(io.StringIO()), \
+                        contextlib.redirect_stderr(io.StringIO()):
+                    self.assertEqual(main(["database-audit", str(root / "alias" / filename), "--json"]), expected)
+
+    def test_non_string_relation_kind_fails_both_commands_without_a_traceback(self):
+        from keyleak.cli import main
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory).resolve()
+            (root / ".keyleak").mkdir()
+            path = root / ".keyleak/database-audit.json"
+            for kind in ([], {}):
+                path.write_text(json.dumps({**catalog(), "relations": [relation(kind)]}))
+                for args, expected in ((["database-audit", str(path)], 1), (["local", str(root)], 2)):
+                    with self.subTest(kind=kind, command=args[0]), contextlib.redirect_stdout(io.StringIO()), \
+                            contextlib.redirect_stderr(io.StringIO()):
+                        self.assertEqual(main(args), expected)
 
     def test_unused_proxy_is_not_contacted_and_offline_policy_is_enforced(self):
         from keyleak.cli import main

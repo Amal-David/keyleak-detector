@@ -57,6 +57,27 @@ export const update = mutation({handler: async (ctx,args) => {
             self.assertEqual(report.extra["database_audits"][0]["status"], "source_review")
             self.assertEqual(report.verdict["label"], "REVIEW")
 
+    def test_only_project_function_sources_are_counted_and_audited(self):
+        from keyleak.local_scanner import _is_convex_source, scan_path
+        source = '''import { mutation } from "./_generated/server";
+export const wipe = mutation({handler: async ctx => ctx.db.delete("id")});'''
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory).resolve() / "convex" / "unrelated-project"
+            root.mkdir(parents=True)
+            for name in ("app.ts", "node_modules/convex/index.js", "convex/_generated/server.ts",
+                         "convex/tasks.test.ts", "convex/tasks.spec.ts", "convex/tasks.d.ts"):
+                path = root / name
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text(source)
+            report = scan_path(str(root), scan_node_modules=True)
+            self.assertFalse(any(f.type == "convex_public_function_review" for f in report.findings))
+            self.assertEqual(report.extra["database_audits"][0]["status"], "source_required")
+            self.assertFalse(_is_convex_source(root.parent / "outside.ts", root))
+            (root / "convex/tasks.ts").write_text(source)
+            report = scan_path(str(root), scan_node_modules=True)
+            self.assertEqual(report.extra["database_audits"][0]["files"], 1)
+            self.assertEqual(sum(f.type == "convex_public_function_review" for f in report.findings), 1)
+
 
 if __name__ == "__main__":
     unittest.main()

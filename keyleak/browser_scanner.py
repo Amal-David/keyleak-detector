@@ -916,8 +916,9 @@ def run_browser_scan(
                     follow_redirects=False, session=session, **kwargs,
                 )
 
+        bounded_guard = bounded_browser_target_guard(target_guard)
         transport_state = install_guarded_routes(
-            context, url, lambda request_url: browser_request_block_reason(request_url, target_guard),
+            context, url, lambda request_url: browser_request_block_reason(request_url, bounded_guard),
             fetch_browser_request, proxy,
         )
         context.add_init_script(init_script)
@@ -979,12 +980,16 @@ def run_browser_scan(
         packs=["leak", "appsec", "access-control", "baas"],
     )
     egress_blocked.total += transport_state["blocked"]
+    coverage_reasons = []
+    if egress_blocked.total:
+        coverage_reasons.append(f"Blocked {egress_blocked.total} unsafe network request(s).")
+    if transport_state["failed"]:
+        coverage_reasons.append(f'Failed to fetch {transport_state["failed"]} browser request(s).')
     report.extra["coverage"] = build_coverage(
         "browser page",
         attempted=1,
         completed=1,
-        reasons=(f"Blocked {egress_blocked.total} unsafe network request(s).",)
-        if egress_blocked.total else (),
+        reasons=coverage_reasons,
     )
     report.extra["coverage_incomplete"] = coverage_is_incomplete(report.extra["coverage"])
     report.extra["egress_blocked_requests"] = egress_blocked.to_dict()

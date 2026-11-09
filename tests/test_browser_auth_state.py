@@ -6,7 +6,6 @@ and scopes a supplied storageState document before any browser request runs.
 
 from __future__ import annotations
 
-import importlib.util
 import json
 import tempfile
 import unittest
@@ -14,9 +13,6 @@ from pathlib import Path
 from unittest import mock
 
 from keyleak.browser_scanner import run_browser_scan
-
-
-HAS_PLAYWRIGHT = importlib.util.find_spec("playwright") is not None
 
 
 def _cookie(name: str, domain: str) -> dict:
@@ -32,7 +28,6 @@ def _cookie(name: str, domain: str) -> dict:
     }
 
 
-@unittest.skipUnless(HAS_PLAYWRIGHT, "Playwright not installed; auth-state contract skipped.")
 class BrowserAuthStateTests(unittest.TestCase):
     def _context_storage_state(self, state: dict) -> object:
         page = mock.MagicMock()

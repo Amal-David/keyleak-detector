@@ -151,6 +151,8 @@ runs:
           JSON_REPORTS+=("$scan_report")
         }
 
+        # Bash 3 treats empty arrays as unset under nounset; conditional expansion
+        # preserves zero arguments and keeps nonempty values individually quoted.
         ALLOWLIST_ARGS=()
         if [ -n "$KL_ALLOWLIST" ] && [ -f "$KL_ALLOWLIST" ]; then
           ALLOWLIST_ARGS=(--allowlist "$KL_ALLOWLIST")

@@ -5,6 +5,7 @@ from __future__ import annotations
 import importlib.util
 import unittest
 from typing import Any, Dict
+from types import SimpleNamespace
 from unittest import mock
 
 HAS_PLAYWRIGHT = importlib.util.find_spec("playwright") is not None
@@ -12,7 +13,7 @@ HAS_PLAYWRIGHT = importlib.util.find_spec("playwright") is not None
 
 @unittest.skipUnless(HAS_PLAYWRIGHT, "Playwright not installed; integration test skipped.")
 class BrowserLibraryScanTests(unittest.TestCase):
-    def _run_with_evaluate_results(self, results):
+    def _run_with_evaluate_results(self, results, routes=()):
         """Drive run_browser_scan with a fully-mocked Playwright; page.evaluate
         returns ``results`` in call order: __keyleak_run, baas_extract, library_scan.
         """
@@ -22,6 +23,7 @@ class BrowserLibraryScanTests(unittest.TestCase):
         page.evaluate.side_effect = list(results)
         context = mock.MagicMock()
         context.new_page.return_value = page
+        page.goto.side_effect = lambda *_args, **_kwargs: [context.route.call_args.args[1](route) for route in routes]
         browser = mock.MagicMock()
         browser.new_context.return_value = context
         p = mock.MagicMock()
@@ -64,6 +66,31 @@ class BrowserLibraryScanTests(unittest.TestCase):
             with self.subTest(result=result):
                 with self.assertRaisesRegex(RuntimeError, "scan is incomplete"):
                     self._run_with_evaluate_results([result])
+
+    def test_browser_routes_obey_the_scan_wide_validation_budget(self):
+        route = mock.Mock(request=SimpleNamespace(
+            url="https://app.example.test/script.js", method="GET", post_data_buffer=None,
+            all_headers=lambda: {},
+        ))
+        with mock.patch("keyleak.browser_scanner.MAX_BROWSER_GUARD_CHECKS", 0), \
+                mock.patch("keyleak.browser_scanner.guarded_request") as fetch:
+            report = self._run_with_evaluate_results([[], None, []], [route])
+        fetch.assert_not_called()
+        route.abort.assert_called_once()
+        self.assertEqual(report.extra["egress_blocked_requests"]["total"], 1)
+        self.assertTrue(report.extra["coverage_incomplete"])
+
+    def test_fetch_failure_reports_incomplete_coverage_without_an_unsafe_egress_count(self):
+        route = mock.Mock(request=SimpleNamespace(
+            url="https://app.example.test/script.js", method="GET", post_data_buffer=None,
+            all_headers=lambda: {},
+        ))
+        with mock.patch("keyleak.browser_scanner.guarded_request", side_effect=TimeoutError("private-token")):
+            report = self._run_with_evaluate_results([[], None, []], [route])
+        self.assertEqual(report.extra["egress_blocked_requests"]["total"], 0)
+        self.assertTrue(report.extra["coverage_incomplete"])
+        self.assertIn("Failed to fetch 1 browser request(s).", report.extra["coverage"]["reasons"])
+        self.assertNotIn("private-token", str(report.to_dict()))
 
 
 if __name__ == "__main__":

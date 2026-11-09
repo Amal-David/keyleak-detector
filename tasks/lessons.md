@@ -19,3 +19,8 @@
   valid resolver fixtures, explicit permission for owned local servers, and
   assertions that offline scans fail before discovery. Do not weaken guards to
   preserve stale mock expectations or leave known failures outside the PR check.
+
+- For the agent-security ecosystem request, compare a representative set of GitHub
+  offensive/red-team skill libraries rather than narrowing the research to DeepSeek.
+  Distinguish advertised capabilities from verified behavior and do not claim exhaustive
+  GitHub coverage or convert methodology catalogs into autonomous exploitation.

@@ -21,7 +21,7 @@ import json
 import re
 import shutil
 import subprocess
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Iterable, List, Optional
 
 from .models import Evidence, Finding, ScanReport
@@ -305,6 +305,31 @@ def _audit_poetry_lockfile(repo_root: Path, *, allow_external_commands: bool = T
 # CODEOWNERS audit
 # ---------------------------------------------------------------------------
 
+_CODEOWNERS_GLOBAL_PATTERNS = {"*", "**", "/*", "/**", "**/*"}
+
+
+def _codeowners_pattern_matches(pattern: str, path: str) -> bool:
+    """Match the common CODEOWNERS forms used for security-sensitive paths."""
+    if pattern in _CODEOWNERS_GLOBAL_PATTERNS:
+        return True
+    normalized = pattern.lstrip("/")
+    if normalized.endswith("/**/*"):
+        return path.startswith(normalized[:-5].rstrip("/") + "/")
+    if normalized.endswith("/**"):
+        return path.startswith(normalized[:-3].rstrip("/") + "/")
+    if normalized.endswith("/"):
+        return path.startswith(normalized)
+    return PurePosixPath(path).match(normalized)
+
+
+def _codeowners_path_is_owned(rules, path: str) -> bool:
+    """Apply CODEOWNERS' last-matching-rule behavior to one repository path."""
+    for pattern, owned in reversed(rules):
+        if _codeowners_pattern_matches(pattern, path):
+            return owned
+    return False
+
+
 def _audit_codeowners(repo_root: Path) -> List[Finding]:
     findings: List[Finding] = []
     candidates = [
@@ -332,12 +357,32 @@ def _audit_codeowners(repo_root: Path) -> List[Finding]:
         return findings
 
     content = existing[0].read_text(encoding="utf-8")
-    required_patterns = (
-        ".github/workflows",
-        "keyleak",
-        "pyproject.toml",
-    )
-    missing = [pattern for pattern in required_patterns if pattern not in content]
+    rules = []
+    for line in content.splitlines():
+        fields = line.split("#", 1)[0].strip().split()
+        if not fields:
+            continue
+        owned = any(owner.startswith("@") or "@" in owner for owner in fields[1:])
+        rules.append((fields[0], owned))
+
+    required_paths = {
+        ".github/workflows": [".github/workflows/__keyleak_owner_check__.yml"],
+        "keyleak": ["keyleak/__keyleak_owner_check__.py"],
+        "pyproject.toml": ["pyproject.toml"],
+    }
+    for label, directory in ((".github/workflows", repo_root / ".github" / "workflows"),
+                             ("keyleak", repo_root / "keyleak")):
+        if directory.is_dir():
+            required_paths[label].extend(
+                path.relative_to(repo_root).as_posix()
+                for path in directory.rglob("*")
+                if path.is_file()
+            )
+
+    missing = []
+    for label, paths in required_paths.items():
+        if any(not _codeowners_path_is_owned(rules, path) for path in paths):
+            missing.append(label)
     if missing:
         findings.append(_finding(
             detector_id="self_audit.codeowners_incomplete",

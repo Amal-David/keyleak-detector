@@ -1,0 +1,65 @@
+{
+  "audit_date": "2026-10-30",
+  "baseline_revision": "e9372e70c6e148092f016c8305cc40101478cb2e",
+  "counts": {
+    "npm_locked_dependencies": 142,
+    "osv_queries": 170,
+    "poetry_locked_packages": 28
+  },
+  "initial_advisory_matches": {
+    "filelock@3.29.6": [
+      "GHSA-567q-5qvw-pf92",
+      "GHSA-69hj-f68j-2879",
+      "GHSA-8mx5-7m5m-r77g",
+      "GHSA-9vhv-jxww-xfm5",
+      "GHSA-cwqr-hh33-gh44",
+      "GHSA-fq56-3cx3-fjxp",
+      "GHSA-j8f7-rjxc-mr56",
+      "GHSA-rfpc-qcw5-3pc4",
+      "GHSA-v4x8-3wr5-3wq8"
+    ],
+    "zod@4.4.3": [
+      "GHSA-mrhx-c7xc-m3w5"
+    ]
+  },
+  "lock_hashes": {
+    "poetry.lock": "sha256:f18c944b4d78c76b67ea45c0977dd830efe5a113fe268fbd352f1b6c08cf0b0e",
+    "tests/rea-evaluation/package-lock.json": "sha256:092fbee50148332e627faf8be4bd856df33ce19d218b9b70cdc8587fea440f81"
+  },
+  "reviewed_artifacts": {
+    "amass@5.0.1": {
+      "linux_amd64": "sha256:ca0682b7f504c7016e8991505aa1bf343b1bf02e64946ce8575891bda037b8e6",
+      "linux_arm64": "sha256:286403bcb0e8dcf8e989f76584a848b179007872ed5258234f77810babf6b771"
+    },
+    "certifi@2026.10.23": {
+      "sdist": "sha256:a9895e6e2758b371e0545e321a3a8fd1fcfd9829ada8824a936dfb16aaaf36cd",
+      "wheel": "sha256:e9b54de76e530bb6cf0ccd036787103acb58fd42ba930ea8bf948ddbaa2f61d1"
+    },
+    "filelock@4.2.4": {
+      "sdist": "sha256:c6d8663535e1650ee430507b4ffbac7b464dd64b7647ea0112a9f406499d163d",
+      "wheel": "sha256:301241438c57936ef93f4243a94f2559022268bfcf9b375a9a72eb0f8db8358e"
+    },
+    "subfinder@2.17.0": {
+      "linux_amd64": "sha256:a39c3e5c7a26ef3c430915c4d6cbf7716a00f26769a75e9405aba796142eba37",
+      "linux_arm64": "sha256:24913d49dddc1d3a5e99a4a7580da5be980959b9415b96f52c4f7f4124392190"
+    },
+    "zod@4.6.7": {
+      "npm_integrity": "sha512-g8W2D2kU6a8untc053fX1uVBKzM7yqAxW/3zwk83+6RyF2+SKOuV+c0wBDhUwzV1PaGapmZH+rmcUzPf+3CGwg=="
+    }
+  },
+  "selected_versions": {
+    "certifi": "2026.10.23",
+    "filelock": "4.2.4",
+    "subfinder": "2.17.0",
+    "zod": "4.6.7"
+  },
+  "verification": {
+    "npm_audit_vulnerabilities": 0,
+    "npm_registry_attestations": 27,
+    "npm_registry_signatures": 137,
+    "post_fix_osv_matches": 0,
+    "pypi_artifact_hash_mismatches": 0,
+    "pypi_yanked_releases": 0,
+    "registry_declared_install_hooks": 0
+  }
+}
