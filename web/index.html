@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="referrer" content="no-referrer">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src 'self' https:; worker-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'">
+  <meta name="theme-color" content="#0c1515">
+  <meta name="description" content="Find exposed credentials in selected files and bundles, locally in your browser. No upload, account, or scan server required.">
+  <title>KeyLeak — Browser scanner</title>
+  <link rel="icon" href="./favicon.ico">
+  <link rel="manifest" href="./manifest.webmanifest">
+  <link rel="stylesheet" href="./styles.css">
+  <script type="module" src="./src/app.js"></script>
+</head>
+<body>
+  <a class="skip-link" href="#scan-input">Skip to scanner</a>
+  <header class="site-header">
+    <a class="brand" href="./" aria-label="KeyLeak home"><span class="brand-icon" aria-hidden="true">K<span>↗</span></span><span>KeyLeak<span class="brand-subtitle">BROWSER</span></span></a>
+    <nav aria-label="Application"><span class="privacy-indicator"><span class="dot"></span> Runs on your device</span><a href="https://github.com/Amal-David/keyleak-detector" target="_blank" rel="noopener noreferrer">Source code <span aria-hidden="true">↗</span></a></nav>
+  </header>
+  <main>
+    <section class="intro" aria-labelledby="page-title">
+      <p class="eyebrow">LOCAL ANALYSIS. YOUR DATA.</p>
+      <h1 id="page-title">Find the secrets.<br><span>Keep the evidence.</span></h1>
+      <p class="intro-copy">Inspect source files, build bundles, and ZIP archives in your browser. Selected files and pasted text are never uploaded.</p>
+      <div class="intro-tags"><span>No account</span><span>No scan server</span><span id="offline-state">Preparing offline access…</span></div>
+    </section>
+
+    <div class="workspace">
+      <aside class="input-column">
+        <section class="panel input-panel" id="scan-input" aria-labelledby="input-title">
+          <div class="panel-heading"><div><p class="eyebrow">01 / INPUT</p><h2 id="input-title">Start a scan</h2></div><span class="quiet-badge">Browser edition</span></div>
+          <div class="tabs" role="tablist" aria-label="Input type">
+            <button id="tab-files" role="tab" aria-controls="panel-files" aria-selected="true" data-tab="files">Files</button>
+            <button id="tab-text" role="tab" aria-controls="panel-text" aria-selected="false" tabindex="-1" data-tab="text">Text</button>
+            <button id="tab-url" role="tab" aria-controls="panel-url" aria-selected="false" tabindex="-1" data-tab="url">URL</button>
+            <button id="tab-dns" role="tab" aria-controls="panel-dns" aria-selected="false" tabindex="-1" data-tab="dns">Discovery</button>
+          </div>
+
+          <section id="panel-files" role="tabpanel" aria-labelledby="tab-files">
+            <div class="drop-zone" id="drop-zone">
+              <div class="upload-glyph" aria-hidden="true">↥</div>
+              <h3>Drop files or a ZIP here</h3>
+              <p>Source, configuration, source maps, and text exports.</p>
+              <div class="file-actions"><label class="button secondary" for="files">Choose files</label><input id="files" type="file" multiple class="visually-hidden"><label class="text-button" for="folder">Choose folder</label><input id="folder" type="file" multiple webkitdirectory class="visually-hidden"></div>
+            </div>
+            <p id="selection-status" class="selection-status" aria-live="polite">No files selected.</p>
+            <p class="field-help">Up to 2 MiB per text file, 20 MiB of inputs, and 500 entries. Unsupported files and exhausted limits are reported as incomplete coverage.</p>
+          </section>
+
+          <section id="panel-text" role="tabpanel" aria-labelledby="tab-text" hidden>
+            <label for="source-text">Paste text to inspect</label>
+            <textarea id="source-text" rows="10" spellcheck="false" autocomplete="off" autocapitalize="off" placeholder="Paste a configuration, JavaScript bundle, or log excerpt…"></textarea>
+            <div class="field-row"><span class="field-help">Text stays in memory during the scan.</span><button class="text-button" id="load-example" type="button">Try a safe example</button></div>
+          </section>
+
+          <section id="panel-url" role="tabpanel" aria-labelledby="tab-url" hidden>
+            <label for="target-url">Public HTTPS resource</label>
+            <input id="target-url" type="url" autocomplete="off" spellcheck="false" placeholder="https://your-app.example/assets/app.js">
+            <p class="field-help">Reads one text resource directly from your browser. The target must allow CORS. Redirects and ambient credentials are disabled. This does not crawl a site or run its JavaScript.</p>
+            <label class="check-row"><input type="checkbox" id="authorized"><span>I own this target or have permission to inspect it.</span></label>
+            <div class="notice">The target receives this request and sees your connection. A blocked response means coverage is unavailable, never a clean scan.</div>
+          </section>
+
+          <section id="panel-dns" role="tabpanel" aria-labelledby="tab-dns" hidden>
+            <label for="target-domain">Public domain</label>
+            <input id="target-domain" type="text" autocomplete="off" spellcheck="false" placeholder="your-app.example">
+            <p class="field-help">Checks a small, bounded set of common names using Google DNS-over-HTTPS. The resolver receives the names queried. Results are kept in memory.</p>
+            <label class="check-row"><input type="checkbox" id="dns-authorized"><span>I have permission to assess this domain and agree to send discovery queries to Google Public DNS.</span></label>
+            <div class="notice">DNS discovery is separate from a secret scan. Discovered websites are not fetched. Certificate Transparency, Subfinder, and Amass are not included.</div>
+          </section>
+
+          <div class="scan-controls"><button class="button primary" id="scan-button" type="button">Scan selected files <span aria-hidden="true">→</span></button><button class="button secondary" id="cancel-button" type="button" hidden>Cancel</button></div>
+          <div class="status-line" id="scan-status" role="status" aria-live="polite">Ready. Analysis happens on this device.</div>
+          <div class="error-message" id="scan-error" role="alert" hidden></div>
+        </section>
+
+        <section class="panel history-panel" aria-labelledby="history-title">
+          <div class="panel-heading"><div><p class="eyebrow">ON THIS DEVICE</p><h2 id="history-title">Scan history</h2></div><button class="text-button" type="button" id="clear-history">Clear all</button></div>
+          <label class="check-row"><input type="checkbox" id="save-history" checked><span>Save redacted reports locally</span></label>
+          <p id="storage-state" class="field-help">Checking browser storage…</p>
+          <ul id="history-list" class="history-list"><li class="empty-note">Your saved scans will appear here.</li></ul>
+          <button class="text-button" id="persist-storage" type="button">Request persistent storage</button>
+        </section>
+      </aside>
+
+      <section class="panel results-panel" aria-labelledby="results-title">
+        <div class="panel-heading"><div><p class="eyebrow">02 / RESULTS</p><h2 id="results-title">Your findings</h2></div><span class="quiet-badge" id="report-state">Awaiting input</span></div>
+        <div class="empty-results" id="empty-results"><div class="shield-glyph" aria-hidden="true">◇</div><h3>A clearer picture of what ships.</h3><p>Select files or paste a bundle to inspect it. Findings include severity, detector, and remediation. Credential values are redacted before leaving the scan worker.</p><button type="button" class="text-button" id="empty-example">Start with a safe example <span aria-hidden="true">→</span></button></div>
+        <div id="report-content" hidden>
+          <div class="verdict" id="verdict"><span id="verdict-label"></span><p id="verdict-reason"></p></div>
+          <div class="metrics" id="metrics"></div>
+          <section class="coverage" aria-labelledby="coverage-title"><div class="section-label"><h3 id="coverage-title">Coverage</h3><span id="coverage-status"></span></div><p id="coverage-description"></p><ul id="coverage-reasons"></ul></section>
+          <div class="export-row"><span>Export redacted report</span><button type="button" class="text-button" data-export="json">JSON ↓</button><button type="button" class="text-button" data-export="sarif">SARIF ↓</button><button type="button" class="text-button" data-export="markdown">Markdown ↓</button><button type="button" class="text-button" data-export="html">HTML ↓</button></div>
+          <div id="findings-list" class="findings-list"></div>
+        </div>
+        <div id="discovery-content" hidden><h3>Discovered DNS names</h3><p id="discovery-notice" class="field-help"></p><ul id="discovery-list" class="discovery-list"></ul><ul id="discovery-errors" class="coverage-reasons"></ul><p class="field-help">These are DNS observations, not security findings. No discovered website has been scanned.</p></div>
+        <div class="capabilities"><h3>What this edition covers</h3><p>Generated browser detectors for exposed credentials and review leads. Local text and ZIP inputs, embedded source-map content, and CORS-readable resources. The Python CLI adds procedural checks, native browser capture, and deeper discovery.</p><p>Passing these selected checks does not establish that an application is secure.</p></div>
+      </section>
+    </div>
+    <footer><span>Built from the KeyLeak detector registry.</span><span>Inputs are local. Live requests are always explicit.</span></footer>
+  </main>
+  <noscript><p class="noscript">KeyLeak needs JavaScript to run its scanner locally in your browser.</p></noscript>
+</body>
+</html>

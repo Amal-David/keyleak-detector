@@ -4,6 +4,63 @@ This document describes the packaging contract and remaining release work.
 It is not a claim of inclusion in Homebrew core, Debian, Fedora, or Kali, nor
 an assertion of eligibility for a third-party program.
 
+## Deployment and release channels
+
+| Deliverable | Publishing trigger | Destination |
+| --- | --- | --- |
+| Static browser app | Successful `Browser app and Pages` workflow on a push to `main`, or a manual run on `main` | The repository's GitHub Pages site. |
+| Python package | Publish a GitHub Release with a matching `vX.Y.Z` package version | PyPI through the existing `publish.yml` Trusted Publisher. |
+| Python and extension downloads | The same published GitHub Release | Wheel, source distribution, extension ZIP and SHA-256 checksums attached as release assets. |
+| Chrome Web Store listing | Separate publisher submission and store review | The existing store listing; GitHub/PyPI publication does not submit it. |
+
+The PyPI publisher has already successfully uploaded version **0.7.0** through
+[the release workflow](https://github.com/Amal-David/keyleak-detector/actions/runs/38147113041).
+Its identity is owner `Amal-David`, repository `keyleak-detector`, workflow
+`publish.yml`, with no environment name. Preserve that identity unless the
+matching PyPI publisher configuration is deliberately updated. No persistent
+PyPI API token is needed. Merging a PR alone does not publish a Python package.
+
+The browser build needs no package publication and runs without Python on the
+visitor's device. See [the browser deployment guide](BROWSER_APP.md) for the
+one-time Pages setting, project paths, offline behavior and privacy boundaries.
+
+### Cutting a new release
+
+1. Prepare the release from a reviewed commit on `main` with passing CI and
+   distribution checks.
+2. Select a new Python version, update both version declarations in
+   `pyproject.toml` and `keyleak/__init__.py`, and add release notes to
+   `CHANGELOG.md`. Existing PyPI versions cannot be reused.
+3. If extension runtime contents changed since its last distributed ZIP, select
+   a new version in `extension/manifest.json` and update the extension section of
+   `CHANGELOG.md`.
+   Python and extension versions are independent.
+4. Publish a GitHub Release with tag `vX.Y.Z` pointing at that exact tested
+   commit. The workflow checks that the tag matches the Python package version,
+   builds the distributions and extension ZIP, and runs the packaging checks.
+5. Verify both the **Publish to PyPI** job and the GitHub release-asset upload
+   job. Download assets from the release and verify their SHA-256 checksums.
+
+The publisher and release-asset jobs receive built artifacts without checking
+out or executing repository code. The PyPI job has OIDC permission; the
+separate release-asset job has repository contents-write permission. Build
+jobs have read-only repository access. Artifact upload does not replace existing
+release files silently.
+
+### Chrome Web Store is a separate publication
+
+The extension ZIP has `manifest.json` at its root and contains only explicitly
+allowed runtime files. It can be loaded unpacked for testing or uploaded to
+the existing Chrome Web Store item. Do not confuse a successful ZIP upload to
+a GitHub Release with a store update.
+
+Automatic store submission requires the Chrome Web Store publisher account's
+authorization, its publisher/item identifiers, and an approved API identity.
+This repository does not contain those credentials or create a new publisher
+account. The current workflow automates the downloadable extension artifact;
+it does not submit to the store or bypass its review process. See Google's
+[publishing API guide](https://developer.chrome.com/docs/webstore/using-api).
+
 ## Installation policy
 
 `keyleak site-scan` and the Python `scan_site()` API no longer install discovery
