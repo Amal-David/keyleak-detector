@@ -18,6 +18,9 @@ proof, not page URLs or scan data.
   from a source checkout. The helper restricts access to the exact extension
   origin.
 
+Both `install-extension-host` commands run from the root of a source checkout after
+`poetry install`; see [CONTRIBUTING.md](../CONTRIBUTING.md#development) for setup.
+
 The Web Store listing and the downloadable ZIP can have different versions because store
 updates require a separate submission. See [release channels](DISTRIBUTION.md#chrome-web-store-is-a-separate-publication)
 and the [extension privacy policy](../extension/PRIVACY_POLICY.md).
