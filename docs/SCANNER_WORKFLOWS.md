@@ -243,7 +243,10 @@ why it is benign. Do not include unredacted credential values in an issue.
 ## Authenticated scans and proxies
 
 Use KeyLeak only on systems you own or have permission to test. Authenticated
-scans should use throwaway credentials, for example:
+scans should use throwaway credentials. `keyleak scan` posts to the local KeyLeak web
+scanner at `http://127.0.0.1:5002` and exits `1` if it is not running; start it first from
+a source checkout with `poetry run python app.py` (see [CONTRIBUTING.md](../CONTRIBUTING.md#development)).
+Then, for example:
 
 ```bash
 keyleak scan https://your-staging-app.example \

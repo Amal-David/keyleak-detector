@@ -70,8 +70,8 @@ The command exits `2` when findings reach `--fail-on` or coverage is incomplete.
 ## Safe use
 
 - Scan only systems you own or have permission to test.
-- `--baas-validate` sends active read-only probes; leave it off unless you are authorized.
-- Detected secret keys are never sent to their provider to check whether they are live. Details: [security model](https://github.com/Amal-David/keyleak-detector/blob/main/docs/SECURITY_MODEL.md).
+- `--baas-validate` sends active read-only probes to the Supabase/Firebase project the app uses, with the key found in the app; leave it off unless you are authorized.
+- Apart from that, detected keys are never sent to their provider to check whether they are live. Details: [security model](https://github.com/Amal-David/keyleak-detector/blob/main/docs/SECURITY_MODEL.md).
 
 ## CI
 

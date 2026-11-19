@@ -205,6 +205,10 @@ GitHub Actions** once to enable publication. Relative assets and workers support
 the project URL `https://amal-david.github.io/keyleak-detector/` and custom-domain
 roots; the existing `php-check/` utility remains in the published site.
 
+Publication is currently blocked: the workflow's **Publish to GitHub Pages** job fails on pushes to `main`
+while the repository's Pages source is still the `gh-pages` branch, which serves the
+`keyleakdetector.com` marketing site. Until the source is switched, build and serve the app locally.
+
 Optional URL scanning reads one CORS-enabled HTTPS resource. Optional DNS
 discovery sends a bounded set of candidate names to Google Public DNS. These
 operations require explicit user action. This browser release does not provide

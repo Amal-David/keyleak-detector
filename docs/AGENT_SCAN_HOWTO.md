@@ -312,10 +312,15 @@ Discover supported checks and their limits without starting a scan:
 
 ```bash
 keyleak capabilities --json
+```
+
+Scan agent assets in the current directory:
+
+```bash
 keyleak local . --include agent-assets --packs leak --json
 ```
 
-The second command checks skill instructions, agent rules, MCP configuration and
+The scan checks skill instructions, agent rules, MCP configuration and
 common scripts/config files under agent directories for credential patterns. It does
 not execute those files or certify prompt-injection resistance.
 
