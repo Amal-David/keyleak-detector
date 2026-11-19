@@ -71,9 +71,12 @@ for (const content of [
   `const firebaseConfig = { apiKey: "${googleKey}", authDomain: "x.firebaseapp.com" };`,
   `<script src="https://maps.googleapis.com/maps/api/js?libraries=places&key=${googleKey}"></script>`,
   `const supabaseKey = "${jwt('anon')}";`,
+  `headers: { Authorization: "Bearer ${jwt('anon')}" }`,
 ]) {
   const publicFindings = scan(content);
   assert(publicFindings.length > 0, content);
+  assert.equal(buildReport('https://preview.example.com', publicFindings).verdict.status, 'SAFE_TO_SHIP', content);
+  assert(publicFindings.every(f => f.confidence < 0.8), content);
   assert.deepEqual([...new Set(publicFindings.map(f => `${f.severity}/${f.validation_status}`))], ['low/public_by_design'], content);
 }
 for (const content of [

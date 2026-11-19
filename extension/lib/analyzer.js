@@ -5,7 +5,7 @@
 
 import { COMPILED_PATTERNS } from './patterns.js';
 import { isFalsePositive, isVendorScript, isCloudStorageSignedUrl, isAzureSasToken, isBrowserInternal, isInfraHeader, isOwnAuthHeader, isBrowserServiceToken, isFirstPartyDomain } from './false-positives.js';
-import { normalizeFinding, redactSnippet } from './reporting.js';
+import { confidenceForSeverity, normalizeFinding, redactSnippet } from './reporting.js';
 
 // Keys a provider intends to ship to browsers. A match is only "public by
 // design" when the value itself proves it. Mirrors _public_by_design_key in
@@ -43,7 +43,7 @@ function publicByDesignKey(findingType, value, content) {
     const config = new RegExp(`apiKey['"\\s:=]+${key}`, 'i').exec(content);
     if (config && nearFirebaseConfig(content, config.index, config.index + config[0].length)) return GOOGLE_BROWSER_KEY_TEXT;
   }
-  if (findingType === 'jwt_token' && isSupabaseAnonJwt(value)) return SUPABASE_ANON_KEY_TEXT;
+  if ((findingType === 'jwt_token' || findingType === 'bearer_token') && isSupabaseAnonJwt(value)) return SUPABASE_ANON_KEY_TEXT;
   return null;
 }
 
@@ -133,6 +133,7 @@ export function analyzeContent(content, source = '', meta = {}) {
       const publicKey = publicByDesignKey(findingType, value, content);
       if (publicKey) {
         finding.severity = 'low';
+        finding.confidence = confidenceForSeverity('low', source);
         finding.validation_status = 'public_by_design';
         finding.risk_reason = publicKey.risk_reason;
         finding.remediation = publicKey.remediation;

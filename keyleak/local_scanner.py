@@ -1051,7 +1051,7 @@ def _public_by_design_key(detector_id: str, raw_value: object, content: str) -> 
         config = re.search(rf"apiKey['\"\s:=]+{key}", content, re.IGNORECASE)
         if config and _near_firebase_config(content, config.start(), config.end()):
             return _GOOGLE_BROWSER_KEY_TEXT
-    if detector_id == "jwt_token" and _is_supabase_anon_jwt(value):
+    if detector_id in {"jwt_token", "bearer_token"} and _is_supabase_anon_jwt(value):
         return _SUPABASE_ANON_KEY_TEXT
     return None
 

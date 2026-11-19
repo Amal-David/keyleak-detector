@@ -726,6 +726,7 @@ class DetectorTests(unittest.TestCase):
             "firebase config": f'const firebaseConfig = {{ apiKey: "{google_key}", authDomain: "x.firebaseapp.com" }};',
             "maps script": f'<script src="https://maps.googleapis.com/maps/api/js?libraries=places&key={google_key}"></script>',
             "supabase anon": f'const supabaseKey = "{jwt("anon")}";',
+            "supabase anon as bearer": f'headers: {{ Authorization: "Bearer {jwt("anon")}" }}',
         }
         secret = {
             "bare google key": f"GEMINI_KEY={google_key}",
