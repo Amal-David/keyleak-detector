@@ -166,6 +166,8 @@ def format_markdown(report: ScanReport) -> str:
                 f"- Evidence: `{item['evidence']['redacted_value']}`",
             ]
         )
+        if item.get("validation_status") == "public_by_design":
+            lines.append("- Exposure: public by design")
         if item["evidence"].get("byte_offset") is not None:
             lines.append(f"- Extraction: {_binary_location(item['evidence'])}")
         remediation = _remediation_details(item)
@@ -299,6 +301,8 @@ def format_html(report: ScanReport) -> str:
             validation_badge = '<span class="badge-confirmed">confirmed</span>'
         elif validation == "validated":
             validation_badge = '<span class="badge-validated">validated</span>'
+        elif validation == "public_by_design":
+            validation_badge = '<span class="badge-validated">public by design</span>'
 
         card = f"""    <div class="finding {e(sev_lower)}">
       <div class="finding-head">
@@ -569,6 +573,7 @@ def report_to_text(report: ScanReport) -> str:
         lines.append(
             f"- {finding['severity'].upper()} {finding['type']} at {finding['source']}: "
             f"{finding['evidence']['redacted_value']}"
+            + (" (public by design)" if finding.get("validation_status") == "public_by_design" else "")
         )
         if finding["evidence"].get("byte_offset") is not None:
             lines.append("  " + _binary_location(finding["evidence"]))

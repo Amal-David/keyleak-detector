@@ -163,7 +163,8 @@ artifact and safety model are proven.
 KeyLeak is not a full DAST or exploit framework. It does not prove exploitability
 for every finding. Treat `lead` findings as high-signal prompts, `validated`
 findings as deterministic evidence, and `confirmed` findings as active
-probe/exploit-validation evidence.
+probe/exploit-validation evidence. `public_by_design` findings are keys meant to
+ship to browsers; check the RLS, security rules or key restrictions behind them.
 
 ## GDPR Article 30 Record
 

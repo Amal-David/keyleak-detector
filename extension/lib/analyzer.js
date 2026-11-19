@@ -7,6 +7,46 @@ import { COMPILED_PATTERNS } from './patterns.js';
 import { isFalsePositive, isVendorScript, isCloudStorageSignedUrl, isAzureSasToken, isBrowserInternal, isInfraHeader, isOwnAuthHeader, isBrowserServiceToken, isFirstPartyDomain } from './false-positives.js';
 import { normalizeFinding, redactSnippet } from './reporting.js';
 
+// Keys a provider intends to ship to browsers. A match is only "public by
+// design" when the value itself proves it. Mirrors _public_by_design_key in
+// keyleak/local_scanner.py.
+const FIREBASE_CONFIG_FIELDS = /authDomain|messagingSenderId|storageBucket|firebaseapp\.com/i;
+const GOOGLE_BROWSER_KEY_TEXT = {
+  risk_reason: 'Google browser API key (Firebase web config or Maps JavaScript). Public by design: it is protected by the key\'s referrer and API restrictions, not by secrecy.',
+  remediation: 'Confirm in Google Cloud Console that the key is restricted by HTTP referrer and to the APIs it needs.',
+};
+const SUPABASE_ANON_KEY_TEXT = {
+  risk_reason: 'Supabase anon key. Public by design: row-level security protects the data, not the key.',
+  remediation: 'Confirm RLS is enabled on every table, then run a scan with BaaS validation to test access.',
+};
+
+function nearFirebaseConfig(content, start, end) {
+  return FIREBASE_CONFIG_FIELDS.test(content.slice(Math.max(0, start - 400), end + 400));
+}
+
+function isSupabaseAnonJwt(token) {
+  try {
+    const payload = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
+    const claims = JSON.parse(atob(payload));
+    return claims !== null && claims.role === 'anon' && claims.iss === 'supabase';
+  } catch {
+    return false;
+  }
+}
+
+function publicByDesignKey(findingType, value, content) {
+  if (findingType === 'gemini_api_key') {
+    const key = value.replace(/[.*+?^${}()|[\]\\-]/g, '\\$&');
+    if (new RegExp(`maps\\.googleapis\\.com/maps/api/js\\?[^\\s'"<>]*key=${key}`, 'i').test(content)) {
+      return GOOGLE_BROWSER_KEY_TEXT;
+    }
+    const config = new RegExp(`apiKey['"\\s:=]+${key}`, 'i').exec(content);
+    if (config && nearFirebaseConfig(content, config.index, config.index + config[0].length)) return GOOGLE_BROWSER_KEY_TEXT;
+  }
+  if (findingType === 'jwt_token' && isSupabaseAnonJwt(value)) return SUPABASE_ANON_KEY_TEXT;
+  return null;
+}
+
 /**
  * Analyze text content for potential secrets.
  * @param {string} content - The text to scan
@@ -61,6 +101,9 @@ export function analyzeContent(content, source = '', meta = {}) {
       // Skip false positives
       if (entry.min_match_length && value.length < entry.min_match_length) continue;
       if (isFalsePositive(value)) continue;
+      // `apiKey: AIza...` alone also fits a Gemini SDK call; it is a Firebase
+      // web config only with Firebase fields next to it.
+      if (name === 'firebase_client_config' && !nearFirebaseConfig(content, match.index, match.index + match[0].length)) continue;
 
       // Get a snippet of surrounding context (up to 100 chars each side)
       const start = Math.max(0, match.index - 60);
@@ -86,8 +129,14 @@ export function analyzeContent(content, source = '', meta = {}) {
         ...meta,
       });
 
-      // AIza key classification: downgrade for Maps/Firebase context
-      if ((name === 'gemini_api_key' || entry.finding_type === 'gemini_api_key') && value.startsWith('AIza')) {
+      const publicKey = publicByDesignKey(entry.finding_type || name, value, content);
+      if (publicKey) {
+        finding.severity = 'low';
+        finding.validation_status = 'public_by_design';
+        finding.risk_reason = publicKey.risk_reason;
+        finding.remediation = publicKey.remediation;
+      } else if ((name === 'gemini_api_key' || entry.finding_type === 'gemini_api_key') && value.startsWith('AIza')) {
+        // AIza key classification: downgrade for Maps/Firebase context
         const contentLower = content.toLowerCase();
         const sourceLower = source.toLowerCase();
         const MAPS_MARKERS = [

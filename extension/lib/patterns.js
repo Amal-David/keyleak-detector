@@ -1077,7 +1077,7 @@ const PATTERN_DEFINITIONS = [
       "env"
     ],
     "category": "baas",
-    "description": "Supabase publishable key (non-standard format) exposed in client bundle.",
+    "description": "Supabase publishable key in client bundle. Public by design: row-level security protects the data, not the key.",
     "detector_id": "baas.supabase_publishable_key",
     "finding_type": "supabase_publishable_key",
     "flags": "gim",
@@ -1087,8 +1087,8 @@ const PATTERN_DEFINITIONS = [
     "pattern": "\\bsb_publishable_[A-Za-z0-9_-]{20,}\\b",
     "references": [],
     "remediation": "Confirm RLS policies protect every table. Run BaaS validation to test.",
-    "severity": "medium",
-    "validation_status": "lead"
+    "severity": "low",
+    "validation_status": "public_by_design"
   },
   {
     "capture_group": 0,
@@ -1098,7 +1098,7 @@ const PATTERN_DEFINITIONS = [
       "env"
     ],
     "category": "baas",
-    "description": "Firebase client configuration with API key exposed in client bundle.",
+    "description": "Firebase client configuration with API key in client bundle. Public by design: security rules protect the data, not the key.",
     "detector_id": "baas.firebase_client_config",
     "finding_type": "firebase_client_config",
     "flags": "gim",
@@ -1110,8 +1110,8 @@ const PATTERN_DEFINITIONS = [
       "https://firebase.google.com/docs/rules"
     ],
     "remediation": "Firebase client config is designed for client use, but verify Firestore Security Rules and Storage Rules deny unauthorized access.",
-    "severity": "medium",
-    "validation_status": "lead"
+    "severity": "low",
+    "validation_status": "public_by_design"
   },
   {
     "capture_group": 0,

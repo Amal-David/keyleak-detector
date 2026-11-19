@@ -6,6 +6,15 @@ and the project aims to follow [Semantic Versioning](https://semver.org/).
 
 ## Unreleased
 
+### Changed
+- Keys meant to ship to browsers are labeled `public_by_design` and reported as
+  `low` instead of looking like leaked secrets: a Google key in a Firebase web
+  config or a Maps JavaScript URL, a Supabase anon key (JWT with role `anon`), and
+  Supabase publishable keys. Text, Markdown and HTML reports show the label. The
+  CLI, the extension and the browser app apply the same rule.
+- `firebase_client_config` no longer fires on `apiKey: AIza...` without Firebase
+  config fields nearby, so a Gemini SDK key is not reported as a Firebase web key.
+
 ## [0.8.0] — 2026-11-19
 
 A feature release adding PHP and incident checks, a Python serialization

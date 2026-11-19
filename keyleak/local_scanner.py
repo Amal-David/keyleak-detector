@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import base64
+import json
 import math
 import hashlib
 import os
@@ -479,6 +481,10 @@ def scan_text(
             # prefix are by definition public.
             if detector.id in {"bearer_token", "openai_api_key", "stripe_secret_key"} and _has_public_prefix(raw_value):
                 continue
+            # ``apiKey: AIza...`` alone also fits a Gemini SDK call; it is a
+            # Firebase web config only with Firebase fields next to it.
+            if detector.id == "firebase_client_config" and not _near_firebase_config(content, match.start(), match.end()):
+                continue
             line += content.count("\n", line_offset, match.start())
             line_offset = match.start()
             snippet = _snippet_for(content, match.start(), match.end())
@@ -489,7 +495,17 @@ def scan_text(
             # not just the ±80-char snippet (markers usually live elsewhere
             # in the file).
             effective_severity = detector.severity
-            if detector.id == "gemini_api_key" and _looks_like_client_side_aiza(content):
+            validation_status = detector.validation_status
+            risk_reason = detector.description
+            remediation = detector.remediation
+            remediation_v2 = detector.get_remediation().to_dict()
+            public_key = _public_by_design_key(detector.id, raw_value, content)
+            if public_key:
+                effective_severity = "low"
+                validation_status = "public_by_design"
+                risk_reason, remediation = public_key
+                remediation_v2 = None
+            elif detector.id == "gemini_api_key" and _looks_like_client_side_aiza(content):
                 effective_severity = "medium"
             redacted_value = redact_value(raw_value, run_salt=run_salt)
             byte_offset = (
@@ -529,9 +545,9 @@ def scan_text(
                     detector_id=detector.canonical_id,
                     source=source,
                     evidence=evidence,
-                    risk_reason=detector.description,
-                    remediation=detector.remediation,
-                    validation_status=detector.validation_status,
+                    risk_reason=risk_reason,
+                    remediation=remediation,
+                    validation_status=validation_status,
                     category=detector.pack,
                     references=list(detector.references),
                     fingerprint=finding_fingerprint(
@@ -543,7 +559,7 @@ def scan_text(
                         byte_offset=byte_offset,
                         decoded_offset=token_start if decoded else None,
                     ),
-                    remediation_v2=detector.get_remediation().to_dict(),
+                    remediation_v2=remediation_v2,
                 )
             )
     return findings
@@ -995,6 +1011,53 @@ _CLIENT_SIDE_AIZA_MARKERS = (
 def _looks_like_client_side_aiza(snippet: object) -> bool:
     text = str(snippet or "")
     return any(marker.lower() in text.lower() for marker in _CLIENT_SIDE_AIZA_MARKERS)
+
+
+# Keys a provider intends to ship to browsers. A match is only "public by
+# design" when the value itself proves it: a Google key sitting in a Firebase
+# web config or a Maps JavaScript URL, or a Supabase JWT whose role claim is
+# ``anon``. The broad file-level markers above are not proof and only soften
+# severity. Mirrored in extension/lib/analyzer.js.
+_FIREBASE_CONFIG_KEY = r"apiKey['\"\s:=]+{key}"
+_FIREBASE_CONFIG_FIELDS = re.compile(r"authDomain|messagingSenderId|storageBucket|firebaseapp\.com", re.IGNORECASE)
+_MAPS_JS_KEY = r"maps\.googleapis\.com/maps/api/js\?[^\s'\"<>]*key={key}"
+_GOOGLE_BROWSER_KEY_TEXT = (
+    "Google browser API key (Firebase web config or Maps JavaScript). Public by design: "
+    "it is protected by the key's referrer and API restrictions, not by secrecy.",
+    "Confirm in Google Cloud Console that the key is restricted by HTTP referrer and to the APIs it needs.",
+)
+_SUPABASE_ANON_KEY_TEXT = (
+    "Supabase anon key. Public by design: row-level security protects the data, not the key.",
+    "Confirm RLS is enabled on every table, then run a scan with --baas-validate to test access.",
+)
+
+
+def _near_firebase_config(content: str, start: int, end: int) -> bool:
+    return bool(_FIREBASE_CONFIG_FIELDS.search(content, max(0, start - 400), end + 400))
+
+
+def _is_supabase_anon_jwt(token: str) -> bool:
+    try:
+        payload = token.split(".")[1]
+        claims = json.loads(base64.urlsafe_b64decode(payload + "=" * (-len(payload) % 4)))
+    except (IndexError, ValueError):
+        return False
+    return isinstance(claims, dict) and claims.get("role") == "anon" and claims.get("iss") == "supabase"
+
+
+def _public_by_design_key(detector_id: str, raw_value: object, content: str) -> Optional[Tuple[str, str]]:
+    """Return (risk_reason, remediation) when the match is a key meant to be public."""
+    value = str(raw_value)
+    if detector_id == "gemini_api_key":
+        key = re.escape(value)
+        if re.search(_MAPS_JS_KEY.format(key=key), content, re.IGNORECASE):
+            return _GOOGLE_BROWSER_KEY_TEXT
+        config = re.search(_FIREBASE_CONFIG_KEY.format(key=key), content, re.IGNORECASE)
+        if config and _near_firebase_config(content, config.start(), config.end()):
+            return _GOOGLE_BROWSER_KEY_TEXT
+    if detector_id == "jwt_token" and _is_supabase_anon_jwt(value):
+        return _SUPABASE_ANON_KEY_TEXT
+    return None
 
 
 def _shannon_entropy(value: object) -> float:

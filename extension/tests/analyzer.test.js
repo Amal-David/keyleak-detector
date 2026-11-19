@@ -61,3 +61,26 @@ assert.match(formatMarkdownReport(report), /BLOCK SHIP/);
 assert.match(formatSarifReport(report), /leak.openai_api_key/);
 
 assert.equal(redactValue('abcd'), 'abcd');
+
+// Keys a provider intends to ship to browsers are labeled, not flagged like secrets.
+const jwt = role => [{ alg: 'HS256' }, { iss: 'supabase', role }]
+  .map(part => Buffer.from(JSON.stringify(part)).toString('base64url')).join('.') + '.' + 's'.repeat(43);
+const googleKey = 'AIza' + 'b1C'.repeat(11) + 'dE';
+const scan = content => analyzeContent(content, 'External Script: https://preview.example.com/app.js', { url: 'https://preview.example.com/app.js' });
+for (const content of [
+  `const firebaseConfig = { apiKey: "${googleKey}", authDomain: "x.firebaseapp.com" };`,
+  `<script src="https://maps.googleapis.com/maps/api/js?libraries=places&key=${googleKey}"></script>`,
+  `const supabaseKey = "${jwt('anon')}";`,
+]) {
+  const publicFindings = scan(content);
+  assert(publicFindings.length > 0, content);
+  assert.deepEqual([...new Set(publicFindings.map(f => `${f.severity}/${f.validation_status}`))], ['low/public_by_design'], content);
+}
+for (const content of [
+  `new GoogleGenerativeAI({ apiKey: "${googleKey}" })`,
+  `const supabaseKey = "${jwt('service_role')}";`,
+]) {
+  const secretFindings = scan(content);
+  assert(secretFindings.length > 0, content);
+  assert(!secretFindings.some(f => f.validation_status === 'public_by_design' || f.severity === 'low'), content);
+}

@@ -710,7 +710,44 @@ class DetectorTests(unittest.TestCase):
             self.assertTrue(detector.result_type)
             self.assertTrue(detector.description)
             self.assertTrue(detector.remediation)
-            self.assertIn(detector.validation_status, {"lead", "validated", "suppressed", "not_applicable"})
+            self.assertIn(detector.validation_status, {"lead", "validated", "suppressed", "not_applicable", "public_by_design"})
+
+    def test_keys_meant_for_browsers_are_labeled_public_by_design(self):
+        """A key the provider intends to ship to browsers must not read as a leaked secret."""
+        import base64
+
+        def jwt(role):
+            def part(data):
+                return base64.urlsafe_b64encode(json.dumps(data).encode()).rstrip(b"=").decode()
+            return f"{part({'alg': 'HS256'})}.{part({'iss': 'supabase', 'role': role})}.{'s' * 43}"
+
+        google_key = "AIza" + "b1C" * 11 + "dE"
+        public = {
+            "firebase config": f'const firebaseConfig = {{ apiKey: "{google_key}", authDomain: "x.firebaseapp.com" }};',
+            "maps script": f'<script src="https://maps.googleapis.com/maps/api/js?libraries=places&key={google_key}"></script>',
+            "supabase anon": f'const supabaseKey = "{jwt("anon")}";',
+        }
+        secret = {
+            "bare google key": f"GEMINI_KEY={google_key}",
+            "gemini sdk call": f'new GoogleGenerativeAI({{ apiKey: "{google_key}" }})',
+            "supabase service role": f'const supabaseKey = "{jwt("service_role")}";',
+        }
+
+        for name, content in public.items():
+            with self.subTest(name):
+                findings = scan_text(content, "app.js", DETECTORS)
+                self.assertTrue(findings)
+                self.assertEqual({(f.severity, f.validation_status) for f in findings}, {("low", "public_by_design")})
+        for name, content in secret.items():
+            with self.subTest(name):
+                findings = scan_text(content, "app.js", DETECTORS)
+                self.assertTrue(findings)
+                self.assertNotIn("public_by_design", {f.validation_status for f in findings})
+                self.assertNotIn("low", {f.severity for f in findings})
+
+        report = build_report("app.js", scan_text(public["supabase anon"], "app.js", DETECTORS), scan_mode="local")
+        self.assertEqual(report.verdict["status"], "SAFE_TO_SHIP")
+        self.assertIn("- Exposure: public by design", format_markdown(report))
 
     def test_private_key_detector_matches_pkcs8(self):
         detector = _detector("private_key")
