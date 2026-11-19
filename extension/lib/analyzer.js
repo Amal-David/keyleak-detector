@@ -11,9 +11,11 @@ import { confidenceForSeverity, normalizeFinding, redactSnippet } from './report
 // design" when the value itself proves it. Mirrors _public_by_design_key in
 // keyleak/local_scanner.py.
 const FIREBASE_KEY_ASSIGNMENT = /apiKey['"\s:=]+(AIza[0-9A-Za-z_-]{35})(?![\w-])/gi;
-const FIREBASE_CONFIG_FIELDS = /authDomain|messagingSenderId|storageBucket|firebaseapp\.com/i;
-// The host must start the URL and `key` must be a whole query parameter.
-const MAPS_JS_KEY = /(?<![\w.:/-])(?:https?:)?\/\/maps\.googleapis\.com\/maps\/api\/js\?(?:[^\s'"<>]*[&;])?key=(AIza[0-9A-Za-z_-]{35})(?![\w-])/gi;
+// A property name, not a string value that happens to contain the word.
+const FIREBASE_CONFIG_PROPERTY = /(?:authDomain|storageBucket|messagingSenderId)['"]?\s*:/i;
+// The host must start the URL and `key` must be a whole query parameter, not
+// part of the fragment.
+const MAPS_JS_KEY = /(?<![\w.:/-])(?:https?:)?\/\/maps\.googleapis\.com\/maps\/api\/js\?(?:[^\s'"<>#]*[&;])?key=(AIza[0-9A-Za-z_-]{35})(?![\w-])/gi;
 const CONFIG_OBJECT_SPAN = 600;
 const GOOGLE_BROWSER_KEY_TEXT = {
   risk_reason: 'Google browser API key (Firebase web config or Maps JavaScript). Public by design: it is protected by the key\'s referrer and API restrictions, not by secrecy.',
@@ -24,30 +26,20 @@ const SUPABASE_ANON_KEY_TEXT = {
   remediation: 'Confirm RLS is enabled on every table, then run a scan with BaaS validation to test access.',
 };
 
-// True when the object literal enclosing content[start, end) has Firebase
-// config fields. `apiKey: AIza...` alone also fits a Gemini SDK call, and a
-// Firebase config may sit right beside one, so only fields in the key's own
-// object count.
+// True when content[start, end) sits in an object literal that also has a
+// Firebase config property. `apiKey: AIza...` alone also fits a Gemini SDK
+// call, and a Firebase config may sit right beside one. Only the brace-free
+// text around the key counts: it must open with `{` and it ends at the next
+// brace of either kind, so a nested object or a brace inside a string can only
+// leave a key unlabeled.
 function inFirebaseConfig(content, start, end) {
-  let depth = 0;
-  let opening = -1;
-  for (let i = start - 1; i >= Math.max(0, start - CONFIG_OBJECT_SPAN); i--) {
-    if (content[i] === '}') depth++;
-    else if (content[i] === '{') {
-      if (depth === 0) { opening = i; break; }
-      depth--;
-    }
-  }
-  if (opening < 0) return false;
-  depth = 0;
-  for (let i = end; i < Math.min(content.length, end + CONFIG_OBJECT_SPAN); i++) {
-    if (content[i] === '{') depth++;
-    else if (content[i] === '}') {
-      if (depth === 0) return FIREBASE_CONFIG_FIELDS.test(content.slice(opening, i));
-      depth--;
-    }
-  }
-  return false;
+  const before = content.slice(Math.max(0, start - CONFIG_OBJECT_SPAN), start);
+  const opening = Math.max(before.lastIndexOf('{'), before.lastIndexOf('}'));
+  if (opening < 0 || before[opening] !== '{') return false;
+  const after = content.slice(end, end + CONFIG_OBJECT_SPAN);
+  const closing = after.search(/[{}]/);
+  if (closing < 0) return false;
+  return FIREBASE_CONFIG_PROPERTY.test(before.slice(opening) + content.slice(start, end) + after.slice(0, closing));
 }
 
 function isSupabaseAnonJwt(token) {

@@ -86,6 +86,9 @@ for (const content of [
   `new GoogleGenerativeAI({ apiKey: "${googleKey}" })`,
   `src="https://maps.googleapis.com/maps/api/js?notkey=${googleKey}"`,
   `src="https://assets.example.org/maps.googleapis.com/maps/api/js?key=${googleKey}"`,
+  `src="https://maps.googleapis.com/maps/api/js?callback=init#&key=${googleKey}"`,
+  `new GoogleGenerativeAI({ apiKey: "${googleKey}", note: "storageBucket" })`,
+  `function boot(){new GoogleGenerativeAI({apiKey: "${googleKey}",note:"{"});const config={authDomain:"x.firebaseapp.com"};}`,
   `const supabaseKey = "${jwt('service_role')}";`,
 ]) {
   const secretFindings = scan(content);

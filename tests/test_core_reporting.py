@@ -736,6 +736,12 @@ class DetectorTests(unittest.TestCase):
             "gemini sdk call": f'new GoogleGenerativeAI({{ apiKey: "{google_key}" }})',
             "maps url with another parameter": f'src="https://maps.googleapis.com/maps/api/js?notkey={google_key}"',
             "maps host inside a path": f'src="https://assets.example.org/maps.googleapis.com/maps/api/js?key={google_key}"',
+            "maps key only in the fragment": f'src="https://maps.googleapis.com/maps/api/js?callback=init#&key={google_key}"',
+            "firebase word only in a string value": f'new GoogleGenerativeAI({{ apiKey: "{google_key}", note: "storageBucket" }})',
+            "quoted brace before a separate config": (
+                f'function boot(){{new GoogleGenerativeAI({{apiKey: "{google_key}",note:"{{"}});'
+                'const config={authDomain:"x.firebaseapp.com"};}'
+            ),
             "supabase service role": f'const supabaseKey = "{jwt("service_role")}";',
         }
 
@@ -762,6 +768,12 @@ class DetectorTests(unittest.TestCase):
         unproven = _to_finding({**in_page, "value": google_key, "context": f"key={google_key}"}, "https://app.example")
         self.assertEqual((proven.severity, proven.validation_status), ("low", "public_by_design"))
         self.assertEqual((unproven.severity, unproven.validation_status), ("critical", "lead"))
+        publishable = _to_finding(
+            {"detector_id": "baas.supabase_publishable_key", "severity": "low", "value": "sb_publishable_" + "a" * 24},
+            "https://app.example",
+        )
+        self.assertEqual(publishable.validation_status, "public_by_design")
+        self.assertIn("Public by design", publishable.risk_reason)
 
         report = build_report("app.js", scan_text(public["supabase anon"], "app.js", DETECTORS), scan_mode="local")
         self.assertEqual(report.verdict["status"], "SAFE_TO_SHIP")

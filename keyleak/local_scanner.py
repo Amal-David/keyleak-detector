@@ -1020,10 +1020,13 @@ def _looks_like_client_side_aiza(snippet: object) -> bool:
 # severity. Mirrored in extension/lib/analyzer.js.
 _GOOGLE_KEY = r"AIza[0-9A-Za-z_-]{35}"
 _FIREBASE_KEY_ASSIGNMENT = re.compile(rf"apiKey['\"\s:=]+({_GOOGLE_KEY})(?![\w-])", re.IGNORECASE)
-_FIREBASE_CONFIG_FIELDS = re.compile(r"authDomain|messagingSenderId|storageBucket|firebaseapp\.com", re.IGNORECASE)
-# The host must start the URL and ``key`` must be a whole query parameter.
+# A property name, not a string value that happens to contain the word.
+_FIREBASE_CONFIG_PROPERTY = re.compile(r"(?:authDomain|storageBucket|messagingSenderId)['\"]?\s*:", re.IGNORECASE)
+_NEXT_BRACE = re.compile(r"[{}]")
+# The host must start the URL and ``key`` must be a whole query parameter,
+# not part of the fragment.
 _MAPS_JS_KEY = re.compile(
-    rf"(?<![\w.:/-])(?:https?:)?//maps\.googleapis\.com/maps/api/js\?(?:[^\s'\"<>]*[&;])?key=({_GOOGLE_KEY})(?![\w-])",
+    rf"(?<![\w.:/-])(?:https?:)?//maps\.googleapis\.com/maps/api/js\?(?:[^\s'\"<>#]*[&;])?key=({_GOOGLE_KEY})(?![\w-])",
     re.IGNORECASE,
 )
 _CONFIG_OBJECT_SPAN = 600
@@ -1039,34 +1042,22 @@ _SUPABASE_ANON_KEY_TEXT = (
 
 
 def _in_firebase_config(content: str, start: int, end: int) -> bool:
-    """True when the object literal enclosing ``content[start:end]`` has Firebase config fields.
+    """True when ``content[start:end]`` sits in an object literal that also has a Firebase config property.
 
     ``apiKey: AIza...`` alone also fits a Gemini SDK call, and a Firebase config
-    may sit right beside one, so only fields in the key's own object count.
+    may sit right beside one. Only the brace-free text around the key counts: it
+    must open with ``{`` and it ends at the next brace of either kind. A nested
+    object or a brace inside a string therefore ends the search early, which can
+    only leave a key unlabeled.
     """
-    depth = 0
-    opening = None
-    for index in range(start - 1, max(0, start - _CONFIG_OBJECT_SPAN) - 1, -1):
-        char = content[index]
-        if char == "}":
-            depth += 1
-        elif char == "{":
-            if depth == 0:
-                opening = index
-                break
-            depth -= 1
-    if opening is None:
+    low = max(0, start - _CONFIG_OBJECT_SPAN)
+    opening = max(content.rfind("{", low, start), content.rfind("}", low, start))
+    if opening < 0 or content[opening] != "{":
         return False
-    depth = 0
-    for index in range(end, min(len(content), end + _CONFIG_OBJECT_SPAN)):
-        char = content[index]
-        if char == "{":
-            depth += 1
-        elif char == "}":
-            if depth == 0:
-                return bool(_FIREBASE_CONFIG_FIELDS.search(content, opening, index))
-            depth -= 1
-    return False
+    closing = _NEXT_BRACE.search(content, end, end + _CONFIG_OBJECT_SPAN)
+    if not closing:
+        return False
+    return bool(_FIREBASE_CONFIG_PROPERTY.search(content, opening, closing.start()))
 
 
 def _is_supabase_anon_jwt(token: str) -> bool:

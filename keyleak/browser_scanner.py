@@ -31,7 +31,7 @@ from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, List, Optional
 from urllib.parse import urljoin, urlparse, urlunparse
 
-from .detectors import detectors_for_packs, normalize_packs
+from .detectors import detectors_for_packs, find_detector, normalize_packs
 from .extension_bundle import extension_pattern_payload
 from .local_scanner import _public_by_design_key, scan_text
 from .models import Evidence, Finding, ScanReport, build_coverage, coverage_is_incomplete
@@ -279,7 +279,9 @@ _INIT_SCRIPT_TEMPLATE = r"""
     if (!text || typeof text !== 'string') return;
     for (let i = 0; i < compiled.length; i++) {
       const d = compiled[i];
-      const m = text.match(d.regex);
+      // exec, not match: the patterns carry the g flag, and match() with g drops the index.
+      d.regex.lastIndex = 0;
+      const m = d.regex.exec(text);
       if (m) {
         // Surrounding text lets the Python side tell a public browser key from a secret.
         emit(d, source, m[0], 'string', text.slice(Math.max(0, m.index - 700), m.index + m[0].length + 700));
@@ -1067,6 +1069,10 @@ def _to_finding(entry: Dict[str, Any], target: str, run_salt: Optional[bytes] = 
     if public_key:
         severity, validation_status = "low", "public_by_design"
         risk_reason, remediation = public_key
+    elif detector_id == "baas.supabase_publishable_key":
+        publishable = find_detector(detector_id)
+        validation_status = publishable.validation_status
+        risk_reason, remediation = publishable.description, publishable.remediation
     return Finding(
         type=str(entry.get("type") or detector_id),
         severity=severity,
