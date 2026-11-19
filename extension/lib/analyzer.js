@@ -129,14 +129,15 @@ export function analyzeContent(content, source = '', meta = {}) {
         ...meta,
       });
 
-      const publicKey = publicByDesignKey(entry.finding_type || name, value, content);
+      const findingType = entry.finding_type || name;
+      const publicKey = publicByDesignKey(findingType, value, content);
       if (publicKey) {
         finding.severity = 'low';
         finding.validation_status = 'public_by_design';
         finding.risk_reason = publicKey.risk_reason;
         finding.remediation = publicKey.remediation;
-      } else if ((name === 'gemini_api_key' || entry.finding_type === 'gemini_api_key') && value.startsWith('AIza')) {
-        // AIza key classification: downgrade for Maps/Firebase context
+      } else if (findingType === 'gemini_api_key' && value.startsWith('AIza')) {
+        // No proof the key is a browser key: broad Maps/Firebase markers only soften it to medium.
         const contentLower = content.toLowerCase();
         const sourceLower = source.toLowerCase();
         const MAPS_MARKERS = [

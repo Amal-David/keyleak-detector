@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import base64
-import json
 import math
 import hashlib
 import os
@@ -12,6 +10,7 @@ import stat
 from pathlib import Path
 from typing import Iterable, List, Optional, Sequence, Tuple
 
+from .baas_validator import _decode_jwt_claims
 from .detectors import Detector, categories_for_packs, detectors_for_categories, normalize_packs
 from .detectors_ast import detect_worm_shape, is_worm_shape_target
 from .detectors_fuzzy import FingerprintHit, load_corpus, match_fingerprints
@@ -436,6 +435,7 @@ def scan_text(
     """Apply detector gates and redact matches while mapping decoded evidence to its carrier."""
     findings: List[Finding] = []
     seen = set()
+    public_keys: dict = {}
     safe_request_url = redact_url(request_url) if request_url else ""
     for detector in detectors:
         if max_findings is not None and len(findings) >= max_findings:
@@ -494,19 +494,21 @@ def scan_text(
             # gapi, googleapis Maps, gtag, fbq) appears in the *same file* —
             # not just the ±80-char snippet (markers usually live elsewhere
             # in the file).
-            effective_severity = detector.severity
-            validation_status = detector.validation_status
-            risk_reason = detector.description
-            remediation = detector.remediation
-            remediation_v2 = detector.get_remediation().to_dict()
-            public_key = _public_by_design_key(detector.id, raw_value, content)
+            public_cache_key = (detector.id, raw_value)
+            if public_cache_key not in public_keys:
+                public_keys[public_cache_key] = _public_by_design_key(detector.id, raw_value, content)
+            public_key = public_keys[public_cache_key]
             if public_key:
-                effective_severity = "low"
-                validation_status = "public_by_design"
+                # The detector's structured card describes a leaked secret, so
+                # these findings carry the plain text only.
+                effective_severity, validation_status, remediation_v2 = "low", "public_by_design", None
                 risk_reason, remediation = public_key
-                remediation_v2 = None
-            elif detector.id == "gemini_api_key" and _looks_like_client_side_aiza(content):
-                effective_severity = "medium"
+            else:
+                effective_severity, validation_status = detector.severity, detector.validation_status
+                risk_reason, remediation = detector.description, detector.remediation
+                remediation_v2 = detector.get_remediation().to_dict()
+                if detector.id == "gemini_api_key" and _looks_like_client_side_aiza(content):
+                    effective_severity = "medium"
             redacted_value = redact_value(raw_value, run_salt=run_salt)
             byte_offset = (
                 byte_offset_base + token_start * byte_offset_width
@@ -1018,9 +1020,7 @@ def _looks_like_client_side_aiza(snippet: object) -> bool:
 # web config or a Maps JavaScript URL, or a Supabase JWT whose role claim is
 # ``anon``. The broad file-level markers above are not proof and only soften
 # severity. Mirrored in extension/lib/analyzer.js.
-_FIREBASE_CONFIG_KEY = r"apiKey['\"\s:=]+{key}"
 _FIREBASE_CONFIG_FIELDS = re.compile(r"authDomain|messagingSenderId|storageBucket|firebaseapp\.com", re.IGNORECASE)
-_MAPS_JS_KEY = r"maps\.googleapis\.com/maps/api/js\?[^\s'\"<>]*key={key}"
 _GOOGLE_BROWSER_KEY_TEXT = (
     "Google browser API key (Firebase web config or Maps JavaScript). Public by design: "
     "it is protected by the key's referrer and API restrictions, not by secrecy.",
@@ -1037,11 +1037,7 @@ def _near_firebase_config(content: str, start: int, end: int) -> bool:
 
 
 def _is_supabase_anon_jwt(token: str) -> bool:
-    try:
-        payload = token.split(".")[1]
-        claims = json.loads(base64.urlsafe_b64decode(payload + "=" * (-len(payload) % 4)))
-    except (IndexError, ValueError):
-        return False
+    claims = _decode_jwt_claims(token)
     return isinstance(claims, dict) and claims.get("role") == "anon" and claims.get("iss") == "supabase"
 
 
@@ -1050,9 +1046,9 @@ def _public_by_design_key(detector_id: str, raw_value: object, content: str) -> 
     value = str(raw_value)
     if detector_id == "gemini_api_key":
         key = re.escape(value)
-        if re.search(_MAPS_JS_KEY.format(key=key), content, re.IGNORECASE):
+        if re.search(rf"maps\.googleapis\.com/maps/api/js\?[^\s'\"<>]*key={key}", content, re.IGNORECASE):
             return _GOOGLE_BROWSER_KEY_TEXT
-        config = re.search(_FIREBASE_CONFIG_KEY.format(key=key), content, re.IGNORECASE)
+        config = re.search(rf"apiKey['\"\s:=]+{key}", content, re.IGNORECASE)
         if config and _near_firebase_config(content, config.start(), config.end()):
             return _GOOGLE_BROWSER_KEY_TEXT
     if detector_id == "jwt_token" and _is_supabase_anon_jwt(value):
