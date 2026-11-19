@@ -305,3 +305,32 @@ keyleak diff baseline.json current.json          # only findings new since basel
 
 See `CONTRIBUTING.md` for contribution conventions and `docs/DETECTOR_AUTHORING.md`
 for adding detectors.
+
+## Capability discovery and agent skills
+
+Discover supported checks and their limits without starting a scan:
+
+```bash
+keyleak capabilities --json
+```
+
+Scan agent assets in the current directory:
+
+```bash
+keyleak local . --include agent-assets --packs leak --json
+```
+
+The scan checks skill instructions, agent rules, MCP configuration and
+common scripts/config files under agent directories for credential patterns. It does
+not execute those files or certify prompt-injection resistance.
+
+Available skills: [audit planning](../.codex/skills/keyleak-audit/SKILL.md),
+[local review](../.codex/skills/keyleak-local-review/SKILL.md),
+[agent assets](../.codex/skills/keyleak-agent-assets/SKILL.md), and
+[report triage](../.codex/skills/keyleak-report-triage/SKILL.md).
+Review and copy a selected skill directory into your agent host's supported skills
+directory. These skills require KeyLeak on PATH and are distributed through the
+repository, not automatically installed by pip.
+
+See the [flow audit and ecosystem comparison](AGENT_INTEGRATION_AUDIT.md) for
+implementation evidence, positioning, validation limits and follow-up work.

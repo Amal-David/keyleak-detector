@@ -51,6 +51,8 @@ tmp/
 !.codex/skills/**/SKILL.md
 !docs/BINARY_ARTIFACT_SCANNING.md
 !docs/BROWSER_APP.md
+!docs/CHROME_EXTENSION.md
+!docs/SERIALIZATION_REVIEW.md
 !docs/OCTOBER_2026_INCIDENTS.md
 !tasks/lessons.md
 !docs/audit/maintenance/*.md

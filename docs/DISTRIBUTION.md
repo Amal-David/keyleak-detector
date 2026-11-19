@@ -160,3 +160,19 @@ not sufficient to make a source install pass.
 
 No distribution formula, archive submission, stable-release declaration,
 program application, or download-count inflation is performed by this change.
+
+## Current versions
+
+The current Python package release is **0.7.0**. The extension Web Store
+listing and downloadable ZIP can have different versions because store updates
+require a separate submission.
+
+The browser site is designed to deploy from tested `main` builds, but that deployment is
+currently blocked: the Pages publish job fails on pushes to `main` (see the
+[browser app guide](BROWSER_APP.md#overview-and-limits)), so the published site does not
+reflect current builds. Publishing a versioned
+GitHub Release triggers PyPI publication and attaches the Python distributions,
+extension ZIP and checksums to that release. See [release channels and setup](#deployment-and-release-channels).
+
+This document tracks packaging checks and
+remaining work; it does not imply official distribution or program acceptance.
