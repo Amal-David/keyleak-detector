@@ -6,6 +6,12 @@ and the project aims to follow [Semantic Versioning](https://semver.org/).
 
 ## Unreleased
 
+### Added
+- Findings produced by an active BaaS probe show the probe next to them: the
+  request method and URL, the HTTP status, and a summary of what came back
+  (row count, column names and types; never row values). Text, Markdown and
+  HTML reports print a `Probe:` line, and JSON evidence gains `request_method`.
+
 ### Changed
 - Keys meant to ship to browsers are labeled `public_by_design` and reported as
   `low` instead of looking like leaked secrets: a Google key in a Firebase web

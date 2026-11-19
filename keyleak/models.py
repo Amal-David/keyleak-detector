@@ -142,6 +142,9 @@ class Evidence:
     request_url: str = ""
     response_status: Optional[int] = None
     redacted_value: str = ""
+    # Set when an active probe produced the finding; with ``request_url`` and
+    # ``response_status`` it records what was sent and what came back.
+    request_method: str = ""
     byte_offset: Optional[int] = None
     byte_length: Optional[int] = None
     extraction: Optional[Dict[str, Any]] = None
@@ -156,6 +159,8 @@ class Evidence:
             "response_status": self.response_status,
             "redacted_value": self.redacted_value,
         }
+        if self.request_method:
+            payload["request_method"] = self.request_method
         if self.byte_offset is not None:
             payload["byte_offset"] = self.byte_offset
         if self.byte_length is not None:
@@ -174,6 +179,7 @@ class Evidence:
             request_url=str(payload.get("request_url") or ""),
             response_status=payload.get("response_status"),
             redacted_value=str(payload.get("redacted_value") or ""),
+            request_method=str(payload.get("request_method") or ""),
             byte_offset=payload.get("byte_offset"),
             byte_length=payload.get("byte_length"),
             extraction=payload.get("extraction"),

@@ -168,6 +168,8 @@ def format_markdown(report: ScanReport) -> str:
         )
         if item.get("validation_status") == "public_by_design":
             lines.append("- Exposure: public by design")
+        if _probe_result(item["evidence"]):
+            lines.append(f"- Probe: {_probe_result(item['evidence'])}")
         if item["evidence"].get("byte_offset") is not None:
             lines.append(f"- Extraction: {_binary_location(item['evidence'])}")
         remediation = _remediation_details(item)
@@ -234,6 +236,14 @@ def _coverage_lines(payload: Dict[str, Any]) -> List[str]:
     return lines + database_lines
 
 
+def _probe_result(evidence: Dict[str, Any]) -> str:
+    """Describe the probe behind a finding: the request sent and what came back. Empty for static findings."""
+    if not evidence.get("request_method"):
+        return ""
+    text = f"{evidence['request_method']} {evidence['request_url']} returned HTTP {evidence['response_status']}"
+    return f"{text}. {evidence['snippet']}" if evidence.get("snippet") else text
+
+
 def _binary_location(evidence: Dict[str, Any]) -> str:
     """Describe original byte spans separately from offsets within decoded text."""
     text = f"Byte offset {evidence['byte_offset']}"
@@ -280,6 +290,8 @@ def format_html(report: ScanReport) -> str:
         evidence_text = e(item["evidence"]["redacted_value"])
         if item["evidence"].get("byte_offset") is not None:
             evidence_text += "<br>" + e(_binary_location(item["evidence"]))
+        if _probe_result(item["evidence"]):
+            evidence_text += "<br>Probe: " + e(_probe_result(item["evidence"]))
         remediation = _remediation_details(item)
         if remediation["structured"]:
             remediation_html = (
@@ -578,6 +590,8 @@ def report_to_text(report: ScanReport) -> str:
         )
         if finding["evidence"].get("byte_offset") is not None:
             lines.append("  " + _binary_location(finding["evidence"]))
+        if _probe_result(finding["evidence"]):
+            lines.append("  Probe: " + _probe_result(finding["evidence"]))
     if len(payload["findings"]) > 10:
         lines.append(f"... {len(payload['findings']) - 10} more findings")
     return "\n".join(lines)

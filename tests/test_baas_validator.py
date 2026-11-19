@@ -163,6 +163,26 @@ class OpenTableTests(unittest.TestCase):
         assert result.open_tables[0].columns == ["id", "username"]
         assert any(f.type == "baas_open_table" and f.validation_status == "confirmed" for f in result.findings)
 
+    def test_open_table_report_shows_the_probe_without_row_values(self):
+        """An owner must see what was requested and what came back, but never the rows themselves."""
+        from keyleak.reporting import build_report, format_markdown, report_to_text
+
+        prober = _mock_prober({
+            "/rest/v1/": {"status_code": 200, "body": None, "headers": {}},
+            "/rest/v1/profiles": {"status_code": 200, "body": [{"id": 7, "email": "alice@example.com"}], "headers": {}},
+            "/storage/v1/bucket": {"status_code": 403, "body": None, "headers": {}},
+        })
+        result = validate_baas_config(self._config(tables=["profiles"]), prober=prober)
+        report = build_report("https://app.example", result.findings, scan_mode="browser")
+        probe = (
+            "Probe: GET https://abcdefghijklmnopqrst.supabase.co/rest/v1/profiles?select=*&limit=1 returned HTTP 200. "
+            "Table 'profiles' readable with anon key. Returned 1 row(s). Columns: id (int), email (str)"
+        )
+
+        self.assertIn(probe, report_to_text(report))
+        self.assertIn(probe, format_markdown(report))
+        self.assertNotIn("alice@example.com", report_to_text(report) + format_markdown(report))
+
     def test_rls_protected_table(self):
         prober = _mock_prober({
             "/rest/v1/": {"status_code": 200, "body": None, "headers": {}},
