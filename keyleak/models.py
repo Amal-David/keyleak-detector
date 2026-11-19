@@ -142,8 +142,7 @@ class Evidence:
     request_url: str = ""
     response_status: Optional[int] = None
     redacted_value: str = ""
-    # Set when an active probe produced the finding; with ``request_url`` and
-    # ``response_status`` it records what was sent and what came back.
+    # Presence marks a finding produced by an active probe; reports key off it.
     request_method: str = ""
     byte_offset: Optional[int] = None
     byte_length: Optional[int] = None
