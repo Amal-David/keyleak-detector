@@ -66,10 +66,13 @@ assert.equal(redactValue('abcd'), 'abcd');
 const jwt = role => [{ alg: 'HS256' }, { iss: 'supabase', role }]
   .map(part => Buffer.from(JSON.stringify(part)).toString('base64url')).join('.') + '.' + 's'.repeat(43);
 const googleKey = 'AIza' + 'b1C'.repeat(11) + 'dE';
+const otherKey = 'AIza' + 'z9Y'.repeat(11) + 'xW';
+const firebaseConfig = `const firebaseConfig = { apiKey: "${googleKey}", authDomain: "x.firebaseapp.com" };`;
 const scan = content => analyzeContent(content, 'External Script: https://preview.example.com/app.js', { url: 'https://preview.example.com/app.js' });
 for (const content of [
-  `const firebaseConfig = { apiKey: "${googleKey}", authDomain: "x.firebaseapp.com" };`,
-  `<script src="https://maps.googleapis.com/maps/api/js?libraries=places&key=${googleKey}"></script>`,
+  firebaseConfig,
+  `init({ apiKey: "${googleKey}" });${' '.repeat(900)}${firebaseConfig}`,
+  `<script src="https://maps.googleapis.com/maps/api/js?libraries=places&amp;key=${googleKey}"></script>`,
   `const supabaseKey = "${jwt('anon')}";`,
   `headers: { Authorization: "Bearer ${jwt('anon')}" }`,
 ]) {
@@ -81,9 +84,17 @@ for (const content of [
 }
 for (const content of [
   `new GoogleGenerativeAI({ apiKey: "${googleKey}" })`,
+  `src="https://maps.googleapis.com/maps/api/js?notkey=${googleKey}"`,
+  `src="https://assets.example.org/maps.googleapis.com/maps/api/js?key=${googleKey}"`,
   `const supabaseKey = "${jwt('service_role')}";`,
 ]) {
   const secretFindings = scan(content);
   assert(secretFindings.length > 0, content);
   assert(!secretFindings.some(f => f.validation_status === 'public_by_design' || f.severity === 'low'), content);
 }
+// A Firebase config beside a Gemini SDK call must not make the Gemini key public.
+const beside = scan(`${firebaseConfig} new GoogleGenerativeAI({ apiKey: "${otherKey}" })`).filter(f => f.detector_id === 'leak.gemini_api_key');
+assert.deepEqual(beside.map(f => f.validation_status).sort(), ['public_by_design', 'validated']);
+assert.notEqual(buildReport('https://preview.example.com', beside).verdict.status, 'SAFE_TO_SHIP');
+// The later, valid occurrence still yields the Firebase config finding.
+assert(scan(`init({ apiKey: "${googleKey}" });${' '.repeat(900)}${firebaseConfig}`).some(f => f.type === 'firebase_client_config'));

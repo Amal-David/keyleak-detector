@@ -12,8 +12,9 @@ and the project aims to follow [Semantic Versioning](https://semver.org/).
   config or a Maps JavaScript URL, a Supabase anon key (JWT with role `anon`), and
   Supabase publishable keys. Text, Markdown and HTML reports show the label. The
   CLI, the extension and the browser app apply the same rule.
-- `firebase_client_config` no longer fires on `apiKey: AIza...` without Firebase
-  config fields nearby, so a Gemini SDK key is not reported as a Firebase web key.
+- `firebase_client_config` only fires when the object holding `apiKey: AIza...`
+  also has Firebase config fields, so a Gemini SDK key is not reported as a
+  Firebase web key, even beside a real Firebase config.
 
 ## [0.8.0] — 2026-11-19
 

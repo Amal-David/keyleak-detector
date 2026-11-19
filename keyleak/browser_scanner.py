@@ -25,6 +25,7 @@ import base64
 import json
 import logging
 import os
+import re
 from pathlib import Path
 from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, List, Optional
@@ -32,7 +33,7 @@ from urllib.parse import urljoin, urlparse, urlunparse
 
 from .detectors import detectors_for_packs, normalize_packs
 from .extension_bundle import extension_pattern_payload
-from .local_scanner import scan_text
+from .local_scanner import _public_by_design_key, scan_text
 from .models import Evidence, Finding, ScanReport, build_coverage, coverage_is_incomplete
 from .net_guard import SSRFBlocked, scan_target_block_reason, url_block_reason
 from .redaction import new_run_salt, redact_url, redact_value, stable_id
@@ -262,8 +263,9 @@ _INIT_SCRIPT_TEMPLATE = r"""
     }
   }).filter(Boolean);
 
-  function emit(detector, source, value, where) {
+  function emit(detector, source, value, where, context) {
     window.__keyleak_findings.push({
+      context: context || '',
       detector_id: detector.detector_id,
       type: detector.finding_type || detector.id,
       severity: detector.severity,
@@ -279,7 +281,8 @@ _INIT_SCRIPT_TEMPLATE = r"""
       const d = compiled[i];
       const m = text.match(d.regex);
       if (m) {
-        emit(d, source, m[0], 'string');
+        // Surrounding text lets the Python side tell a public browser key from a secret.
+        emit(d, source, m[0], 'string', text.slice(Math.max(0, m.index - 700), m.index + m[0].length + 700));
       }
     }
   }
@@ -1024,6 +1027,14 @@ def _run_baas_validation(
     return validation.findings
 
 
+# The in-page analyzer reports a whole match, e.g. ``apiKey: "AIza..."`` or
+# ``Bearer eyJ...``; the key inside it is what gets classified.
+_KEY_IN_MATCH = (
+    ("gemini_api_key", re.compile(r"AIza[0-9A-Za-z_-]{35}")),
+    ("jwt_token", re.compile(r"eyJ[\w-]+\.[\w-]+\.[\w-]+")),
+)
+
+
 def _to_finding(entry: Dict[str, Any], target: str, run_salt: Optional[bytes] = None) -> Finding:
     source = entry.get("source") or target
     value = str(entry.get("value") or "")
@@ -1043,16 +1054,29 @@ def _to_finding(entry: Dict[str, Any], target: str, run_salt: Optional[bytes] = 
         request_url=safe_target,
     )
     detector_id = str(entry.get("detector_id") or "browser:unknown")
+    severity = str(entry.get("severity") or "info")
+    risk_reason = f"Browser-side scan detected {detector_id}"
+    remediation = "Rotate the exposed credential and remove it from the bundle / storage."
+    validation_status = "lead"
+    public_key = None
+    for key_kind, key_pattern in _KEY_IN_MATCH:
+        key = key_pattern.search(value)
+        if key:
+            public_key = _public_by_design_key(key_kind, key.group(0), str(entry.get("context") or ""))
+            break
+    if public_key:
+        severity, validation_status = "low", "public_by_design"
+        risk_reason, remediation = public_key
     return Finding(
         type=str(entry.get("type") or detector_id),
-        severity=str(entry.get("severity") or "info"),
+        severity=severity,
         confidence=0.85,
         detector_id=detector_id,
         source=source,
         evidence=evidence,
-        risk_reason=f"Browser-side scan detected {detector_id}",
-        remediation="Rotate the exposed credential and remove it from the bundle / storage.",
-        validation_status="lead",
+        risk_reason=risk_reason,
+        remediation=remediation,
+        validation_status=validation_status,
         category="leak",
         fingerprint=finding_fingerprint(
             detector_id=detector_id,

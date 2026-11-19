@@ -10,7 +10,11 @@ import { confidenceForSeverity, normalizeFinding, redactSnippet } from './report
 // Keys a provider intends to ship to browsers. A match is only "public by
 // design" when the value itself proves it. Mirrors _public_by_design_key in
 // keyleak/local_scanner.py.
+const FIREBASE_KEY_ASSIGNMENT = /apiKey['"\s:=]+(AIza[0-9A-Za-z_-]{35})(?![\w-])/gi;
 const FIREBASE_CONFIG_FIELDS = /authDomain|messagingSenderId|storageBucket|firebaseapp\.com/i;
+// The host must start the URL and `key` must be a whole query parameter.
+const MAPS_JS_KEY = /(?<![\w.:/-])(?:https?:)?\/\/maps\.googleapis\.com\/maps\/api\/js\?(?:[^\s'"<>]*[&;])?key=(AIza[0-9A-Za-z_-]{35})(?![\w-])/gi;
+const CONFIG_OBJECT_SPAN = 600;
 const GOOGLE_BROWSER_KEY_TEXT = {
   risk_reason: 'Google browser API key (Firebase web config or Maps JavaScript). Public by design: it is protected by the key\'s referrer and API restrictions, not by secrecy.',
   remediation: 'Confirm in Google Cloud Console that the key is restricted by HTTP referrer and to the APIs it needs.',
@@ -20,8 +24,30 @@ const SUPABASE_ANON_KEY_TEXT = {
   remediation: 'Confirm RLS is enabled on every table, then run a scan with BaaS validation to test access.',
 };
 
-function nearFirebaseConfig(content, start, end) {
-  return FIREBASE_CONFIG_FIELDS.test(content.slice(Math.max(0, start - 400), end + 400));
+// True when the object literal enclosing content[start, end) has Firebase
+// config fields. `apiKey: AIza...` alone also fits a Gemini SDK call, and a
+// Firebase config may sit right beside one, so only fields in the key's own
+// object count.
+function inFirebaseConfig(content, start, end) {
+  let depth = 0;
+  let opening = -1;
+  for (let i = start - 1; i >= Math.max(0, start - CONFIG_OBJECT_SPAN); i--) {
+    if (content[i] === '}') depth++;
+    else if (content[i] === '{') {
+      if (depth === 0) { opening = i; break; }
+      depth--;
+    }
+  }
+  if (opening < 0) return false;
+  depth = 0;
+  for (let i = end; i < Math.min(content.length, end + CONFIG_OBJECT_SPAN); i++) {
+    if (content[i] === '{') depth++;
+    else if (content[i] === '}') {
+      if (depth === 0) return FIREBASE_CONFIG_FIELDS.test(content.slice(opening, i));
+      depth--;
+    }
+  }
+  return false;
 }
 
 function isSupabaseAnonJwt(token) {
@@ -36,12 +62,12 @@ function isSupabaseAnonJwt(token) {
 
 function publicByDesignKey(findingType, value, content) {
   if (findingType === 'gemini_api_key') {
-    const key = value.replace(/[.*+?^${}()|[\]\\-]/g, '\\$&');
-    if (new RegExp(`maps\\.googleapis\\.com/maps/api/js\\?[^\\s'"<>]*key=${key}`, 'i').test(content)) {
-      return GOOGLE_BROWSER_KEY_TEXT;
+    for (const match of content.matchAll(MAPS_JS_KEY)) {
+      if (match[1] === value) return GOOGLE_BROWSER_KEY_TEXT;
     }
-    const config = new RegExp(`apiKey['"\\s:=]+${key}`, 'i').exec(content);
-    if (config && nearFirebaseConfig(content, config.index, config.index + config[0].length)) return GOOGLE_BROWSER_KEY_TEXT;
+    for (const match of content.matchAll(FIREBASE_KEY_ASSIGNMENT)) {
+      if (match[1] === value && inFirebaseConfig(content, match.index, match.index + match[0].length)) return GOOGLE_BROWSER_KEY_TEXT;
+    }
   }
   if ((findingType === 'jwt_token' || findingType === 'bearer_token') && isSupabaseAnonJwt(value)) return SUPABASE_ANON_KEY_TEXT;
   return null;
@@ -93,6 +119,10 @@ export function analyzeContent(content, source = '', meta = {}) {
       const captureIndex = entry.capture_group || 0;
       const value = (match[captureIndex] || match[1] || match[0]).trim();
 
+      // Checked before dedupe: a rejected occurrence must not hide a later one
+      // of the same key that does sit in a Firebase config.
+      if (name === 'firebase_client_config' && !inFirebaseConfig(content, match.index, match.index + match[0].length)) continue;
+
       // Skip duplicates within this content block
       const dedupeKey = `${name}:${value}`;
       if (seen.has(dedupeKey)) continue;
@@ -101,9 +131,6 @@ export function analyzeContent(content, source = '', meta = {}) {
       // Skip false positives
       if (entry.min_match_length && value.length < entry.min_match_length) continue;
       if (isFalsePositive(value)) continue;
-      // `apiKey: AIza...` alone also fits a Gemini SDK call; it is a Firebase
-      // web config only with Firebase fields next to it.
-      if (name === 'firebase_client_config' && !nearFirebaseConfig(content, match.index, match.index + match[0].length)) continue;
 
       // Get a snippet of surrounding context (up to 100 chars each side)
       const start = Math.max(0, match.index - 60);

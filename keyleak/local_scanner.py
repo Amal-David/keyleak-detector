@@ -481,9 +481,7 @@ def scan_text(
             # prefix are by definition public.
             if detector.id in {"bearer_token", "openai_api_key", "stripe_secret_key"} and _has_public_prefix(raw_value):
                 continue
-            # ``apiKey: AIza...`` alone also fits a Gemini SDK call; it is a
-            # Firebase web config only with Firebase fields next to it.
-            if detector.id == "firebase_client_config" and not _near_firebase_config(content, match.start(), match.end()):
+            if detector.id == "firebase_client_config" and not _in_firebase_config(content, match.start(), match.end()):
                 continue
             line += content.count("\n", line_offset, match.start())
             line_offset = match.start()
@@ -1016,11 +1014,19 @@ def _looks_like_client_side_aiza(snippet: object) -> bool:
 
 
 # Keys a provider intends to ship to browsers. A match is only "public by
-# design" when the value itself proves it: a Google key sitting in a Firebase
-# web config or a Maps JavaScript URL, or a Supabase JWT whose role claim is
+# design" when the value itself proves it: a Google key inside a Firebase web
+# config object or a Maps JavaScript URL, or a Supabase JWT whose role claim is
 # ``anon``. The broad file-level markers above are not proof and only soften
 # severity. Mirrored in extension/lib/analyzer.js.
+_GOOGLE_KEY = r"AIza[0-9A-Za-z_-]{35}"
+_FIREBASE_KEY_ASSIGNMENT = re.compile(rf"apiKey['\"\s:=]+({_GOOGLE_KEY})(?![\w-])", re.IGNORECASE)
 _FIREBASE_CONFIG_FIELDS = re.compile(r"authDomain|messagingSenderId|storageBucket|firebaseapp\.com", re.IGNORECASE)
+# The host must start the URL and ``key`` must be a whole query parameter.
+_MAPS_JS_KEY = re.compile(
+    rf"(?<![\w.:/-])(?:https?:)?//maps\.googleapis\.com/maps/api/js\?(?:[^\s'\"<>]*[&;])?key=({_GOOGLE_KEY})(?![\w-])",
+    re.IGNORECASE,
+)
+_CONFIG_OBJECT_SPAN = 600
 _GOOGLE_BROWSER_KEY_TEXT = (
     "Google browser API key (Firebase web config or Maps JavaScript). Public by design: "
     "it is protected by the key's referrer and API restrictions, not by secrecy.",
@@ -1032,8 +1038,35 @@ _SUPABASE_ANON_KEY_TEXT = (
 )
 
 
-def _near_firebase_config(content: str, start: int, end: int) -> bool:
-    return bool(_FIREBASE_CONFIG_FIELDS.search(content, max(0, start - 400), end + 400))
+def _in_firebase_config(content: str, start: int, end: int) -> bool:
+    """True when the object literal enclosing ``content[start:end]`` has Firebase config fields.
+
+    ``apiKey: AIza...`` alone also fits a Gemini SDK call, and a Firebase config
+    may sit right beside one, so only fields in the key's own object count.
+    """
+    depth = 0
+    opening = None
+    for index in range(start - 1, max(0, start - _CONFIG_OBJECT_SPAN) - 1, -1):
+        char = content[index]
+        if char == "}":
+            depth += 1
+        elif char == "{":
+            if depth == 0:
+                opening = index
+                break
+            depth -= 1
+    if opening is None:
+        return False
+    depth = 0
+    for index in range(end, min(len(content), end + _CONFIG_OBJECT_SPAN)):
+        char = content[index]
+        if char == "{":
+            depth += 1
+        elif char == "}":
+            if depth == 0:
+                return bool(_FIREBASE_CONFIG_FIELDS.search(content, opening, index))
+            depth -= 1
+    return False
 
 
 def _is_supabase_anon_jwt(token: str) -> bool:
@@ -1045,11 +1078,12 @@ def _public_by_design_key(detector_id: str, raw_value: object, content: str) -> 
     """Return (risk_reason, remediation) when the match is a key meant to be public."""
     value = str(raw_value)
     if detector_id == "gemini_api_key":
-        key = re.escape(value)
-        if re.search(rf"maps\.googleapis\.com/maps/api/js\?[^\s'\"<>]*key={key}", content, re.IGNORECASE):
+        if any(match.group(1) == value for match in _MAPS_JS_KEY.finditer(content)):
             return _GOOGLE_BROWSER_KEY_TEXT
-        config = re.search(rf"apiKey['\"\s:=]+{key}", content, re.IGNORECASE)
-        if config and _near_firebase_config(content, config.start(), config.end()):
+        if any(
+            match.group(1) == value and _in_firebase_config(content, match.start(), match.end())
+            for match in _FIREBASE_KEY_ASSIGNMENT.finditer(content)
+        ):
             return _GOOGLE_BROWSER_KEY_TEXT
     if detector_id in {"jwt_token", "bearer_token"} and _is_supabase_anon_jwt(value):
         return _SUPABASE_ANON_KEY_TEXT
