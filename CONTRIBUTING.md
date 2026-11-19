@@ -20,6 +20,8 @@ poetry run python app.py
 python -m unittest
 ```
 
+From a fresh clone, run `git clone https://github.com/Amal-David/keyleak-detector.git` and `cd keyleak-detector`, then the commands above. `poetry run python app.py` starts the Flask web UI at `http://127.0.0.1:5002`. See the [detector authoring guide](docs/DETECTOR_AUTHORING.md) for detector contributions.
+
 CLI smoke tests:
 
 ```bash

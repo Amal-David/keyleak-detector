@@ -1,253 +1,102 @@
 # KeyLeak Detector
 
+**Find the API keys and open Supabase/Firebase tables your running app actually ships.**
+
 [![PyPI](https://img.shields.io/pypi/v/keyleak-detector?color=34d399&logo=python&logoColor=white)](https://pypi.org/project/keyleak-detector/)
-[![GitHub](https://img.shields.io/github/stars/Amal-David/keyleak-detector?style=flat&logo=github)](https://github.com/Amal-David/keyleak-detector)
-[![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
-[![GitHub Action](https://img.shields.io/badge/GitHub_Action-available-2088FF?logo=githubactions&logoColor=white)](docs/github-action.md)
-[![Chrome Extension](https://img.shields.io/badge/Chrome-Extension-4288FF?logo=googlechrome&logoColor=white)](extension/)
-[![Python](https://img.shields.io/badge/Python-3.12%2B-3776AB?logo=python&logoColor=white)](https://www.python.org/)
+[![License](https://img.shields.io/badge/License-MIT-green.svg)](https://github.com/Amal-David/keyleak-detector/blob/main/LICENSE)
+[![GitHub stars](https://img.shields.io/github/stars/Amal-David/keyleak-detector?style=flat&logo=github)](https://github.com/Amal-David/keyleak-detector)
 
-KeyLeak finds exposed credentials in browser traffic, local projects, build
-artifacts, and supported deployment archives. It checks selected backend-as-a-
-service configurations and returns redacted evidence with remediation guidance.
+Static scanners read your source. KeyLeak watches the running app (traffic, JS bundles, headers) and tests whether your backend is readable with the public key. You get a verdict, redacted evidence, fix steps, and a re-test command. Reports stay on your machine. Website: [keyleakdetector.com](https://keyleakdetector.com)
 
-## Install
+![KeyLeak scan ending in BLOCK SHIP](https://raw.githubusercontent.com/Amal-David/keyleak-detector/main/docs/assets/keyleak-demo.gif)
 
-KeyLeak requires Python 3.12 or newer.
+> Only scan apps you own or are authorized to test. Probes are read-only. Reports redact credential values.
 
-```bash
-python -m pip install keyleak-detector
+## Try it
+
+- **Chrome extension** (browse your app, see findings as pages load): [Chrome Web Store](https://chromewebstore.google.com/detail/keyleak-detector/ildodbfchnbmndkcijllpmihcbfchgdl)
+- **CLI** (Python 3.12 or newer required; older Pythons install the outdated 0.5.0 release):
+
+  ```bash
+  pip install keyleak-detector
+  keyleak local . --launch-profile launch-gate --fail-on high
+  python -m playwright install chromium   # once, for browser scans
+  keyleak browser-scan https://your-owned-app.example --baas-validate
+  ```
+
+- **Browser app** (scans pasted text and files on your device, no Python): [build and serve it locally](https://github.com/Amal-David/keyleak-detector/blob/main/docs/BROWSER_APP.md).
+
+## Example result
+
+`keyleak local . --launch-profile launch-gate --fail-on high` on a copy of the repository's fake-key fixture (`fixtures/vulnerable-demo`), trimmed:
+
+```text
+BLOCK SHIP: 4 critical, 1 high, 4 medium, 1 low
+5 high/critical exposure(s); static detections — verify before relying on them. Fix before release.
+Re-test: keyleak local /private/tmp/acme-app --include ci,code,config,docker,env,logs,mcp,sourcemaps --launch-profile launch-gate --packs leak --fail-on high
+Coverage: complete; 3/3 checks completed; 0 skipped, 0 failed.
+- CRITICAL openai_api_key at /private/tmp/acme-app/.env.leaky: [redacted:8003d7c8]
+- CRITICAL database_url at /private/tmp/acme-app/.env.leaky: [redacted:a15e8e37]
+- CRITICAL openrouter_api_key at /private/tmp/acme-app/app.js.map: [redacted:f21e9200]
+- HIGH mcp_config_secret at /private/tmp/acme-app/.env.leaky: [redacted:540d08fb]
+...
 ```
 
-Or run without a permanent install:
+Add `--markdown`, `--html`, `--json`, or `--sarif` for the full report. Each finding carries its fix:
 
-```bash
-uvx keyleak-detector --help
+```text
+### CRITICAL: openai_api_key
+- Source: `/private/tmp/acme-app/.env.leaky`
+- Evidence: `[redacted:9162cc36]`
+- Fix steps:
+    1. Rotate the OpenAI key, remove it from client/config files, and load it server-side from a secret manager.
 ```
 
-## Quick start
+The command exits `2` when findings reach `--fail-on` or coverage is incomplete.
 
-Scan the current project before shipping:
+## Why not just gitleaks or trufflehog
 
-```bash
-keyleak local . --launch-profile launch-gate --fail-on high
-```
-
-Scan a web app you own or are authorized to test:
-
-```bash
-keyleak browser-scan https://your-owned-app.example --html > report.html
-```
-
-Scan an authorized site and its pages:
-
-```bash
-keyleak site-scan your-owned-domain.example \
-  --depth 3 --max-pages 100 --max-subdomains 25 --baas-validate --html \
-  > site-report.html
-```
-
-Use `--json`, `--sarif`, `--markdown`, or `--html` for machine-readable or shareable reports. See the [agent scan runbook](docs/AGENT_SCAN_HOWTO.md) for setup and triage examples.
-
-## Choose a scan
-
-- **Database permissions:** `keyleak database-audit catalog.json` audits an owner-exported Supabase catalog and generates SQL fixes for review. Local scans automatically consume `.keyleak/database-audit.json` and inspect Convex source. See [database audits and limits](docs/DATABASE_AUDIT.md).
-
-- **PHP patch assessment:** `keyleak php-check URL --authorized` checks ordinary response headers for the October 2026 PHP advisories. The local web bridge includes a URL form at `/php-check`. Hidden versions remain unknown; a patched banner does not prove a site is safe.
-  The [public PHP checker](https://keyleakdetector.com/php-check/) offers URL assessment and a browser-side version comparison.
-- **Incident inputs:** `keyleak incident-check .` checks selected manifests for compromised dependencies and outdated trust packages. Add `--ca-bundle FILE` for fingerprint checks or `--railway` for operator-requested recovery guidance. See [incident checks and limits](docs/OCTOBER_2026_INCIDENTS.md).
-- **Local project:** `keyleak local .` scans supported configuration, CI, Docker, MCP, source-map, and log files. Source files in `node_modules` and root `dist/` are opt-in.
-- **Binary release:** add `--scan-binaries` to scan printable strings in recognized native files. Use `keyleak archive release.zip --scan-binaries` for ZIP/tar archives, including APK/IPA ZIP containers.
-- **Web app:** `keyleak browser-scan URL` scans one authorized target; `keyleak site-scan DOMAIN` discovers and crawls an authorized site.
-- **Coordinated audit:** `keyleak audit --help` describes the local, archive, and authorized network phases. Active network scans require explicit scope and attestation.
-
-Audit writes redacted artifacts under `.keyleak/audits/`; `artifact_dir` is reported as an absolute path.
-
-Advanced coverage limits, source scanning options, archive behavior, and examples are in [scanner workflows](docs/SCANNER_WORKFLOWS.md) and the [binary artifact guide](docs/BINARY_ARTIFACT_SCANNING.md).
-
-### Local coverage options
-
-Local scans cover configuration and infrastructure files such as `.env`, MCP,
-CI, Docker, source maps, and logs. Add source trees or release artifacts
-explicitly:
-
-```bash
-keyleak local . --scan-node-modules --json
-keyleak local . --scan-dist --json
-keyleak local . --scan-binaries --sarif
-keyleak archive release.zip --scan-binaries --out release-report.json
-```
-
-`--scan-node-modules` checks JavaScript and TypeScript source; `--scan-dist`
-includes root `dist/` build output. `--scan-binaries` checks printable strings
-in supported executables and binary members of ZIP/tar archives, with bounded
-common decoding and nested archive traversal. APK and IPA files are ZIP containers;
-DEX and mobile resource semantics remain unsupported. The scanner does not execute
-artifacts; encrypted and runtime-assembled secrets can be missed. Limits and unsupported scope are reported
-as incomplete coverage, never as a clean result. See the [binary guide](docs/BINARY_ARTIFACT_SCANNING.md)
-for supported formats, caps, and output examples.
-
-Full site scans can use crt.sh, DNS, and installed `subfinder` / `amass` for
-subdomain discovery. They do **not** install missing tools by default. Operators
-can explicitly opt in with `--auto-install`; `--no-auto-install` remains
-supported. `KEYLEAK_NO_AUTO_INSTALL=1` or `KEYLEAK_MANAGED_INSTALL=1` vetoes
-installation even with explicit consent. `keyleak doctor` reports available
-discovery tools. See [distribution readiness](docs/DISTRIBUTION.md) for the
-migration note and package-manager contract.
-
-## Use KeyLeak from an agent
-
-Discover supported checks and their limits without starting a scan:
-
-```bash
-keyleak capabilities --json
-keyleak local . --include agent-assets --packs leak --json
-```
-
-The second command checks skill instructions, agent rules, MCP configuration and
-common scripts/config files under agent directories for credential patterns. It does
-not execute those files or certify prompt-injection resistance.
-
-Available skills: [audit planning](.codex/skills/keyleak-audit/SKILL.md),
-[local review](.codex/skills/keyleak-local-review/SKILL.md),
-[agent assets](.codex/skills/keyleak-agent-assets/SKILL.md), and
-[report triage](.codex/skills/keyleak-report-triage/SKILL.md).
-Review and copy a selected skill directory into your agent host's supported skills
-directory. These skills require KeyLeak on PATH and are distributed through the
-repository, not automatically installed by pip.
-
-See the [flow audit and ecosystem comparison](docs/AGENT_INTEGRATION_AUDIT.md) for
-implementation evidence, positioning, validation limits and follow-up work.
-
-## Python secret serialization review
-
-Opt into static source checks for credentials on Python dataclasses, attrs classes,
-Pydantic models, and class-style NamedTuple definitions:
-
-```bash
-keyleak local . --include serialization --packs leak --json
-```
-
-Inspired by [Sentry's secret serialization review guidance](https://github.com/getsentry/skills/tree/main/skills/secret-serialization).
-The check does not import or execute scanned code. It reports unprotected generated
-holders as medium review leads, and direct same-file exposing serializer uses as
-high leads. `repr=False` does not protect `asdict`; Pydantic dump exclusion does not
-protect repr. Raw `vars`, `__dict__`, and pickle paths bypass field flags and wrappers.
-Evidence includes field names and line numbers without copying source values.
-Optional Pydantic secret wrappers retain their masking. The exact metadata fields
-`token_ttl: int`, `password_min_length: int`, and `cookie_secure: bool` are excluded;
-numeric `token` and `password` fields remain in scope. Structural fingerprints support
-allowlists when `KEYLEAK_FINDING_FINGERPRINT_KEY` is configured.
-
-This is a bounded Python source review, not proof of runtime disclosure. It resolves
-module-level holders, import aliases, direct constructor assignments, and typed
-function parameters. It checks explicit repr/dump/raw serializers, object formatting,
-and logging arguments. Partial exclusions require a traced unblocked path. Custom
-serializers, inherited/imported holders, custom redaction, conditional exclusions,
-comprehensions, cross-file/interprocedural flows, and JavaScript/TypeScript need
-manual review. Known test, fixture, example, dependency, build, and generated protobuf
-paths relative to the scan root are excluded. Existing file limits apply, plus 100,000 AST nodes and 1,000
-findings per Python file. Parsing/analysis limits or no eligible Python sources make
-coverage incomplete; findings collected before a limit are retained. This check is opt-in and has no browser or extension
-bundle counterpart.
-
-## Findings and safe use
-
-Reports include a verdict, severity, confidence, source, evidence, remediation, and a re-test command. Normalized reports redact credential values by default. Binary findings include a zero-based byte offset and omit surrounding string snippets so nearby credentials cannot leak through context.
-
-Scans are bounded. If a file, archive, or scan limit is reached, earlier findings remain in the report and coverage is marked incomplete. Exit code `0` means the selected threshold passed with complete coverage; `1` means the command failed; `2` means the threshold was reached or coverage was incomplete.
-
-Use KeyLeak only on systems you own or have permission to test. Authenticated
-scans should use throwaway credentials, for example:
-
-```bash
-keyleak scan https://your-staging-app.example \
-  --profile authenticated --bearer "$THROWAWAY_TOKEN"
-```
-
-KeyLeak does not upload reports to a hosted service. Values are redacted in
-normalized reports by default. A proxy can see the scan traffic routed through
-it, so use a trusted local proxy rather than an unknown public service. Read the
-[security model](docs/SECURITY_MODEL.md) before scanning sensitive targets.
-
-### Read the result
-
-KeyLeak retains the machine statuses `SAFE_TO_SHIP`, `REVIEW`, and `BLOCK_SHIP`.
-Local zero-finding reports say **No findings in selected checks** and include
-coverage, inventory, extraction limits, and a retest command preserving scan options.
-Archive envelopes bind the report and input digests; HMAC authentication requires
-`KEYLEAK_COC_KEY`. Use the evidence,
-confidence, remediation, and re-test command to decide what to fix. The default
-launch gate blocks on high and critical findings:
-
-- Exit `0`: the selected threshold passed and coverage is complete.
-- Exit `1`: the command failed.
-- Exit `2`: findings met `--fail-on`, or coverage was incomplete or malformed.
-
-If you believe a result is a false positive, report its detector, source, and
-why it is benign. Do not include unredacted credential values in an issue.
-
-## Chrome extension
-
-The extension observes request and response metadata, page content, and
-fetch/XHR responses locally. It redacts stored and copied findings, keeps raw
-finding values in service-worker memory, and lets you pause collection for an
-origin. `nativeMessaging` is used for explicit full scans through the installed
-local helper; it sends fixed lifecycle actions, a startup challenge, and local
-proof, not page URLs or scan data.
-
-- [Install the published Chrome Web Store extension](https://chromewebstore.google.com/detail/keyleak-detector/ildodbfchnbmndkcijllpmihcbfchgdl) (listing version **1.2.0**).
-- [Download extension v1.3.0](https://github.com/Amal-David/keyleak-detector/releases/download/v0.7.0/keyleak-detector-extension-v1.3.0.zip) from the GitHub release. This ZIP is available for unpacked testing; it has not been submitted to the store listing.
-- For local development, load the `extension/` directory in
-  `chrome://extensions`, then run `poetry run keyleak install-extension-host`
-  from a source checkout. The helper restricts access to the exact extension
-  origin.
+- The secrets that hurt are the ones users receive: injected at build time, served in bundles, or exposed by a backend with RLS off.
+- Source scanners read the repository, so they miss what only exists in the built or running app.
+- Use KeyLeak next to your source scanner, not instead of it.
 
 ## What it detects
 
-- API credentials, private keys, JWT risks, and secrets in browser responses or local files.
+- API credentials, private keys, and JWT risks in browser responses, JS bundles, source maps, and local files.
 - Supabase, Firebase, Appwrite, PocketBase, and Convex configuration or access-control issues.
-- Risky npm lifecycle hooks, CI workflow settings, exposed local configuration, and selected build artifacts.
-- Opt-in application-security and correctness leads, labeled for review when they are not validated exploits.
+- Risky npm lifecycle hooks, CI workflow settings, and exposed local configuration.
+- Opt-in application-security leads, labeled for review when they are not validated exploits.
 
-KeyLeak complements dedicated source-secret scanners and DAST tools. It is not a general exploit framework. See [Convex support and safety boundaries](docs/CONVEX_SUPPORT.md) for provider-specific limits.
+## Safe use
 
-## GitHub Action
+- Scan only systems you own or have permission to test.
+- `--baas-validate` sends active read-only probes to the Supabase/Firebase project the app uses, with the key found in the app; leave it off unless you are authorized.
+- Apart from that, detected keys are never sent to their provider to check whether they are live. Details: [security model](https://github.com/Amal-David/keyleak-detector/blob/main/docs/SECURITY_MODEL.md).
 
-Use the [GitHub Action guide](docs/github-action.md) to scan a deployment or repository in CI. The action supports browser and local modes, SARIF upload, and configurable failure thresholds.
+## CI
 
-## Development
-
-```bash
-git clone https://github.com/Amal-David/keyleak-detector.git
-cd keyleak-detector
-poetry install
-poetry run playwright install chromium
-poetry run keyleak local . --launch-profile launch-gate --fail-on high
+```yaml
+- uses: actions/checkout@v4
+- uses: Amal-David/keyleak-detector@v0.7.0
+  with:
+    mode: local
+    fail-on: high
 ```
 
-To run the Flask web UI, use `poetry run python app.py` and open `http://127.0.0.1:5002`. For detector contributions, see [CONTRIBUTING.md](CONTRIBUTING.md) and the [detector authoring guide](docs/DETECTOR_AUTHORING.md).
+Browser mode, SARIF upload, and preview-deployment examples: [GitHub Action guide](https://github.com/Amal-David/keyleak-detector/blob/main/docs/github-action.md).
 
-## Releases and documentation
+## More
 
-The current Python package release is **0.7.0**. The extension Web Store
-listing and downloadable ZIP can have different versions because store updates
-require a separate submission.
+- [Scanner workflows](https://github.com/Amal-David/keyleak-detector/blob/main/docs/SCANNER_WORKFLOWS.md): every command, coverage options, verdicts, exit codes
+- [Chrome extension](https://github.com/Amal-David/keyleak-detector/blob/main/docs/CHROME_EXTENSION.md): unpacked ZIP, native host, permissions
+- [Browser app](https://github.com/Amal-David/keyleak-detector/blob/main/docs/BROWSER_APP.md)
+- [Binary and archive scanning](https://github.com/Amal-David/keyleak-detector/blob/main/docs/BINARY_ARTIFACT_SCANNING.md)
+- [Agent runbook and skills](https://github.com/Amal-David/keyleak-detector/blob/main/docs/AGENT_SCAN_HOWTO.md) and [integration audit](https://github.com/Amal-David/keyleak-detector/blob/main/docs/AGENT_INTEGRATION_AUDIT.md)
+- [Python secret serialization review](https://github.com/Amal-David/keyleak-detector/blob/main/docs/SERIALIZATION_REVIEW.md)
+- [PHP patch assessment and incident checks](https://github.com/Amal-David/keyleak-detector/blob/main/docs/OCTOBER_2026_INCIDENTS.md)
+- [Convex support](https://github.com/Amal-David/keyleak-detector/blob/main/docs/CONVEX_SUPPORT.md)
+- [Releases and packaging](https://github.com/Amal-David/keyleak-detector/blob/main/docs/DISTRIBUTION.md) and [changelog](https://github.com/Amal-David/keyleak-detector/blob/main/CHANGELOG.md)
 
-- [Changelog](CHANGELOG.md)
-- [Scanner workflows](docs/SCANNER_WORKFLOWS.md)
-- [Binary artifact scanning](docs/BINARY_ARTIFACT_SCANNING.md)
-- [Security model](docs/SECURITY_MODEL.md)
-- [Agent scan runbook](docs/AGENT_SCAN_HOWTO.md)
+## Contributing, security, license
 
-## Security and maintenance
-
-Amal David (`@Amal-David`) is the project and security maintainer. See
-[SECURITY.md](SECURITY.md#security-maintainer) for responsibilities and private
-vulnerability reporting, and [MAINTAINERS.md](MAINTAINERS.md) for review ownership.
-[Distribution readiness](docs/DISTRIBUTION.md) tracks packaging checks and
-remaining work; it does not imply official distribution or program acceptance.
-
-## License
-
-MIT. See [LICENSE](LICENSE).
+See [CONTRIBUTING.md](https://github.com/Amal-David/keyleak-detector/blob/main/CONTRIBUTING.md) to set up a checkout and add detectors. Report vulnerabilities privately through [SECURITY.md](https://github.com/Amal-David/keyleak-detector/blob/main/SECURITY.md); review ownership is in [MAINTAINERS.md](https://github.com/Amal-David/keyleak-detector/blob/main/MAINTAINERS.md). MIT licensed: [LICENSE](https://github.com/Amal-David/keyleak-detector/blob/main/LICENSE).

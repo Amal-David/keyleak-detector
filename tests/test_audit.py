@@ -656,12 +656,12 @@ class AgentRunbookSmokeTests(unittest.TestCase):
         self.assertIn("SAFE TO SHIP", text)
 
     def test_audit_artifact_docs_state_absolute_paths_and_erasure(self):
-        readme = Path("README.md").read_text(encoding="utf-8")
+        workflows = Path("docs/SCANNER_WORKFLOWS.md").read_text(encoding="utf-8")
         howto = Path("docs/AGENT_SCAN_HOWTO.md").read_text(encoding="utf-8")
         security = Path("docs/SECURITY_MODEL.md").read_text(encoding="utf-8")
 
-        self.assertIn("`artifact_dir` is reported as", readme)
-        self.assertIn("an absolute path", readme)
+        self.assertIn("`artifact_dir` is reported as", workflows)
+        self.assertIn("an absolute path", workflows)
         self.assertIn("absolute artifact directory", howto)
         self.assertIn("normalized `--out-dir`", security)
         self.assertIn("delete `.keyleak/audits/", security)

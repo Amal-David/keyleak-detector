@@ -15,7 +15,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: Amal-David/keyleak-detector@v0.5.0
+      - uses: Amal-David/keyleak-detector@v0.7.0
         with:
           mode: local
           fail-on: high
@@ -34,7 +34,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: Amal-David/keyleak-detector@v0.5.0
+      - uses: Amal-David/keyleak-detector@v0.7.0
         with:
           mode: browser
           url: ${{ github.event.deployment_status.target_url }}
@@ -55,7 +55,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: Amal-David/keyleak-detector@v0.5.0
+      - uses: Amal-David/keyleak-detector@v0.7.0
         with:
           mode: browser
           url: ${{ github.event.deployment_status.environment_url }}
@@ -66,7 +66,7 @@ jobs:
 ### Full scan (local + browser)
 
 ```yaml
-- uses: Amal-David/keyleak-detector@v0.5.0
+- uses: Amal-David/keyleak-detector@v0.7.0
   with:
     mode: both
     url: https://preview.example.com
@@ -125,7 +125,7 @@ whose report still identifies high-severity findings as `BLOCK_SHIP`.
 Upload findings to GitHub Security tab:
 
 ```yaml
-- uses: Amal-David/keyleak-detector@v0.5.0
+- uses: Amal-David/keyleak-detector@v0.7.0
   id: keyleak
   with:
     mode: local

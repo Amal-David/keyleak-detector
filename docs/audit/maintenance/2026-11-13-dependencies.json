@@ -1,0 +1,44 @@
+{
+  "audit_date": "2026-11-13",
+  "base_revision": "0f69a0f4f7c47f31bea1920b47e2ca5173f20fee",
+  "implementation_revision": "89ad09e5108c73aa51a3a1c9dd12c54e7b3298aa",
+  "pull_request": 43,
+  "changed_dependency": {
+    "ecosystem": "PyPI",
+    "name": "soupsieve",
+    "previous_version": "2.10",
+    "selected_version": "4.1",
+    "reason": "GHSA-mmhr-3c5m-f64f",
+    "python": ">=3.11.5",
+    "artifacts": {
+      "soupsieve-4.1-py3-none-any.whl": "sha256:e4d667b3974ce6e038e7390486b8093369854a1d345ffdd4c121dfc4a782e809",
+      "soupsieve-4.1.tar.gz": "sha256:ca9abf7126667010d8f6e9b39bfc1bc3b23c8aed9bcb0f54a754dde969bb8aab"
+    },
+    "pypi_provenance": true,
+    "yanked": false
+  },
+  "final_graph": {
+    "poetry_packages": 28,
+    "npm_packages": 143,
+    "osv_queries": 171,
+    "osv_matches": [],
+    "pypi_hash_mismatches": 0,
+    "pypi_yanked_files": 0,
+    "npm_integrity_mismatches": 0,
+    "npm_deprecated_packages": 0,
+    "npm_consumer_install_hooks": 0,
+    "npm_audit_vulnerabilities": 0,
+    "npm_signature_invalid": 0,
+    "npm_signature_missing": 0
+  },
+  "unchanged_selected_dependency": {
+    "name": "PyJWT",
+    "version": "2.15.1",
+    "osv_matches": []
+  },
+  "notes": [
+    "Registry and advisory results are point-in-time metadata evidence, not proof that upstream code is benign.",
+    "Synthetic scanner fixtures are not exposed credentials.",
+    "No package or extension release was published."
+  ]
+}
