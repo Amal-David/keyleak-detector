@@ -6,6 +6,54 @@ and the project aims to follow [Semantic Versioning](https://semver.org/).
 
 ## Unreleased
 
+## [0.8.0] — 2026-11-19
+
+A feature release adding PHP and incident checks, a Python serialization
+review, and a browser app, with a safer default for discovery-tool installation.
+The Chrome extension release is v1.3.1 and is distributed separately.
+
+### Added
+- `keyleak php-check URL --authorized` assesses ordinary response headers for the
+  October 2026 PHP advisories. Hidden versions remain unknown.
+- `keyleak incident-check PATH` checks selected manifests for compromised
+  dependencies and outdated trust packages, with optional `--ca-bundle` and
+  `--railway` inputs.
+- `keyleak local . --include serialization` reviews Python dataclasses, attrs
+  classes, Pydantic models and NamedTuples for credential fields exposed through
+  repr or serializers. It is opt-in and does not import or execute scanned code.
+- `keyleak capabilities --json` lists installed checks, skills, coverage limits
+  and report contracts without scanning; `--include agent-assets` checks skill
+  instructions, agent rules and MCP configuration for credential patterns.
+
+### Changed
+- `keyleak site-scan` and `scan_site()` no longer install `subfinder` by
+  default. Pass `--auto-install` to opt in; `KEYLEAK_NO_AUTO_INSTALL=1` or
+  `KEYLEAK_MANAGED_INSTALL=1` vetoes installation. `amass` is never installed
+  by KeyLeak; it is used only when already present.
+- The README is a short entry point; scan options, agent usage and extension
+  setup moved to `docs/`.
+
+### Fixed
+- Local, archive and binary scans keep findings collected before a limit or a
+  decompression error and report the remaining scope as incomplete coverage.
+- Prefixed ZIP archives are scanned within the existing bounds, and nested
+  archive discovery stays inside the selected directories.
+- Partial TAR members are removed after extraction errors.
+
+### Security
+- Dependency pins updated for reviewed advisories, including `requests` 2.34.2,
+  `soupsieve` 4.1, `certifi` 2026.10.23, `python-dotenv` 1.2.4 and `PyYAML` 6.0.3.
+- Scan exception details stay out of public error responses, scan progress
+  streams end with their public error, and a TLS minimum is enforced.
+- URL redaction covers encoded secret query names and bounds its work on long
+  or international URLs.
+
+### Chrome extension 1.3.1 — 2026-11-19
+- The popup's key test no longer sends detected credentials to their provider;
+  it inspects JWT claims locally only. The Supabase access checks are unchanged:
+  a Supabase key seen in page traffic is still sent to that project's own
+  endpoints to test table and storage access.
+
 ### Browser app and delivery
 
 - Add a static browser scanner for local text, files/folders, ordinary ZIP text
@@ -152,3 +200,4 @@ The browser extension is versioned independently of the Python package
 [0.6.1]: https://github.com/Amal-David/keyleak-detector/releases/tag/v0.6.1
 [0.6.0]: https://github.com/Amal-David/keyleak-detector/releases/tag/v0.6.0
 [0.7.0]: https://github.com/Amal-David/keyleak-detector/releases/tag/v0.7.0
+[0.8.0]: https://github.com/Amal-David/keyleak-detector/releases/tag/v0.8.0

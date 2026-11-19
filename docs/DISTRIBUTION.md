@@ -107,7 +107,7 @@ Before this change, the CLI and `scan_site()` could try to install missing
 explicitly opt in. Setting `KEYLEAK_NO_AUTO_INSTALL=0` alone does not opt in.
 Unknown nonempty opt-out values now fail closed instead of being ignored.
 
-The project remains version 0.7.0 / beta in this development change. Do not
+The project is version 0.8.0 / beta. Do not
 republish an existing version. A maintainer must select a new release version
 and tag only after reviewing and validating the changes.
 
@@ -163,7 +163,8 @@ program application, or download-count inflation is performed by this change.
 
 ## Current versions
 
-The current Python package release is **0.7.0**. The extension Web Store
+The Python package version in this repository is **0.8.0**. It reaches PyPI when the
+`v0.8.0` GitHub Release is published; until then PyPI serves the previous release. The extension Web Store
 listing and downloadable ZIP can have different versions because store updates
 require a separate submission.
 

@@ -8,7 +8,7 @@ local helper; it sends fixed lifecycle actions, a startup challenge, and local
 proof, not page URLs or scan data.
 
 - [Install the published Chrome Web Store extension](https://chromewebstore.google.com/detail/keyleak-detector/ildodbfchnbmndkcijllpmihcbfchgdl) (listing version **1.2.0**).
-- [Download extension v1.3.0](https://github.com/Amal-David/keyleak-detector/releases/download/v0.7.0/keyleak-detector-extension-v1.3.0.zip) from the GitHub release. This ZIP is available for unpacked testing; it has not been submitted to the store listing.
+- [Download the extension ZIP](https://github.com/Amal-David/keyleak-detector/releases/latest) from the assets of the latest GitHub release. To test a version that is not released yet, load `extension/` from a source checkout. This ZIP is available for unpacked testing; it has not been submitted to the store listing.
   The native-host installer needs a source checkout and cannot discover a ZIP unpacked
   elsewhere, so pass the ID shown in `chrome://extensions`:
   `poetry run keyleak install-extension-host --extension-id <extension-id>`.
