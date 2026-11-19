@@ -25,6 +25,17 @@ test('detects long and short credentials without emitting raw values or adjacent
   }
 });
 
+test('a key meant for browsers keeps its public-by-design label in the stored report', async () => {
+  const googleKey = 'AIza' + 'b1C'.repeat(11) + 'dE';
+  const report = await scanInputs([{ name: 'app.js', content: `const firebaseConfig = { apiKey: "${googleKey}", authDomain: "x.firebaseapp.com" };` }]);
+  assert(report.findings.length > 0);
+  for (const item of report.findings) {
+    assert.equal(item.severity, 'low');
+    assert.equal(item.validation_status, 'public_by_design');
+  }
+  assert(!JSON.stringify(report).includes(googleKey));
+});
+
 test('source labels cannot trigger vendor or authentication exclusions or echo URL secrets', async () => {
   const report = await scanInputs([
     text('google-analytics.com.js'), text('Authorization Header'),
