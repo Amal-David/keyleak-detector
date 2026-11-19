@@ -77,7 +77,7 @@ The command exits `2` when findings reach `--fail-on` or coverage is incomplete.
 
 ```yaml
 - uses: actions/checkout@v4
-- uses: Amal-David/keyleak-detector@v0.8.0
+- uses: Amal-David/keyleak-detector@v0.7.0
   with:
     mode: local
     fail-on: high

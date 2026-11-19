@@ -26,9 +26,10 @@ The Chrome extension release is v1.3.1 and is distributed separately.
   instructions, agent rules and MCP configuration for credential patterns.
 
 ### Changed
-- `keyleak site-scan` and `scan_site()` no longer install `subfinder` or `amass`
-  by default. Pass `--auto-install` to opt in; `KEYLEAK_NO_AUTO_INSTALL=1` or
-  `KEYLEAK_MANAGED_INSTALL=1` vetoes installation.
+- `keyleak site-scan` and `scan_site()` no longer install `subfinder` by
+  default. Pass `--auto-install` to opt in; `KEYLEAK_NO_AUTO_INSTALL=1` or
+  `KEYLEAK_MANAGED_INSTALL=1` vetoes installation. `amass` is never installed
+  by KeyLeak; it is used only when already present.
 - The README is a short entry point; scan options, agent usage and extension
   setup moved to `docs/`.
 
@@ -48,8 +49,10 @@ The Chrome extension release is v1.3.1 and is distributed separately.
   or international URLs.
 
 ### Chrome extension 1.3.1 — 2026-11-19
-- Detected credentials are no longer sent to their provider to test whether
-  they are live. The popup inspects JWT claims locally only.
+- The popup's key test no longer sends detected credentials to their provider;
+  it inspects JWT claims locally only. The Supabase access checks are unchanged:
+  a Supabase key seen in page traffic is still sent to that project's own
+  endpoints to test table and storage access.
 
 ### Browser app and delivery
 

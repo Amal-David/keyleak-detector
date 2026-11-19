@@ -163,7 +163,8 @@ program application, or download-count inflation is performed by this change.
 
 ## Current versions
 
-The current Python package release is **0.8.0**. The extension Web Store
+The Python package version in this repository is **0.8.0**. It reaches PyPI when the
+`v0.8.0` GitHub Release is published; until then PyPI serves the previous release. The extension Web Store
 listing and downloadable ZIP can have different versions because store updates
 require a separate submission.
 
