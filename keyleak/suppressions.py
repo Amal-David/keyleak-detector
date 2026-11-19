@@ -162,9 +162,8 @@ def apply_suppressions(
     apply_defaults: bool = True,
 ) -> ScanReport:
     suppressions = SuppressionSet()
-    # L.1 — apply built-in fixture suppressions unless explicitly disabled.
-    if apply_defaults and os.environ.get(DISABLE_DEFAULTS_ENV) != "1":
-        suppressions = merge_suppressions(suppressions, default_fixture_suppressions())
+    defaults = (default_fixture_suppressions()
+                if apply_defaults and os.environ.get(DISABLE_DEFAULTS_ENV) != "1" else SuppressionSet())
     if baseline_path:
         suppressions = merge_suppressions(suppressions, load_suppressions(baseline_path, baseline_mode=True))
     if allowlist_path:
@@ -178,11 +177,16 @@ def apply_suppressions(
             suppressions.types,
             suppressions.signatures,
             suppressions.source_contains,
+            defaults.source_contains,
         ]
     ):
         return report
 
-    findings = [finding for finding in report.findings if not is_suppressed(finding, suppressions)]
+    findings = [finding for finding in report.findings
+                if not is_suppressed(finding, suppressions)
+                and ((finding.detector_id.startswith("baas.supabase_")
+                      and finding.evidence.redacted_value.startswith("catalog:"))
+                     or not is_suppressed(finding, defaults))]
     return ScanReport(
         target=report.target,
         scan_mode=report.scan_mode,

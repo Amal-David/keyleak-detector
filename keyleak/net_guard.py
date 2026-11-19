@@ -87,6 +87,7 @@ def guarded_request(
     allow_private: Optional[bool] = None,
     max_redirects: int = 3,
     session: Any = None,
+    follow_redirects: bool = True,
     **kwargs: Any,
 ) -> Any:
     """SSRF-safe HTTP request: validates the target host before connecting and
@@ -119,7 +120,7 @@ def guarded_request(
         if reason:
             raise SSRFBlocked(reason)
         resp = sess.request(current_method, current, allow_redirects=False, **req_kwargs)
-        if resp.status_code in (301, 302, 303, 307, 308) and resp.headers.get("location"):
+        if follow_redirects and resp.status_code in (301, 302, 303, 307, 308) and resp.headers.get("location"):
             nxt = urljoin(current, resp.headers["location"])
             # On a cross-host redirect, strip credential-bearing headers so we
             # never forward an auth token / cookie / api key to a different host.

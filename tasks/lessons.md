@@ -1,5 +1,9 @@
 # Lessons
 
+- For browser redirect changes, verify the final page URL and origin, relative
+  asset paths, storage isolation, and interception of every redirect hop in a
+  real browser. Cookie and header assertions alone do not prove redirect safety.
+
 - Read newly updated review-comment bodies before running a merge command.
   Green checks do not mean late feedback is addressed; keep inspection and the
   merge as separate steps so new findings can change the decision.
@@ -14,6 +18,11 @@
   may still fail because its configured writable root retains the symlink;
   explain that distinction and use approved physical-path access. Preserve dirty
   primary checkouts and implement in an isolated worktree.
+
+- Browser tests that mock Playwright must also isolate DNS and HTTP probes. Use
+  valid resolver fixtures, explicit permission for owned local servers, and
+  assertions that offline scans fail before discovery. Do not weaken guards to
+  preserve stale mock expectations or leave known failures outside the PR check.
 
 - For the agent-security ecosystem request, compare a representative set of GitHub
   offensive/red-team skill libraries rather than narrowing the research to DeepSeek.

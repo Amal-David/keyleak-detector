@@ -37,6 +37,12 @@ and effective port. The local proxy removes those headers from cross-origin
 requests, including redirected requests; concurrent scans retain separate
 credential scopes even when they use the same token. Private per-scan routing
 markers are removed before a request reaches the scanned website.
+Single-page Python browser scans filter supplied storage state to exact-host
+cookies and exact-origin storage entries. HTTP requests use the guarded request
+transport, with a 10 MiB response limit and credentials removed off the target
+origin. Native HTTP proxy tunnels are denied. Routed WebSockets never connect to
+the server; blocked transport requests make scan coverage incomplete.
+
 The legacy proxy and findings collector support one `basic`/`extensive` scan at
 a time. Overlapping requests return HTTP 409 before accessing that shared scan
 state; full-site scans use their separate engine.
