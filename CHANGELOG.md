@@ -6,6 +6,12 @@ and the project aims to follow [Semantic Versioning](https://semver.org/).
 
 ## Unreleased
 
+## [0.9.0] — 2026-11-20
+
+A feature release that labels keys meant for browsers instead of reporting them
+as leaked secrets, and shows the probe behind each active BaaS finding. The
+Chrome extension release is v1.4.0 and is distributed separately.
+
 ### Added
 - Findings produced by an active BaaS probe show the probe next to them: the
   request method and URL, the HTTP status, and a summary of what came back
@@ -21,6 +27,10 @@ and the project aims to follow [Semantic Versioning](https://semver.org/).
 - `firebase_client_config` only fires when the object holding `apiKey: AIza...`
   also has Firebase config fields, so a Gemini SDK key is not reported as a
   Firebase web key, even beside a real Firebase config.
+
+### Chrome extension 1.4.0 — 2026-11-20
+- Labels keys meant for browsers as public by design and reports them as low,
+  using the same rule as the CLI.
 
 ## [0.8.0] — 2026-11-19
 
@@ -217,3 +227,4 @@ The browser extension is versioned independently of the Python package
 [0.6.0]: https://github.com/Amal-David/keyleak-detector/releases/tag/v0.6.0
 [0.7.0]: https://github.com/Amal-David/keyleak-detector/releases/tag/v0.7.0
 [0.8.0]: https://github.com/Amal-David/keyleak-detector/releases/tag/v0.8.0
+[0.9.0]: https://github.com/Amal-David/keyleak-detector/releases/tag/v0.9.0
