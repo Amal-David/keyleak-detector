@@ -166,6 +166,8 @@ def format_markdown(report: ScanReport) -> str:
                 f"- Evidence: `{item['evidence']['redacted_value']}`",
             ]
         )
+        if item.get("validation_status") == "public_by_design":
+            lines.append("- Exposure: public by design")
         if item["evidence"].get("byte_offset") is not None:
             lines.append(f"- Extraction: {_binary_location(item['evidence'])}")
         remediation = _remediation_details(item)
@@ -299,6 +301,8 @@ def format_html(report: ScanReport) -> str:
             validation_badge = '<span class="badge-confirmed">confirmed</span>'
         elif validation == "validated":
             validation_badge = '<span class="badge-validated">validated</span>'
+        elif validation == "public_by_design":
+            validation_badge = '<span class="badge-public">public by design</span>'
 
         card = f"""    <div class="finding {e(sev_lower)}">
       <div class="finding-head">
@@ -418,6 +422,7 @@ def format_html(report: ScanReport) -> str:
   .sev.low {{ background: var(--blue); color: #0a0a0f; }}
   .badge-confirmed {{ font-size: 10px; color: var(--green); border: 1px solid rgba(81,207,102,.3); padding: 1px 6px; border-radius: 3px; }}
   .badge-validated {{ font-size: 10px; color: var(--blue); border: 1px solid rgba(77,171,247,.35); padding: 1px 6px; border-radius: 3px; }}
+  .badge-public {{ font-size: 10px; color: var(--blue); border: 1px solid rgba(77,171,247,.35); padding: 1px 6px; border-radius: 3px; }}
   .badge-lead {{ font-size: 10px; color: var(--yellow); border: 1px solid rgba(255,212,59,.35); padding: 1px 6px; border-radius: 3px; }}
   .finding-type {{ font-size: 14px; font-weight: 600; color: var(--text); }}
   .finding-detail {{ font-size: 13px; color: var(--text2); margin-bottom: 6px; }}
@@ -566,9 +571,10 @@ def report_to_text(report: ScanReport) -> str:
 
     lines.extend(_coverage_lines(payload))
     for finding in payload["findings"][:10]:
+        public = " (public by design)" if finding.get("validation_status") == "public_by_design" else ""
         lines.append(
             f"- {finding['severity'].upper()} {finding['type']} at {finding['source']}: "
-            f"{finding['evidence']['redacted_value']}"
+            f"{finding['evidence']['redacted_value']}{public}"
         )
         if finding["evidence"].get("byte_offset") is not None:
             lines.append("  " + _binary_location(finding["evidence"]))

@@ -237,6 +237,10 @@ endpoints.
 Validation vocabulary is strict: `lead` means a plausible static/passive signal,
 `validated` means deterministic evidence supports the finding, and `confirmed`
 means active probe or exploit-validation evidence confirmed impact.
+`public_by_design` marks a key the provider intends to ship to browsers (a Firebase
+web config key, a Google Maps JavaScript key, a Supabase anon or publishable key).
+These are reported as `low`: the thing to check is the access control behind the
+key, not the key's secrecy.
 
 **Exit codes** are driven by `--fail-on` (`low`/`medium`/`high`/`critical`):
 
@@ -262,8 +266,11 @@ the **evidence snippet and the live context** before reporting a finding as real
 
 - **Google `AIza…` keys in a `firebaseConfig`.** The `AIza…` prefix is shared by
   Firebase **Web** API keys and Gemini/Google API keys, so the same token can fire as
-  both `baas.firebase_client_config` (medium, accurate) *and* `leak.gemini_api_key`
-  (critical). A key sitting inside a `firebaseConfig` (`apiKey`, `authDomain`,
+  both `baas.firebase_client_config` *and* `leak.gemini_api_key`. When the key sits
+  next to Firebase config fields (`authDomain`, `storageBucket`, `messagingSenderId`)
+  or in a Maps JavaScript URL, both findings are `low` and `public_by_design`. In
+  other client-side files the Gemini finding is only softened to medium, and a bare
+  key stays critical. A key sitting inside a `firebaseConfig` (`apiKey`, `authDomain`,
   `projectId`, `appId`) is a Firebase **Web** key, which Google designs to ship
   publicly in every client — it identifies the project, it is not a credential. The
   "critical Gemini leak" is usually an over-escalation of that same key. The *real*

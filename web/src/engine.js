@@ -151,7 +151,9 @@ function privacySafeFinding(finding, source, index) {
     snippet: '',
     url: '',
     request_url: '',
-    validation_status: 'lead',
+    // Nothing here is validated, so every status is a lead except the label
+    // that explains why a browser key is low.
+    validation_status: finding.validation_status === 'public_by_design' ? 'public_by_design' : 'lead',
     evidence: {
       source, snippet: '', line: null, request_url: '', response_status: null,
       redacted_value: '[redacted]', sample: '', raw_sample_available: false,
