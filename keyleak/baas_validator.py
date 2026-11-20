@@ -542,8 +542,9 @@ def _probe_tables(
 ) -> None:
     probe_list = tables if tables is not None else config.tables
     for table in probe_list[:TABLE_PROBE_CAP]:
+        path = f"/rest/v1/{table}?select=*&limit=1"
         try:
-            resp = prober("GET", f"{config.project_url}/rest/v1/{table}?select=*&limit=1", headers)
+            resp = prober("GET", config.project_url + path, headers)
         except Exception:
             validation.protected_tables.append(BaaSProbeResult(
                 probe_type="table_read", target=table, status="error", note="probe failed",
@@ -578,7 +579,8 @@ def _probe_tables(
                 http_status=status, row_count=len(body), columns=columns,
             ))
 
-            col_summary = ", ".join(columns[:10])
+            first_row = body[0] if isinstance(body[0], dict) else {}
+            col_summary = ", ".join(f"{name} ({type(first_row[name]).__name__})" for name in columns[:10])
             if len(columns) > 10:
                 col_summary += f" (+{len(columns) - 10} more)"
 
@@ -607,10 +609,12 @@ def _probe_tables(
                 source=config.project_url,
                 evidence=Evidence(
                     source=config.project_url,
-                    snippet=f"{relation.title()} '{table}' readable with anon key. Columns: {col_summary}",
+                    snippet=f"{relation.title()} '{table}' readable with anon key. "
+                            f"Returned {len(body)} row(s). Columns: {col_summary}",
                     redacted_value=f"table:{table}",
                     response_status=status,
-                    request_url=f"{redact_url(config.project_url)}/rest/v1/{table}",
+                    request_method="GET",
+                    request_url=redact_url(config.project_url) + path,
                 ),
                 risk_reason=reason,
                 remediation=remediation,
@@ -683,6 +687,7 @@ def _probe_storage(
                         snippet=f"Storage bucket '{name}' is marked public.",
                         redacted_value=f"bucket:{name}",
                         response_status=status,
+                        request_method="GET",
                         request_url=f"{redact_url(config.project_url)}/storage/v1/bucket",
                     ),
                     risk_reason=f"Supabase storage bucket '{name}' is publicly accessible. "
@@ -697,12 +702,9 @@ def _probe_storage(
         already_found = any(b.target == bucket_name for b in validation.accessible_buckets)
         if already_found:
             continue
+        list_path = f"/storage/v1/object/list/{bucket_name}?limit=1"
         try:
-            list_resp = prober(
-                "GET",
-                f"{config.project_url}/storage/v1/object/list/{bucket_name}?limit=1",
-                headers,
-            )
+            list_resp = prober("GET", config.project_url + list_path, headers)
         except Exception:
             continue
         if list_resp.get("status_code") == 200:
@@ -724,7 +726,8 @@ def _probe_storage(
                     snippet=f"Storage bucket '{bucket_name}' objects are listable with anon key.",
                     redacted_value=f"bucket:{bucket_name}",
                     response_status=200,
-                    request_url=f"{redact_url(config.project_url)}/storage/v1/object/list/{bucket_name}",
+                    request_method="GET",
+                    request_url=redact_url(config.project_url) + list_path,
                 ),
                 risk_reason=f"Storage bucket '{bucket_name}' allows anonymous object listing.",
                 remediation=f"Restrict the '{bucket_name}' bucket's storage policy to authenticated users.",
@@ -822,6 +825,7 @@ def _probe_write_access(
                     snippet=f"Table '{table}' accepts POST (insert) with anon key (HTTP {status}).",
                     redacted_value=f"writable:{table}",
                     response_status=status,
+                    request_method="POST",
                     request_url=f"{redact_url(config.project_url)}/rest/v1/{table}",
                 ),
                 risk_reason=f"Supabase table '{table}' allows unauthenticated inserts. "
@@ -922,6 +926,9 @@ def _probe_auth_config(
                         source=config.project_url,
                         snippet="mailer_autoconfirm: true — accounts are auto-confirmed without email verification.",
                         redacted_value="autoconfirm:true",
+                        response_status=200,
+                        request_method="GET",
+                        request_url=f"{redact_url(config.project_url)}/auth/v1/settings",
                     ),
                     risk_reason="Email confirmation is disabled. Attackers can create accounts with any email address without verification.",
                     remediation="Enable email confirmation in Supabase Auth settings.",
@@ -1003,6 +1010,7 @@ def _validate_firebase(config: BaaSConfig, prober: BaaSProber) -> BaaSValidation
                 snippet=f"Firebase Realtime Database is publicly readable. Top-level keys: {', '.join(top_keys[:10])}",
                 redacted_value="firebase:/.json",
                 response_status=status,
+                request_method="GET",
                 request_url=f"{redact_url(config.project_url)}/.json?shallow=true",
             ),
             risk_reason="Firebase Realtime Database has no security rules (or rules allow public read). All data is accessible without authentication.",
@@ -1016,8 +1024,9 @@ def _validate_firebase(config: BaaSConfig, prober: BaaSProber) -> BaaSValidation
 
     # Probe Firebase Storage
     for bucket in config.storage_buckets[:BUCKET_PROBE_CAP]:
+        storage_url = f"https://firebasestorage.googleapis.com/v0/b/{bucket}/o?maxResults=1"
         try:
-            storage_resp = prober("GET", f"https://firebasestorage.googleapis.com/v0/b/{bucket}/o?maxResults=1", {})
+            storage_resp = prober("GET", storage_url, {})
         except Exception:
             continue
         if storage_resp.get("status_code") == 200:
@@ -1037,6 +1046,8 @@ def _validate_firebase(config: BaaSConfig, prober: BaaSProber) -> BaaSValidation
                     snippet=f"Firebase Storage bucket '{bucket}' is publicly listable.",
                     redacted_value=f"bucket:{bucket}",
                     response_status=200,
+                    request_method="GET",
+                    request_url=storage_url,
                 ),
                 risk_reason=f"Firebase Storage bucket '{bucket}' allows public listing. Objects can be enumerated and downloaded.",
                 remediation="Set Storage security rules: allow read, write: if request.auth != null;",
@@ -1086,7 +1097,9 @@ def _validate_appwrite(config: BaaSConfig, prober: BaaSProber) -> BaaSValidation
                         detector_id="baas.open_table", source=config.project_url,
                         evidence=Evidence(source=config.project_url,
                             snippet=f"Appwrite collection '{col_name}' accessible.",
-                            redacted_value=f"collection:{col_name}"),
+                            redacted_value=f"collection:{col_name}",
+                            response_status=200, request_method="GET",
+                            request_url=f"{redact_url(config.project_url)}/databases/{db_id}/collections"),
                         risk_reason=f"Appwrite collection '{col_name}' is accessible without authentication.",
                         remediation="Set collection-level permissions in the Appwrite console.",
                         validation_status="confirmed", category="baas",
@@ -1110,8 +1123,9 @@ def _validate_pocketbase(config: BaaSConfig, prober: BaaSProber) -> BaaSValidati
             col_name = col.get("name", "") if isinstance(col, dict) else str(col)
             if not col_name:
                 continue
+            records_path = f"/api/collections/{col_name}/records?perPage=1"
             try:
-                rec_resp = prober("GET", f"{config.project_url}/api/collections/{col_name}/records?perPage=1", {})
+                rec_resp = prober("GET", config.project_url + records_path, {})
             except Exception:
                 continue
             if rec_resp.get("status_code") == 200:
@@ -1124,7 +1138,9 @@ def _validate_pocketbase(config: BaaSConfig, prober: BaaSProber) -> BaaSValidati
                     detector_id="baas.open_table", source=config.project_url,
                     evidence=Evidence(source=config.project_url,
                         snippet=f"PocketBase collection '{col_name}' readable without auth.",
-                        redacted_value=f"collection:{col_name}"),
+                        redacted_value=f"collection:{col_name}",
+                        response_status=200, request_method="GET",
+                        request_url=redact_url(config.project_url) + records_path),
                     risk_reason=f"PocketBase collection '{col_name}' has no list/view API rules. Anyone can read all records.",
                     remediation=f"Set API rules for the '{col_name}' collection in PocketBase admin.",
                     validation_status="confirmed", category="baas",
