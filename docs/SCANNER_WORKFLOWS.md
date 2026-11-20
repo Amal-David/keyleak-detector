@@ -2,7 +2,7 @@
 
 Use this guide to pick a scan, try the local build checks on a fictional `ABCapp`, and understand what a clean or incomplete result means. The example key below is a synthetic detector test string, not a credential; the sample never calls a provider or contacts a real site.
 
-The commands in this guide are available in KeyLeak 0.9.0 and current source checkouts. Older installed releases may not include every flag shown here.
+The commands in this guide are available in KeyLeak 0.8.1 and current source checkouts. Older installed releases may not include every flag shown here.
 
 ## Choose a scan
 
